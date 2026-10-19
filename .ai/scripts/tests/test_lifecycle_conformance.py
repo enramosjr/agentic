@@ -8,6 +8,8 @@ import shlex
 import subprocess
 import sys
 import unittest
+import tempfile
+from unittest.mock import patch
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1]
@@ -24,6 +26,44 @@ def text(path: str) -> str:
     return (ROOT / path).read_text()
 
 
+class Distribution(unittest.TestCase):
+    def test_eval_and_installer_share_one_kit_list(self) -> None:  # installer R1
+        import install
+        import lifecycle_eval
+        expected = ("AGENTS.md", "CLAUDE.md", ".ai/", ".claude/agents/", ".claude/skills/", ".claude/settings.json", ".codex/agents/", ".codex/hooks.json", ".cursor/hooks.json", ".agents/skills", "THIRD_PARTY_NOTICES.md")
+        self.assertEqual(install.KIT, expected)
+        self.assertIs(lifecycle_eval.COPY, install.KIT)
+        names = install.plain_files(ROOT)
+        self.assertTrue(names)
+        for name in names:
+            self.assertFalse(name.startswith(("knowledge/", ".claude/worktrees/")), name)
+            self.assertNotIn("__pycache__", name)
+            self.assertFalse(name.endswith(".pyc"), name)
+            self.assertNotEqual(name, ".ai/install-manifest.json")
+        with tempfile.TemporaryDirectory() as directory:
+            source, work = Path(directory) / "template", Path(directory) / "eval"
+            work.mkdir()
+            sentinels = (".claude/worktrees/nested/private", ".claude/settings.local.json", ".ai/__pycache__/bad.pyc", ".ai/install-manifest.json")
+            for name in (*sentinels, ".ai/scripts/keep.py", ".ai/tests/test.py", ".ai/evals/test.json", ".claude/skills/plan/SKILL.md"):
+                p = source / name
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text("fixture")
+            self.assertTrue(set(sentinels).isdisjoint(install.kit_files(source)))
+            with patch.object(lifecycle_eval, "ROOT", source):
+                lifecycle_eval.prepare({"id": "distribution", "prompt": "Inspect the copied kit.",
+                                        "expect": {"tier": ["L0"]}}, work)
+            self.assertTrue((work / ".ai/scripts/keep.py").is_file())
+            for name in (*sentinels, ".ai/tests/test.py", ".ai/evals/test.json"):
+                self.assertFalse((work / name).exists(), name)
+
+    def test_readme_and_playbook_document_the_installer(self) -> None:  # installer R12
+        self.assertIn(".ai/scripts/install.py", text("README.md").split("## Quick start", 1)[1].split("\n## ", 1)[0])
+        playbook = text("knowledge/playbooks/install-and-upgrade.md")
+        for term in ("--check", "--force", "--no-knowledge", "conflict", "/hooks"):
+            self.assertIn(term, playbook)
+        self.assertRegex(text(".ai/VERSION"), r"^\d+\.\d+\.\d+\n$")
+
+
 class RolesAndSkills(unittest.TestCase):
     def test_every_role_in_the_selection_table_is_registered_for_claude_and_codex(self) -> None:
         roles = set(re.findall(r"\(\.ai/agents/(\w+)\.md\)", text("AGENTS.md").split("### 2.3")[0]))
@@ -37,13 +77,25 @@ class RolesAndSkills(unittest.TestCase):
         self.assertTrue(link.is_symlink(), ".agents/skills must be a symlink so there is one copy")
         self.assertEqual(link.resolve(), (ROOT / ".claude/skills").resolve())
         names = sorted(str(p.relative_to(link)) for p in link.rglob("SKILL.md"))
-        self.assertEqual(names, ["debug/SKILL.md", "implement/SKILL.md", "plan/SKILL.md", "review/SKILL.md", "ship/SKILL.md", "spec/SKILL.md"])
+        self.assertEqual(names, ["debug/SKILL.md", "implement/SKILL.md", "onboard/SKILL.md", "plan/SKILL.md", "review/SKILL.md", "ship/SKILL.md", "spec/SKILL.md"])
 
     def test_skills_have_name_matching_directory_and_a_description(self) -> None:
         for path in (ROOT / ".claude/skills").rglob("SKILL.md"):
             front = text(str(path.relative_to(ROOT))).split("---")[1]
             self.assertIn(f"name: {path.parent.name}\n", front)
             self.assertRegex(front, r"description: \S")
+
+    def test_semantic_lens_in_analyst_reviewer_and_skills(self) -> None:  # spec-analysis-convergence R7
+        analyst, reviewer = text(".ai/agents/analyst.md"), text(".ai/agents/reviewer.md")
+        for term in ("missing scenarios", "error paths", "contradictions", "terminology drift"):
+            self.assertIn(term, analyst, term)
+            self.assertIn(term, reviewer, term)
+        self.assertIn("lifecycle.py analyze", analyst)
+        self.assertIn("lifecycle.py analyze", text(".claude/skills/spec/SKILL.md"))
+        passes = reviewer.split("## Passes", 1)[1].split("\n## ", 1)[0]
+        for path, body in ((".ai/agents/reviewer.md#Passes", passes), (".claude/skills/review/SKILL.md", text(".claude/skills/review/SKILL.md"))):
+            self.assertIn("lifecycle.py converge", body, path)
+            self.assertIn("## Validation Reviewed", body, path)
 
     def test_every_documented_okf_show_command_resolves(self) -> None:
         sources = [*(ROOT / ".claude").rglob("*.md"), *(ROOT / ".codex/agents").glob("*.toml"), *(ROOT / ".ai").rglob("*.md"), ROOT / "AGENTS.md"]
@@ -84,6 +136,17 @@ class Tiers(unittest.TestCase):
         for heading in ("Stage 0: Intent", "Stage 1: Plan", "Stage 3: Review", "Stage 4: Verify and sync", "Stage 5: Ship"):
             self.assertIn(f"## {heading}\n", doc)
         self.assertEqual(set(lifecycle.STAGES), {"intent", "plan", "review", "verify", "ship"})
+
+    def test_the_committed_audit_record_is_documented(self) -> None:
+        for path in (".ai/lifecycle.md", "knowledge/project/lifecycle.md"):
+            self.assertIn("knowledge/history/lifecycle/", text(path), path)
+            self.assertIn("lifecycle.py audit", text(path), path)
+
+    def test_analyze_and_converge_are_documented(self) -> None:  # spec-analysis-convergence R8
+        for path in (".ai/lifecycle.md", "knowledge/project/lifecycle.md", ".ai/validation-policy.md"):
+            self.assertIn("lifecycle.py analyze", text(path), path)
+            self.assertIn("lifecycle.py converge", text(path), path)
+        self.assertIn("cites a passing converge run of an identical command on the current tree", text(".ai/validation-policy.md"))
 
 
 class HarnessWiring(unittest.TestCase):

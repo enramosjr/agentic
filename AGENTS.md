@@ -17,7 +17,7 @@ The OKF corpus (`knowledge/`) is the machine-readable, persistent knowledge grap
 
 - **Requirement**: Any agent change that alters functionality, contracts, specifications, dependencies, or architectural patterns MUST update the corresponding OKF document(s) and append a log entry to `knowledge/log.md`.
 - **Scope**: Code changes are not considered complete until OKF synchronization is verified and updated where relevant.
-- **Bootstrap**: If `knowledge/` does not exist yet, create it with `python3 .ai/scripts/okf.py init` before the first OKF update.
+- **Bootstrap**: If `knowledge/index.md` does not exist yet, create the bundle with `python3 .ai/scripts/okf.py init` before the first OKF update.
 
 ---
 
@@ -67,7 +67,7 @@ This section is the only place persona selection and authority are defined. The 
 - **Selection**: A persona is selected by explicit instruction (`Persona: .ai/personas/go-principal-engineer.md`, `Use persona: go-principal-engineer`, or a plain request) or automatically from the §2.1 table, which this document authorizes. A bare name resolves to `.ai/personas/<name>.md`. When selecting automatically, agents MUST state the persona and why before starting.
 - **Role**: A persona is advisory. It supplies language pitfalls, validation commands, and a review checklist. It MUST NOT change the requested outcome, override acceptance criteria or the approved plan, expand scope, force a pattern, or turn preferences into requirements or defects.
 - **Application**: Load the outline, then only the sections relevant to the task (§2.3). Agents SHOULD NOT apply every item to every task.
-- **Precedence** (highest first): explicit user instructions, acceptance criteria, the approved plan, repository and directory instructions, executable code/config/schemas/tests, project knowledge, the persona, existing repository conventions, general engineering judgment, personal preference. A review finding MUST rest on a source above the persona.
+- **Precedence** (highest first): explicit user instructions, acceptance criteria, the approved plan, repository and directory instructions (including human-approved project rules in `knowledge/project/rules.md`), executable code/config/schemas/tests, project knowledge, the persona, existing repository conventions, general engineering judgment, personal preference. A review finding MUST rest on a source above the persona. Lessons alone are observations; promotion and retirement MUST have human approval.
 - **Multiple personas**: One primary persona governs; secondary personas apply only inside their own files. Agents MUST NOT combine personas merely because several technologies are present.
 - **Reporting**: Name the persona used (or `None`) and only the considerations that materially changed the result.
 
@@ -86,7 +86,7 @@ Every task, from a one-line prompt to an autonomous milestone, follows one lifec
 - Agents MUST escalate as soon as investigation shows a contract, schema, persistence, security, or dependency effect, or a behavior question the repository cannot answer. Agents MUST NOT lower a tier the user set.
 - At L2 and above, agents MUST NOT start Implement while the spec has an unresolved question that changes behavior. With a human, the user approves the spec and plan. At L3, open decisions resolve by tier (§9.7).
 - Tiers scale the spec, plan, review, and gate breadth. They MUST NOT relax §8.1, Gate 3, or the evidence rules.
-- **Enforcement.** Agents MUST declare the tier with `lifecycle.py tier` and record each required stage with `lifecycle.py stage` as it completes; `stage` validates the artifact (a lint-clean spec, a plan that cites every requirement ID, an Approved review verdict, a passing `okf.py records`). The same script runs as a hook in Claude Code, Codex and Cursor: it denies source edits until a tier is declared and the stages that tier requires are recorded, denies `git commit` (other than `wip:`) and PR creation until Verify is recorded, and injects the router at session start. Markdown and `knowledge/` edits are exempt. `LIFECYCLE_GUARD=off` disables it, and autonomous driver sessions (`OKF_AUTONOMOUS=1`) are gated by the work queue instead. Approvals are recorded claims: `--approved-by human:<id>` MUST come from a user message, and `decision:<ADR>` only under §9.7. The hook raises the cost of skipping a stage; it cannot prove that a human approved.
+- **Enforcement.** Agents MUST declare the tier with `lifecycle.py tier` and record each required stage with `lifecycle.py stage` as it completes; `stage` validates the artifact (a lint-clean spec, a plan that cites every requirement ID, an Approved review verdict, a passing `okf.py records`, and, at L2+, a current passing `lifecycle.py converge` run). The same script runs as a hook in Claude Code, Codex and Cursor: it denies source edits until a tier is declared and the stages that tier requires are recorded, denies `git commit` (other than `wip:`) and PR creation until Verify is recorded, requires the committed audit record (`knowledge/history/lifecycle/`) in such commits, and injects the router at session start. Markdown and `knowledge/` edits are exempt. `LIFECYCLE_GUARD=off` disables it, and autonomous driver sessions (`OKF_AUTONOMOUS=1`) are gated by the work queue instead. Approvals are recorded claims: `--approved-by human:<id>` MUST come from a user message, and `decision:<ADR>` only under §9.7. The hook raises the cost of skipping a stage; it cannot prove that a human approved.
 
 ---
 
@@ -136,7 +136,7 @@ Any OKF operation the script covers MUST go through it instead of reading, grepp
 | Run the queue as fresh agent sessions (`.ai/scripts/autonomy_driver.py`) | `autonomy_driver.py [--role orchestrator] -- AGENT_COMMAND` |
 | Merge parallel branches' log, index, queue and status without conflicts (once per clone) | `git-setup` |
 | Keep agent PRs mergeable after base-branch merges (`.ai/scripts/pr_sync.py`) | `pr_sync.py [--dry-run]` |
-| Declare the tier, record and gate lifecycle stages, record red/green evidence (`.ai/scripts/lifecycle.py`) | `lifecycle.py tier L0\|L1\|L2\|L3 --reason T [--kind K]`, `stage NAME [--ref P] [--note T] [--approved-by A]`, `gate TARGET`, `status`, `redgreen red\|green -- CMD` |
+| Declare the tier, record and gate lifecycle stages, record red/green evidence (`.ai/scripts/lifecycle.py`) | `lifecycle.py tier L0\|L1\|L2\|L3 --reason T [--kind K]`, `stage NAME [--ref P] [--note T] [--approved-by A]`, `gate TARGET`, `status`, `redgreen red\|green -- CMD`, `analyze SPEC`, `converge SPEC` |
 | Check spec → plan → tests coverage, and turn a spec into work-queue entries | `lifecycle.py trace SPEC [--plan P] [--tests PATH…]`, `lifecycle.py queue-from-spec SPEC [--group G]` |
 | Run the lifecycle scenario evals against a real agent (`.ai/scripts/lifecycle_eval.py`) | `lifecycle_eval.py list\|check\|run [--scenario ID] -- AGENT_COMMAND` |
 

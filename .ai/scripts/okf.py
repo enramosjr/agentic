@@ -21,7 +21,12 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Iterator
-from urllib.parse import unquote
+from urllib.parse import unquote, quote
+import fnmatch
+import stat
+
+sys.dont_write_bytecode = True  # Importing the shared helper must not dirty adopter worktrees.
+import learning
 
 OKF_VERSION = "0.2"
 STANDARD_SECTIONS = (
@@ -677,10 +682,17 @@ def reindex(bundle: Path, *, check: bool = False) -> list[Path]:
 # --------------------------------------------------------------------------
 
 
-def append_log(bundle: Path, message: str, day: date) -> Path:
+def append_log(bundle: Path, message: str, day: date, *, once: str | None = None) -> Path:
     """Add a bullet under ``## day`` in log.md, keeping headings newest-first."""
     path = bundle / "log.md"
     text = read_text(path) if path.is_file() else LOG_TITLE + "\n"
+    if once is not None:
+        if not re.fullmatch(r'[A-Za-z0-9:._-]+', once):
+            raise OkfError('log --once must be an identifier without spaces')
+        marker = f'<!-- {once} -->'
+        if any(line.endswith(' ' + marker) for line in text.splitlines()):
+            return path
+        message += ' ' + marker
     lines = text.rstrip("\n").split("\n")
     heading = f"## {day.isoformat()}"
     bullet = message if message.startswith("- ") else f"- {message}"
@@ -706,6 +718,45 @@ def append_log(bundle: Path, message: str, day: date) -> Path:
         else:
             lines[position:position] = [heading, "", bullet, ""]
     write_text(path, "\n".join(lines) + "\n")
+    return path
+
+
+def read_project_rules(bundle: Path) -> dict:
+    """Validate OKF metadata at consumer boundaries without a helper import cycle."""
+    path = learning.rules_path(bundle.parent)
+    if path.exists():
+        doc = load_doc(bundle, path)
+        if doc.error:
+            raise learning.LearningError(f'invalid rules document frontmatter: {doc.error}')
+        errors = [issue.message for issue in _check_concept(doc, bundle, display(bundle, doc.rel)) if issue.level == 'error']
+        if errors:
+            raise learning.LearningError('invalid rules document frontmatter: ' + '; '.join(errors))
+    return learning.read_rules(bundle.parent)
+
+
+def publish_rules(bundle: Path, data: dict) -> Path:
+    """Publish the validated rules payload without duplicating retry metadata."""
+    require_bundle(bundle)
+    path = learning.rules_path(bundle.parent)
+    learning.validate_rules(bundle.parent, data)
+    if path.exists():
+        doc = load_doc(bundle, path)
+        if doc.error or not doc.meta or not doc.meta.get('type'):
+            raise OkfError(f'invalid rules document frontmatter: {doc.error or "missing type"}')
+        previous = read_text(path)
+    else:
+        meta = {'type': 'Development Guide', 'title': 'Approved project rules',
+                'description': 'Human-approved standing rules with retained lesson provenance.',
+                'tags': ['learning', 'rules'], 'status': 'stable',
+                'evidence': 'implementation-and-current-specifications',
+                'generated': {'by': 'process:lifecycle', 'at': utc_now()},
+                'sources': [{'id': 'learning', 'resource': '../../.ai/scripts/learning.py'},
+                            {'id': 'lifecycle', 'resource': '../../.ai/scripts/lifecycle.py'}]}
+        frontmatter = '\n'.join(line for key, value in meta.items() for line in dump_entry(key, value))
+        previous = '---\n' + frontmatter + '\n---\n\n# Approved project rules\n\n' + learning.BEGIN + '\n```json\n{}\n```\n' + learning.END + '\n'
+    updated = learning.replace_payload(previous, data)
+    if not path.exists() or updated != previous:
+        write_text(path, updated)
     return path
 
 
@@ -849,6 +900,12 @@ def validate(bundle: Path) -> list[Issue]:
     for index in reindex(bundle, check=True):
         rel = index.relative_to(bundle).as_posix()
         issues.append(Issue("warning", display(bundle, rel), None, "index is out of date (run `okf.py reindex`)"))
+    try:
+        rules = read_project_rules(bundle)
+        issues.extend(Issue(level, display(bundle, 'project/rules.md'), None, message)
+                      for level, message in learning.source_issues(bundle.parent, rules))
+    except (learning.LearningError, OSError, UnicodeError) as error:
+        issues.append(Issue('error', display(bundle, 'project/rules.md'), None, str(error)))
     return issues
 
 
@@ -1811,6 +1868,122 @@ def _print_written(bundle: Path, paths: list[Path], verb: str = "updated") -> No
         print(f"{verb} {display(bundle, path.relative_to(bundle).as_posix())}")
 
 
+def onboard_inventory(repo: Path) -> dict[str, list[tuple[str, str]]]:
+    """Tracked path candidates only; never import, build, or execute repository content."""
+    result = {key: [] for key in ('Source directories', 'Build manifests', 'Entry-point candidates', 'Test-path candidates')}
+    process = subprocess.run(['git', '-C', str(repo), 'ls-files', '-z'], capture_output=True, check=True, timeout=30)
+    directories = set()
+    excluded = {'knowledge', '.git', '.ai', '.claude', '.codex', '.cursor', '.agents'}
+    source_suffixes = {'.py', '.pyi', '.rs', '.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.go', '.cs', '.dart', '.swift', '.c', '.h', '.cpp', '.java', '.kt', '.rb', '.php'}
+    for raw in sorted(process.stdout.split(b'\0')):
+        if not raw:
+            continue
+        try:
+            name = raw.decode('utf-8')
+        except UnicodeError:
+            continue
+        relative = Path(name)
+        if relative.parts[0] in excluded:
+            continue
+        path = repo / relative
+        if not path.resolve().is_relative_to(repo.resolve()) or not path.is_file():
+            continue
+        try:
+            data = path.read_bytes()
+            if b'\0' in data:
+                continue
+            data.decode('utf-8')
+        except (OSError, UnicodeError):
+            continue
+        if len(relative.parts) > 1 and relative.suffix in source_suffixes and relative.parts[0] not in directories:
+            directories.add(relative.parts[0])
+            result['Source directories'].append((relative.parts[0] + '/', name))
+        if any(fnmatch.fnmatchcase(relative.name, pattern) for pattern in
+               ('Cargo.toml', 'pyproject.toml', 'package.json', 'go.mod', 'pubspec.yaml', 'Package.swift', '*.csproj', '*.sln')):
+            result['Build manifests'].append((name, name))
+        if any(fnmatch.fnmatchcase(relative.name, pattern) for pattern in ('main.*', '__main__.py', 'Program.cs')):
+            result['Entry-point candidates'].append((name, name))
+        if set(relative.parts[:-1]) & {'test', 'tests'} or any(fnmatch.fnmatchcase(relative.name, pattern) for pattern in
+                                                            ('*_test.go', 'test_*.py', '*.test.*', '*.spec.*')):
+            result['Test-path candidates'].append((name, name))
+    return result
+
+
+def onboard_document(path: Path, inventory: dict, title: str, kind: str) -> str:
+    import hashlib
+    sources, sections = {}, []
+    for category, candidates in inventory.items():
+        sections.extend(['## ' + category, ''])
+        for label, name in candidates:
+            sid = 'file-' + hashlib.sha256(name.encode()).hexdigest()[:16]
+            resource = Path(os.path.relpath(path.parents[2] / name, path.parent)).as_posix()
+            sources[sid] = {'id': sid, 'resource': resource, 'title': name}
+            safe_label = label.replace('\\', '\\\\').replace('[', '\\[').replace(']', '\\]').replace('\n', '\\n').replace('\r', '\\r')
+            sections.append('- Observed path: [' + safe_label + '](' + quote(resource, safe='/') + ') (source: ' + sid + ').')
+        if not candidates:
+            sections.append('No candidates found.')
+        sections.append('')
+    meta = dict(type=kind, title=title, description='Draft tracked-file inventory; candidates require analyst inspection.',
+                tags=['brownfield', 'inventory'], status='draft', evidence='project-documentation',
+                generated={'by': 'okf.py/0.2', 'at': utc_now()}, sources=list(sources.values()))
+    front = '\n'.join(line for key, value in meta.items() for line in dump_entry(key, value))
+    return '---\n' + front + '\n---\n\n# ' + title + '\n\nDraft structural facts only; no runtime or behavioral conclusions.\n\n' + '\n'.join(sections)
+
+
+def preflight_bundle_writes(bundle: Path, extra: list[Path] | None = None) -> None:
+    """Reject deterministic path/log failures before a multi-file OKF operation writes."""
+    directories = [bundle, *(bundle / name for name in STANDARD_SECTIONS)]
+    if bundle.exists():
+        directories.extend(p for p in bundle.rglob('*') if p.is_dir())
+    files = [bundle / 'log.md', *(p / 'index.md' for p in directories), *(extra or [])]
+    for path, expected_dir in [(p, True) for p in directories] + [(p, False) for p in files]:
+        if path.is_symlink() or (path.exists() and (not path.is_dir() if expected_dir else not path.is_file())):
+            raise OkfError('invalid ' + ('directory' if expected_dir else 'file') + ' destination: ' + str(path))
+        parent = path if expected_dir else path.parent
+        while not parent.exists():
+            if parent.is_symlink():
+                raise OkfError('invalid symlink parent: ' + str(parent))
+            parent = parent.parent
+        if (not parent.is_dir() or parent.is_symlink() or not os.access(parent, os.W_OK | os.X_OK)
+                or not parent.stat().st_mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)):
+            raise OkfError('needs writable directory: ' + str(parent))
+    log = bundle / 'log.md'
+    if log.is_file():
+        doc = load_doc(bundle, log)
+        if doc.error or doc.meta is not None or list(_check_log(doc, 'log.md')):
+            raise OkfError('invalid log.md; repair dated log structure before retrying')
+
+
+def cmd_onboard(bundle: Path, args: argparse.Namespace) -> int:
+    try:
+        repo = bundle.parent.resolve()
+        process = subprocess.run(['git', '-C', str(repo), 'rev-parse', '--show-toplevel'],
+                                 capture_output=True, text=True, timeout=30)
+        if process.returncode or Path(process.stdout.strip()).resolve() != repo:
+            raise OkfError('onboard requires knowledge/ at a Git repository root')
+        destinations = ((bundle / 'project/architecture.md', 'Architecture inventory', 'Architecture'),
+                        (bundle / 'capabilities/repository-inventory.md', 'Repository inventory', 'Capability'))
+        preflight_bundle_writes(bundle, [p for p, _, _ in destinations])
+        absent = [(p, title, kind) for p, title, kind in destinations if not p.exists()]
+        for path, _, _ in destinations:
+            if path.exists():
+                print('kept: ' + str(path.relative_to(repo)))
+        if not absent:
+            return 0
+        inventory = onboard_inventory(repo)
+        documents = [(p, onboard_document(p, inventory, title, kind)) for p, title, kind in absent]
+        if not (bundle / 'index.md').is_file():
+            cmd_init(bundle, argparse.Namespace(autonomous=False))
+        for path, text in documents:
+            write_text(path, text)
+            print('created: ' + str(path.relative_to(repo)))
+        append_log(bundle, 'Onboarded draft tracked-file inventory: ' + ', '.join(p.relative_to(bundle).as_posix() for p, _ in documents) + '; no behavior verified.', date.today())
+        reindex(bundle)
+        return 0
+    except (OSError, subprocess.SubprocessError) as error:
+        raise OkfError('onboard refused or interrupted; existing documents kept: ' + str(error)) from error
+
+
 def cmd_init(bundle: Path, args: argparse.Namespace) -> int:
     bundle.mkdir(parents=True, exist_ok=True)
     for name in STANDARD_SECTIONS:
@@ -1882,14 +2055,25 @@ def cmd_queue(bundle: Path, args: argparse.Namespace) -> int:
 
 def cmd_checkpoint(bundle: Path, args: argparse.Namespace) -> int:
     require_bundle(bundle)
+    selected = getattr(args, 'lessons_from', None)
+    if selected:
+        read_project_rules(bundle)
+    rows = learning.retrospective(bundle.parent, selected) if selected else None
     checks = checkpoint(bundle)
     safe = all(check.ok for check in checks)
     if args.json:
-        print(json.dumps({"safe": safe, "checks": [check.__dict__ for check in checks]}, indent=2))
+        output = {"safe": safe, "checks": [check.__dict__ for check in checks]}
+        if rows is not None:
+            output['lessons'] = rows
+        print(json.dumps(output, indent=2))
     else:
         for check in checks:
             print(f"{'PASS' if check.ok else 'FAIL'} {check.name}: {check.detail}")
         print("SAFE" if safe else "UNSAFE")
+        if rows is not None:
+            print('Unpromoted milestone lessons:')
+            for row in rows:
+                print(f"- {row['reference']}: {row['text']}")
     return 0 if safe else 1
 
 
@@ -2197,7 +2381,7 @@ def cmd_log(bundle: Path, args: argparse.Namespace) -> int:
     message = " ".join(args.message).strip()
     if not message:
         raise OkfError("log message is empty")
-    _print_written(bundle, [append_log(bundle, message, day)])
+    _print_written(bundle, [append_log(bundle, message, day, once=getattr(args, 'once', None))])
     return 0
 
 
@@ -2316,6 +2500,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.set_defaults(handler=cmd_init)
 
+    p = sub.add_parser('onboard', help='scaffold cited draft inventories from tracked repository paths')
+    p.set_defaults(handler=cmd_onboard)
+
+
     p = sub.add_parser("context", help="session start: roles, personas, knowledge docs, recent log in one call")
     p.add_argument("--log", type=int, default=5, metavar="N", help="recent log entries to show")
     p.set_defaults(handler=cmd_context)
@@ -2388,6 +2576,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("log", help="append an entry under today's date in log.md")
     p.add_argument("message", nargs="+")
     p.add_argument("--date", help="YYYY-MM-DD (default: today)")
+    p.add_argument('--once', help='idempotency marker: append only when this exact identifier is absent')
     p.set_defaults(handler=cmd_log)
 
     p = sub.add_parser("reindex", help="regenerate index.md listings")
@@ -2422,6 +2611,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("checkpoint", help="check that a fresh agent could resume now; exit 1 if unsafe")
     p.add_argument("--json", action="store_true")
+    p.add_argument('--lessons-from', action='append', metavar='RECORD', help='include unpromoted lessons from this explicit milestone record; repeatable')
     p.set_defaults(handler=cmd_checkpoint)
 
     p = sub.add_parser("handoff", help="resume material from repository state: digest, --prompt, or --task ID")

@@ -39,6 +39,7 @@ class MergeDriverTests(unittest.TestCase):
         scripts = self.repo / ".ai" / "scripts"
         scripts.mkdir(parents=True)
         shutil.copy(SCRIPTS / "okf.py", scripts / "okf.py")
+        shutil.copy(SCRIPTS / "learning.py", scripts / "learning.py")
         self.env = {k: v for k, v in os.environ.items() if not k.startswith(("OKF_", "GIT_"))}
         self.env.update(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t", PYTHONDONTWRITEBYTECODE="1")
         self.git("init", "-q", "-b", "main")

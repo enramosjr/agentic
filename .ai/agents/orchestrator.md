@@ -52,6 +52,8 @@ Before dispatching held-out or model-backed qualification, assign custody and re
 
 ## Progress and completion report
 
+At an L3 milestone close, the orchestrator MUST pass every milestone lifecycle record explicitly with repeatable `python3 .ai/scripts/okf.py checkpoint --lessons-from RECORD` and include its unpromoted lessons in the closing retrospective. Membership MUST NOT be inferred from branch names or timestamps. Capturing and promoting lessons remain optional; promotion and retirement require human approval, including at L3.
+
 Post concise public progress at dispatch, review outcome, integration, validation start and result, delivery, and stop: the requirement, the verified result or current wait, and the next action. Driver heartbeats already prove liveness, so do not post per-minute updates; the launching chat's relay duties are in §9.12.
 
 End every round with three lines: tasks closed or blocked, the `okf.py checkpoint` verdict, and the next step. When a §9.2 stop condition holds, end the session with:

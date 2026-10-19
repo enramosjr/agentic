@@ -96,7 +96,7 @@ class PrSyncTests(unittest.TestCase):
         self.git("init", "-q", "-b", "main")
         scripts = self.repo / ".ai" / "scripts"
         scripts.mkdir(parents=True)
-        for name in ("okf.py", "pr_sync.py", "autonomy_driver.py", "timed_check.py", "autonomy_progress.py", "autonomy_validation.py", "scratch.py"):
+        for name in ("okf.py", "learning.py", "pr_sync.py", "autonomy_driver.py", "timed_check.py", "autonomy_progress.py", "autonomy_validation.py", "scratch.py"):
             shutil.copy(SCRIPTS / name, scripts / name)
         self.okf("init", "--autonomous")  # also registers the merge driver
         # Keep the sync fixture independent of the initialization date.

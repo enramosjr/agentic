@@ -23,10 +23,14 @@ You settle what must be built and how anyone will know it is built, before plann
 2. **Investigate.** Find the current behavior, contracts, and constraints the request touches.
 3. **Clarify.** Collect the behavior-changing questions, attach a recommended default to each, and ask them as one batch. Re-ask only when an answer opens a new behavior question.
 4. **Specify.** Write the spec below. Keep it as short as the change allows.
-5. **Check consistency.** Every requirement has an ID and an acceptance check; no two requirements contradict; terms mean one thing; non-goals are stated; every assumption is listed. `python3 .ai/scripts/lifecycle.py trace SPEC` checks the structural part (sections, `R<n>` bullets, acceptance coverage) and `lifecycle.py stage intent` refuses a spec that fails it.
+5. **Check consistency.** Every requirement has an ID and an acceptance check; no two requirements contradict; terms mean one thing; non-goals are stated; every assumption is listed. Run `python3 .ai/scripts/lifecycle.py analyze SPEC` first: it reports graded findings (missing sections, duplicate IDs, uncovered requirements, missing `MUST`/`SHOULD`, vague terms, identical requirements, open questions, manual checks), and `lifecycle.py stage intent` refuses any Critical or High finding. Then apply the absence-finding lens the script cannot: look for missing scenarios, error paths with no requirement, contradictions between requirements or with constraints, and terminology drift (one thing named two ways).
 6. **Hand off.** Give the user or orchestrator the spec path, the requirement count, and the open questions. The planner starts from the spec.
 
 ## Spec structure
+
+For brownfield onboarding, run `okf.py onboard` to gather cited draft path facts, then inspect implementation/configuration and tests before describing behavior. Keep source claims cited and request human approval before creating a structured capability baseline. Existing prose capabilities remain valid.
+
+For a delta, use a capability `namespace` and stable IDs such as `EXPORT-R1`; frontmatter `target: /capabilities/export.md` must agree with the body `## Target baseline` mirror. Pin operated blocks by sha256 (or `absent` for additions). Replace Requirements with Added/Modified/Removed requirements sections, using `None.` for empty sections; removals need a `Reason:` and acceptance. Preserve unchanged scenarios by omitting scenario directives; use `Scenarios: replace` only when replacing that requirement's scenarios. Load the full contract with `python3 .ai/scripts/okf.py show .ai/lifecycle.md --section "Brownfield deltas"`.
 
 ```markdown
 # Spec: <concise title>
@@ -40,6 +44,8 @@ You settle what must be built and how anyone will know it is built, before plann
 ## Assumptions           — defaults taken in place of an answer, each with the question it replaces.
 ## Open questions        — each with why evidence cannot settle it, options, and a recommended default. If none: `None. The spec is ready for planning.`
 ```
+
+Each acceptance bullet leads with a backticked command runnable from the repository root, such as `` `python3 .ai/scripts/tests/test_x.py Class.test` passes ``; `lifecycle.py converge` runs that first backtick span. A prose-only check is reported as manual (a Medium finding): converge lists it as MANUAL and the reviewer must cite it in `## Validation Reviewed`.
 
 Persist L2 specs with `okf.py new specifications/<slug>.md --type Specification --title "<title>" --description "<one sentence>" --tags spec --status draft --evidence project-documentation`, then fill the body. Draft specs record intent, not shipped behavior.
 
