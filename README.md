@@ -64,7 +64,7 @@ AGENTIC is files in your repository, plus stdlib-only Python scripts that read t
    | Cursor | `.cursor/hooks.json`, `.claude/agents/` | Cursor reads the subagents from `.claude/agents/`. |
    | Anything else | `AGENTS.md` | Have the agent load it and follow its tool instructions. Without hooks, enforcement is by instruction only. |
 
-2. Create the knowledge bundle, or keep the one you have:
+2. Create your project's knowledge bundle, unless it already has one:
 
    ```sh
    python3 .ai/scripts/okf.py init
@@ -124,7 +124,7 @@ Read the [autonomous execution protocol](.ai/autonomous-execution.md), especiall
 | `autonomy_driver.py` and friends | Supervised multi-session execution and out-of-session validation |
 | `lifecycle_eval.py` | Scenario evals (L0 to L3) you can run against a real agent |
 
-**Knowledge.** [knowledge/](knowledge/) is this repository's own OKF v0.2 bundle, documenting the governance tooling's contracts. Yours will document your project.
+**Knowledge.** AGENTIC ships no knowledge of its own. It is the machinery that keeps your project's OKF v0.2 `knowledge/` bundle honest, and `okf.py init` creates the empty bundle in your repository.
 
 ## Philosophy
 
@@ -144,7 +144,7 @@ mkdir -p .git/okf-test-tmp
 TMPDIR="$PWD/.git/okf-test-tmp" python3 -m unittest discover -s .ai/scripts/tests
 ```
 
-Changes under `knowledge/` run `python3 .ai/scripts/okf.py records`. These checks cover the framework and its records. They do not establish the correctness of your application, which keeps its own build, lint, and end-to-end commands.
+In a project that uses AGENTIC, `python3 .ai/scripts/okf.py records` checks that project's knowledge bundle. The suite above covers the framework only. It does not establish the correctness of your application, which keeps its own build, lint, and end-to-end commands.
 
 ## Attribution
 
