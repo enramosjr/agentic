@@ -201,6 +201,8 @@ A known failure that predates the task may remain only if it is off the task's c
 
 ## 9.6 Recovery checkpoint (`status.md`)
 
+**Milestone retrospective.** At L3 milestone close, the orchestrator MUST pass every milestone lifecycle record explicitly to `python3 .ai/scripts/okf.py checkpoint --lessons-from RECORD` (repeat the option for each record) and include the resulting unpromoted lessons in the closing retrospective. Record selection is explicit; branch names and timestamps MUST NOT infer membership. Capturing lessons remains optional, and promotion or retirement into standing rules requires human approval at every tier. A retrospective listing does not override an UNSAFE checkpoint.
+
 `status.md` has the sections `Objective`, `Active task`, `In flight`, `Next step`, `Blockers`, `Known failures`, `Key decisions`, and `Last validation`. Overwrite them with current facts; do not append previous run budgets, custody narratives, authorization recitals or historical next actions. Link retained evidence rather than copying its narrative. It is not a log. Every `handoff` prints it into a fresh session, so `okf.py validate` warns and `okf.py checkpoint` fails (not SAFE) when its body exceeds 6,000 characters; `Last validation` keeps only the current candidate's commands. Compact it at the handoff instead of appending. Keep one history document per task (updated in place), not one per sub-topic or session; fresh sessions load history only by section and only when the next step needs it.
 
 - `Active task` begins with the task ID, or `none`.

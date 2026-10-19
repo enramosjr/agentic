@@ -43,7 +43,7 @@ You determine whether a plan, design, or change is correct, safe, complete, in s
 
 Review in two passes when a spec or plan exists.
 
-1. **Spec compliance.** Process steps 1, 4, 6, and 7. Does every requirement and planned outcome exist and pass its acceptance check, with nothing missing and nothing extra? Report these findings first. A failed Pass 1 is the review result; fixing it can change the code that Pass 2 would examine.
+1. **Spec compliance.** Process steps 1, 4, 6, and 7. Does every requirement and planned outcome exist and pass its acceptance check, with nothing missing and nothing extra? At L2 and above, cite the implementer's `python3 .ai/scripts/lifecycle.py converge SPEC` result instead of rerunning it, and judge each requirement it lists as MANUAL yourself; the report's `## Validation Reviewed` section MUST cite the converge result and each MANUAL requirement ID with what you checked (`stage verify` refuses an uncited MANUAL ID). Also apply the absence-finding lens, mandatory at L2 and above: missing scenarios, error paths with no requirement or test, contradictions between the spec, plan and code, and terminology drift. Report these findings first. A failed Pass 1 is the review result; fixing it can change the code that Pass 2 would examine.
 2. **Quality.** Process steps 2, 3, 5, and 8. Correctness, safety, compatibility, maintainability, and knowledge sync, on a change that already meets its spec.
 
 Without a spec or plan, run both passes against the intent you established in step 1. A bug fix also fails Pass 1 when it has no test that failed before the fix (`AGENTS.md` §8.6).
@@ -112,7 +112,7 @@ Persona name, or `None. General engineering review judgment was used.` Mention o
 In descending severity, or `None.`
 
 ## Validation Reviewed
-Commands you ran and their results; checks only read from a report; checks you could not run, including any blocked by read-only mode.
+Commands you ran and their results; checks only read from a report; checks you could not run, including any blocked by read-only mode. At L2 and above, the `lifecycle.py converge` result and a note for each MANUAL requirement ID.
 
 ## Residual Risks
 Meaningful risks that remain despite approval, or `None identified.`

@@ -10,6 +10,7 @@ import contextlib
 import io
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -111,6 +112,13 @@ class LifecycleCase(unittest.TestCase):
     def denied(self, output: str) -> bool:
         return bool(output) and '"deny"' in output
 
+    def converge_green(self) -> None:
+        """Make SPEC's acceptance commands pass and record the converge run that L2 verify requires."""
+        (self.repo / "test_greet.py").write_text(
+            "import unittest\n\n\nclass GreetTests(unittest.TestCase):\n    def test_hello(self):\n        pass\n\n    def test_empty(self):\n        pass\n"
+        )
+        self.ok("converge", "spec.md")
+
 
 class SpecTests(LifecycleCase):
     def test_trace_passes_when_plan_and_tests_cite_every_requirement(self) -> None:
@@ -168,6 +176,7 @@ class StageTests(LifecycleCase):
         self.fails("stage", "review", "--ref", "review.md", message="not Approved")
         (self.repo / "review.md").write_text(REVIEW_OK)
         self.ok("stage", "review", "--ref", "review.md")
+        self.converge_green()
         self.fails("stage", "verify", message="--note")
         self.ok("stage", "verify", "--note", "unit tests PASS")
         self.ok("stage", "ship")
@@ -369,6 +378,490 @@ class HookTests(LifecycleCase):
         self.assertEqual((result.returncode, result.stdout), (0, ""))
         outside = self.edit() | {"tool_input": {"file_path": "/etc/hosts"}}
         self.assertEqual(self.hook(outside), "")
+
+
+class AuditTrailTests(LifecycleCase):
+    """The committed, hash-bound record (knowledge/specifications/lifecycle-audit-trail.md R1 to R6)."""
+
+    def records(self) -> list[Path]:
+        return sorted((self.repo / "knowledge/history/lifecycle").glob("*.json"))
+
+    def record(self) -> dict:
+        (path,) = self.records()
+        return json.loads(path.read_text())
+
+    def l2_through_review(self) -> None:
+        self.ok("tier", "L2", "--reason", "feature")
+        self.ok("stage", "intent", "--ref", "spec.md", "--approved-by", "human:me")
+        self.ok("stage", "plan", "--ref", "plan.md")
+        self.ok("stage", "review", "--ref", "review.md")
+
+    def bash(self, command: str) -> dict:
+        return {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(self.repo)}
+
+    def test_record_written_per_task_and_not_for_l0(self) -> None:  # R1
+        self.ok("tier", "L1", "--reason", "small")
+        (first,) = self.records()
+        self.assertRegex(first.name, r"^\d{8}T\d{6}Z(-\d+)?-[A-Za-z0-9_.-]+\.json$")
+        self.ok("stage", "intent", "--note", "goal; check; none")
+        self.assertIn("intent", self.record()["stages"])
+        self.ok("tier", "L1", "--reason", "another task", "--new")
+        self.assertEqual(len(self.records()), 2)
+        self.ok("tier", "L0", "--reason", "typo", "--new")
+        self.assertEqual(len(self.records()), 2)
+
+    def test_first_record_in_a_bundle_keeps_okf_records_passing(self) -> None:  # R1 with the Constraints' okf rule
+        shutil.copytree(SCRIPTS, self.repo / ".ai/scripts", ignore=shutil.ignore_patterns("tests", "__pycache__"))
+        subprocess.run([sys.executable, ".ai/scripts/okf.py", "init"], cwd=self.repo, check=True, capture_output=True)
+        self.ok("tier", "L1", "--reason", "x")
+        self.ok("stage", "intent", "--note", "n")
+        self.ok("stage", "plan", "--note", "p")
+        self.ok("stage", "verify", "--note", "ran")
+        self.assertEqual(len(self.records()), 1)
+
+    def test_bundle_can_still_be_initialized_after_the_first_record(self) -> None:  # AGENTS.md §1 bootstrap
+        shutil.copytree(SCRIPTS, self.repo / ".ai/scripts", ignore=shutil.ignore_patterns("tests", "__pycache__"))
+        self.ok("tier", "L1", "--reason", "x")
+        self.assertFalse((self.repo / "knowledge/index.md").exists())
+        okf_cli = [sys.executable, ".ai/scripts/okf.py"]
+        subprocess.run([*okf_cli, "init"], cwd=self.repo, check=True, capture_output=True)
+        self.assertEqual(len(self.records()), 1)
+        result = subprocess.run([*okf_cli, "records"], cwd=self.repo, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_record_fields_and_no_output_tail(self) -> None:  # R2
+        self.ok("tier", "L1", "--reason", "bug", "--kind", "bugfix")
+        self.ok("redgreen", "red", "--", sys.executable, "-c", "import sys; print('MARKER-' + 'TAIL-XYZ'); sys.exit(2)")
+        record = self.record()
+        for key in ("version", "task", "branch", "head", "tier", "kind", "reason", "user_set", "history", "stages", "redgreen"):
+            self.assertIn(key, record)
+        self.assertEqual(record["redgreen"][0]["red"]["exit"], 2)
+        self.assertIn("work", record["redgreen"][0]["red"])
+        self.assertNotIn("MARKER-TAIL-XYZ", self.records()[0].read_text())
+        self.assertIn("MARKER-TAIL-XYZ", json.dumps(lifecycle.load(self.repo)))
+
+    def test_ref_hash_ignores_frontmatter(self) -> None:  # R3
+        (self.repo / "spec.md").write_text("---\ntype: Specification\nstatus: draft\n---\n\n" + SPEC)
+        self.ok("tier", "L2", "--reason", "feature")
+        self.ok("stage", "intent", "--ref", "spec.md", "--approved-by", "human:me")
+        self.assertRegex(self.record()["stages"]["intent"]["sha256"], r"^[0-9a-f]{64}$")
+        (self.repo / "spec.md").write_text("---\ntype: Specification\nstatus: stable\nverified: { by: process:x }\n---\n\n" + SPEC)
+        self.ok("audit")
+
+    def test_audit_detects_changed_ref_and_malformed_record(self) -> None:  # R4
+        self.l2_through_review()
+        (path,) = self.records()
+        self.assertIn("OK", self.ok("audit", str(path)))
+        (self.repo / "spec.md").write_text(SPEC.replace("Hello, NAME", "Hi, NAME"))
+        self.fails("audit", message="spec.md changed")
+        (self.repo / "spec.md").write_text(SPEC)
+        (self.repo / "plan.md").unlink()
+        self.fails("audit", message="plan.md is missing")
+        (self.repo / "plan.md").write_text(PLAN)
+        unapproved = json.loads(path.read_text())
+        del unapproved["stages"]["intent"]["approved_by"]
+        other = self.repo / "unapproved.json"
+        other.write_text(json.dumps(unapproved))
+        self.fails("audit", str(other), message="approved_by")
+        other.write_text("{not json")
+        self.fails("audit", str(other), message="unparseable")
+        self.ok("audit")
+
+    def test_verify_refuses_failed_audit(self) -> None:  # R5
+        self.l2_through_review()
+        (self.repo / "spec.md").write_text(SPEC.replace("reject an empty name", "accept any name"))
+        self.fails("stage", "verify", "--note", "ran", message="audit")
+        (self.repo / "spec.md").write_text(SPEC)
+        self.converge_green()
+        self.ok("stage", "verify", "--note", "ran")
+
+    def test_commit_hook_requires_staged_record(self) -> None:  # R6
+        self.ok("tier", "L1", "--reason", "small")
+        self.ok("stage", "intent", "--note", "n")
+        self.ok("stage", "plan", "--note", "p")
+        self.ok("stage", "verify", "--note", "ran")
+        (path,) = self.records()
+        relative = path.relative_to(self.repo).as_posix()
+        output = self.hook(self.bash('git commit -m "feat: x"'))
+        self.assertTrue(self.denied(output))
+        self.assertIn(f"git add {relative}", output)
+        self.assertEqual(self.hook(self.bash('git add -A && git commit -m "feat: x"')), "")
+        self.assertEqual(self.hook(self.bash('git commit -m "wip: partial"')), "")
+        self.git("add", relative)
+        self.assertEqual(self.hook(self.bash('git commit -m "feat: x"')), "")
+        self.git("commit", "-qm", "feat: x")
+        self.assertEqual(self.hook(self.bash('git commit -m "feat: y"')), "")
+        self.ok("stage", "verify", "--note", "ran again")
+        self.assertTrue(self.denied(self.hook(self.bash('git commit -m "feat: y"'))))
+        self.assertEqual(self.hook(self.bash('git commit -am "feat: y"')), "")
+        self.ok("tier", "L0", "--reason", "typo", "--new")
+        self.assertEqual(self.hook(self.bash('git commit -m "fix: typo"')), "")
+
+    def verified_l1_with_untracked_record(self) -> str:
+        self.ok("tier", "L1", "--reason", "small")
+        self.ok("stage", "intent", "--note", "n")
+        self.ok("stage", "plan", "--note", "p")
+        self.ok("stage", "verify", "--note", "ran")
+        return self.records()[0].relative_to(self.repo).as_posix()
+
+    def test_staging_another_knowledge_path_does_not_count(self) -> None:  # R6, review M1
+        relative = self.verified_l1_with_untracked_record()
+        self.assertTrue(self.denied(self.hook(self.bash('git add knowledge/other.md && git commit -m "feat: x"'))))
+        self.assertTrue(self.denied(self.hook(self.bash('git add knowledge-other && git commit -m "feat: x"'))))
+        for staged in ("knowledge", "knowledge/history/", "knowledge/history/lifecycle", relative, "--all", "."):
+            self.assertEqual(self.hook(self.bash(f'git add {staged} && git commit -m "feat: x"')), "", staged)
+
+    def test_commit_all_flag_is_read_from_the_commit_command_only(self) -> None:  # R6, review L1
+        relative = self.verified_l1_with_untracked_record()
+        self.git("add", relative)
+        self.git("commit", "-qm", "feat: x")
+        self.ok("stage", "verify", "--note", "again")
+        for command in ('ls -a && git commit -m "feat: y"', 'git commit -m "fix -a thing"', "git commit --amend --no-edit"):
+            self.assertTrue(self.denied(self.hook(self.bash(command))), command)
+        for command in ('git commit -a -m "feat: y"', 'git commit --all -m "feat: y"', 'git commit -qam "feat: y"'):
+            self.assertEqual(self.hook(self.bash(command)), "", command)
+
+    def test_staged_deletion_of_the_record_is_denied(self) -> None:  # R6, review L3
+        relative = self.verified_l1_with_untracked_record()
+        self.git("add", relative)
+        self.git("commit", "-qm", "feat: x")
+        self.git("rm", "-q", relative)
+        self.assertTrue(self.denied(self.hook(self.bash('git commit -m "feat: y"'))))
+
+    def test_state_from_before_the_audit_trail_reaches_verify(self) -> None:  # R5, review M2
+        self.ok("tier", "L1", "--reason", "small")
+        self.ok("stage", "intent", "--note", "n")
+        self.ok("stage", "plan", "--note", "p")
+        state = lifecycle.load(self.repo)
+        del state["task"]
+        lifecycle.state_path(self.repo).write_text(json.dumps(state))
+        for path in self.records():
+            path.unlink()
+        self.ok("stage", "verify", "--note", "ran")
+        self.assertEqual(len(self.records()), 1)
+
+    def test_ref_is_stored_repo_relative(self) -> None:  # R2, review L5
+        self.ok("tier", "L2", "--reason", "feature")
+        self.ok("stage", "intent", "--ref", str(self.repo / "spec.md"), "--approved-by", "human:me")
+        self.assertEqual(self.record()["stages"]["intent"]["ref"], "spec.md")
+
+
+R1_REQ = 'The greeter MUST return "Hello, NAME".'
+R1_ACC = "- R1: `python3 -m unittest test_greet.GreetTests.test_hello` passes.\n"
+R2_REQ = "- R2: The greeter MUST reject an empty name.\n"
+R2_ACC = "- R2: `python3 -m unittest test_greet.GreetTests.test_empty` passes.\n"
+
+
+class SpecAnalysisTests(LifecycleCase):
+    """Graded spec analysis (knowledge/specifications/spec-analysis-convergence.md R1 to R3)."""
+
+    def lint(self, text: str) -> list:
+        (self.repo / "spec.md").write_text(text)
+        return lifecycle.lint_spec(self.repo / "spec.md")
+
+    def cats(self, findings: list) -> list[tuple[str, str]]:
+        return [(f.severity, f.category) for f in findings]
+
+    def req(self, text: str) -> str:
+        return SPEC.replace(R1_REQ, text)
+
+    def test_duplicate_ids_reported_and_continuation_lines_kept(self) -> None:  # R1
+        self.assertEqual(self.lint(SPEC), [])
+        text = SPEC.replace(R2_REQ, R2_REQ + "- R1: The greeter MUST log each call.\n")
+        text = text.replace(R2_ACC, R2_ACC + "- R1: `python3 -c 1` exits 0.\n")
+        dups = [f for f in self.lint(text) if f.category == "duplicate-id"]
+        self.assertEqual(sorted(dups), ["R1 is defined more than once under '## Acceptance'", "R1 is defined more than once under '## Requirements'"])
+        self.assertEqual({f.severity for f in dups}, {"Critical"})
+        continued = SPEC.replace(R2_REQ, "- R2: The greeter MUST reject an empty name\n  and answer quickly.\n\nA robust paragraph outside any bullet.\n")
+        findings = self.lint(continued)
+        self.assertEqual(findings, ["R2 uses the vague term 'quickly'"])
+        self.assertEqual(self.cats(findings), [("High", "vague-term")])
+
+    def test_lint_flags_modal_vague_identical_and_manual(self) -> None:  # R2
+        no_modal = self.lint(self.req("The tool is fast."))
+        self.assertEqual([f for f in no_modal if f.category == "missing-modal"], ["R1 has no MUST or SHOULD"])
+        self.assertEqual(self.cats(self.lint(self.req("The tool MUST be fast."))), [("High", "vague-term")])
+        self.assertEqual(self.lint(self.req("The tool MUST be fast.")), ["R1 uses the vague term 'fast'"])
+        works = self.lint(SPEC.replace(R1_ACC, "- R1: `python3 -c 1` works well.\n"))
+        self.assertEqual((works, self.cats(works)), (["acceptance R1 uses the vague term 'works well'"], [("High", "vague-term")]))
+        twin = self.lint(SPEC.replace(R2_REQ, '- R2: the greeter  MUST return "hello, name".\n'))
+        self.assertEqual((twin, self.cats(twin)), (["R2 repeats the text of R1"], [("High", "identical-requirements")]))
+        manual = self.lint(SPEC.replace(R1_ACC, "- R1: A reviewer reads the greeting.\n"))
+        self.assertEqual(manual, ["acceptance R1 has no backticked command; converge lists it as MANUAL"])
+        self.assertEqual(self.cats(manual), [("Medium", "manual-check")])
+        self.assertEqual(self.lint(self.req("The greeter MUST accept the `fast` flag.")), [])
+        self.assertEqual(self.lint(SPEC.replace(R1_ACC, "- R1: `python3 -c \"print('etc')\"` exits 0.\n")), [])
+        self.assertEqual(self.lint(self.req("The tool MUST answer within 200 ms.")), [])
+        self.assertEqual(self.lint(self.req("The tool SHOULD answer within 200 ms.")), [])
+
+    def test_project_vague_terms_extend_defaults(self) -> None:  # R2
+        project = self.repo / "knowledge/project"
+        project.mkdir(parents=True)
+        (project / "guide.md").write_text("# Guide\n\n## Vague terms\n\n- snappy\n- `Blazing`\n\n## Other\n\n- zippy\n")
+        (project / "bad.md").write_bytes(b"## Vague terms\n\n- \xff\xfe\n")
+        self.assertEqual(self.lint(self.req("The tool MUST be snappy.")), ["R1 uses the vague term 'snappy'"])
+        self.assertEqual(self.lint(self.req("The tool MUST be blazing.")), ["R1 uses the vague term 'blazing'"])
+        self.assertEqual(self.lint(self.req("The tool MUST be zippy.")), [])
+        self.assertEqual(self.lint(self.req("The tool MUST be fast.")), ["R1 uses the vague term 'fast'"])
+        shutil.rmtree(self.repo / "knowledge")
+        self.assertEqual(self.lint(self.req("The tool MUST be snappy.")), [])
+        self.assertEqual(self.lint(self.req("The tool MUST be fast.")), ["R1 uses the vague term 'fast'"])
+
+    def test_analyze_severities_and_exit_code(self) -> None:  # R3
+        self.assertEqual(lifecycle.CATEGORY_SEVERITY, {
+            "missing-section": "Critical", "no-requirements": "Critical", "duplicate-id": "Critical",
+            "uncovered-requirement": "Critical", "orphan-acceptance": "Critical", "placeholder-acceptance": "Critical",
+            "missing-modal": "High", "vague-term": "High", "identical-requirements": "High", "open-questions": "High",
+            "manual-check": "Medium",
+        })
+        cases = {
+            ("Critical", "missing-section"): SPEC.replace("## Non-goals\n\nLocalization.\n", ""),
+            ("Critical", "no-requirements"): SPEC.replace("- R1: " + R1_REQ + "\n" + R2_REQ, ""),
+            ("Critical", "uncovered-requirement"): SPEC.replace(R2_ACC, ""),
+            ("Critical", "orphan-acceptance"): SPEC.replace(R2_ACC, R2_ACC + "- R3: `python3 -c 1` exits 0.\n"),
+            ("Critical", "placeholder-acceptance"): SPEC.replace(R1_ACC, "- R1: `python3 -c 1` TBD.\n"),
+            ("High", "missing-modal"): self.req("The greeter returns a greeting."),
+            ("High", "open-questions"): SPEC.replace("None. The spec is ready for planning.", "- Which locale?"),
+        }
+        for pair, text in cases.items():
+            self.assertIn(pair, self.cats(self.lint(text)), pair)
+        mixed = self.req("The tool MUST be fast.").replace(R2_ACC, "- R2: A reviewer checks it.\n")
+        mixed = mixed.replace(R2_REQ, R2_REQ + "- R2: The greeter MUST log each call.\n")
+        (self.repo / "spec.md").write_text(mixed)
+        code, out, _ = self.run_cli("analyze", "spec.md")
+        self.assertEqual(code, 1)
+        lines = out.splitlines()
+        self.assertIn("Critical duplicate-id spec.md: R2 is defined more than once under '## Requirements'", lines)
+        self.assertIn("High vague-term spec.md: R1 uses the vague term 'fast'", lines)
+        self.assertIn("Medium manual-check spec.md: acceptance R2 has no backticked command; converge lists it as MANUAL", lines)
+        (self.repo / "spec.md").write_text(self.req("The tool MUST be fast."))
+        self.assertEqual(self.run_cli("analyze", "spec.md")[0], 1)
+        (self.repo / "spec.md").write_text(SPEC.replace(R2_ACC, "- R2: A reviewer checks it.\n"))
+        code, out, _ = self.run_cli("analyze", "spec.md")
+        self.assertEqual(code, 0, out)
+        self.assertIn("Medium manual-check spec.md:", out)
+        (self.repo / "spec.md").write_text(SPEC)
+        (self.repo / "other.md").write_text(self.req("The tool MUST be fast."))
+        code, out, _ = self.run_cli("analyze", "spec.md", "other.md")
+        self.assertEqual((code, out.strip()), (1, "High vague-term other.md: R1 uses the vague term 'fast'"))
+        (self.repo / "other.md").write_text(SPEC)
+        self.assertIn("analyze: OK, 2 spec(s)", self.ok("analyze", "spec.md", "other.md"))
+        self.fails("analyze", "missing.md", message="missing.md")
+
+    def test_only_critical_and_high_block_intent_plan_trace_and_queue(self) -> None:  # R3
+        medium = SPEC.replace(R2_ACC, "- R2: A reviewer confirms an empty name is rejected.\n")
+        high = self.req("The greeter MUST be fast.")
+        spec = self.repo / "spec.md"
+        self.ok("tier", "L2", "--reason", "feature")
+        spec.write_text(high)
+        self.fails("stage", "intent", "--ref", "spec.md", "--approved-by", "human:me", message="spec is not ready")
+        self.fails("stage", "intent", "--ref", "spec.md", "--approved-by", "human:me", message="R1 uses the vague term 'fast'")
+        spec.write_text(medium)
+        code, out, err = self.run_cli("stage", "intent", "--ref", "spec.md", "--approved-by", "human:me")
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("Medium manual-check spec.md:", err)
+        code, out, err = self.run_cli("stage", "plan", "--ref", "plan.md")
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("Medium manual-check spec.md:", err)
+        code, out, err = self.run_cli("trace", "spec.md", "--plan", "plan.md")
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("Medium manual-check spec.md:", err)
+        code, out, err = self.run_cli("queue-from-spec", "spec.md")
+        self.assertEqual(code, 0, err)
+        self.assertIn("### SPEC-R2", out)
+        self.assertNotIn("manual-check", out)
+        self.assertIn("Medium manual-check spec.md:", err)
+        spec.write_text(high)
+        code, out, _ = self.run_cli("trace", "spec.md", "--plan", "plan.md")
+        self.assertEqual(code, 1)
+        self.assertIn("R1 uses the vague term 'fast'", out)
+        self.fails("queue-from-spec", "spec.md", message="spec is not ready")
+        self.fails("stage", "plan", "--ref", "plan.md", message="R1 uses the vague term 'fast'")
+        spec.write_text(SPEC.replace(R2_ACC, ""))
+        self.fails("stage", "intent", "--ref", "spec.md", "--approved-by", "human:me", message="R2 has no acceptance check under '## Acceptance'")
+        self.assertIn("R2 has no acceptance check under '## Acceptance'", self.run_cli("analyze", "spec.md")[1])
+
+
+PY = shlex.quote(sys.executable)
+
+
+class ConvergeTests(LifecycleCase):
+    """Acceptance execution and the verify gate (knowledge/specifications/spec-analysis-convergence.md R4 to R6)."""
+
+    def converge_spec(self, *checks: str) -> str:
+        reqs = "".join(f"- R{n}: The tool MUST satisfy check {n}.\n" for n in range(1, len(checks) + 1))
+        accs = "".join(f"- R{n}: {check}\n" for n, check in enumerate(checks, 1))
+        head, tail = SPEC.split("## Requirements")[0], SPEC.split("## Constraints")[1]
+        text = f"{head}## Requirements\n\n{reqs}\n## Acceptance\n\n{accs}\n## Constraints{tail}"
+        (self.repo / "spec.md").write_text(text)
+        (self.repo / "plan.md").write_text("# Plan\n\n" + "".join(f"### Step {n}: R{n}\n" for n in range(1, len(checks) + 1)))
+        return text
+
+    def approve(self) -> None:
+        self.ok("tier", "L2", "--reason", "feature")
+        self.ok("stage", "intent", "--ref", "spec.md", "--approved-by", "human:me")
+
+    def record(self) -> tuple[Path, dict]:
+        (path,) = sorted((self.repo / "knowledge/history/lifecycle").glob("*.json"))
+        return path, json.loads(path.read_text())
+
+    def test_converge_runs_acceptance_commands_and_records_results(self) -> None:  # R4
+        self.converge_spec(
+            f"`{PY} -c pass` exits 0.",
+            f"`{PY} -c \"print('TAIL-' + 'R2-MARKER'); raise SystemExit(3)\"` exits 0.",
+            f"`{PY} -c \"import time; time.sleep(5)\"` exits 0.",
+            "A reviewer reads the output.",
+        )
+        self.approve()
+        code, out, err = self.run_cli("converge", "spec.md", "--timeout", "1")
+        self.assertEqual(code, 1, out + err)
+        lines = out.splitlines()
+        for line in ("R1 PASS", "R2 FAIL (exit 3)", "R3 FAIL (timeout)", "R4 MANUAL"):
+            self.assertIn(line, lines)
+        self.assertIn("TAIL-R2-MARKER", out)
+        path, record = self.record()
+        run = record["converge"]
+        self.assertEqual([(r["id"], r["status"], r["exit"]) for r in run["results"]], [("R1", "PASS", 0), ("R2", "FAIL", 3), ("R3", "FAIL", None), ("R4", "MANUAL", None)])
+        self.assertEqual(run["results"][0]["cmd"], f"{PY} -c pass")
+        self.assertEqual(run["spec"], "spec.md")
+        self.assertRegex(run["spec_sha256"], r"^[0-9a-f]{64}$")
+        self.assertRegex(run["tree"], r"^[0-9a-f]{64}$")
+        self.assertNotIn("TAIL-R2-MARKER", path.read_text())
+        self.assertNotIn("TAIL-R2-MARKER", json.dumps(lifecycle.load(self.repo)))
+        self.assertEqual(lifecycle.load(self.repo)["converge"], run)
+        self.converge_spec("`definitely-not-a-command-xyz --flag` exits 0.", "`bad 'quote` exits 0.")
+        self.ok("tier", "L2", "--reason", "another spec", "--new")
+        self.ok("stage", "intent", "--ref", "spec.md", "--approved-by", "human:me")
+        code, out, err = self.run_cli("converge", "spec.md")
+        self.assertEqual(code, 1, out + err)
+        self.assertIn("R1 FAIL (cannot run)", out.splitlines())
+        self.assertIn("R2 FAIL (cannot run)", out.splitlines())
+
+    def test_converge_refuses_unbound_or_edited_spec_without_running_commands(self) -> None:  # R5
+        text = self.converge_spec(f"`{PY} -c \"open('marker', 'w').close()\"` exits 0.")
+        marker = self.repo / "marker"
+
+        def refused(spec: str) -> None:
+            code, out, err = self.run_cli("converge", spec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("audit", out + err)
+            self.assertFalse(marker.exists())
+
+        refused("spec.md")
+        self.ok("tier", "L1", "--reason", "small")
+        refused("spec.md")
+        self.approve()
+        (self.repo / "other.md").write_text(text)
+        refused("other.md")
+        (self.repo / "spec.md").write_text(text.replace("check 1", "check one"))
+        refused("spec.md")
+        (self.repo / "spec.md").write_text(text)
+        approved = lifecycle.load(self.repo)
+        unapproved = json.loads(json.dumps(approved))
+        del unapproved["stages"]["intent"]["approved_by"]
+        lifecycle.state_path(self.repo).write_text(json.dumps(unapproved))
+        refused("spec.md")
+        lifecycle.state_path(self.repo).write_text(json.dumps(approved))
+        self.assertIn("R1 PASS", self.ok("converge", "spec.md"))
+        self.assertTrue(marker.exists())
+
+    def test_verify_requires_current_passing_converge(self) -> None:  # R6
+        self.ok("tier", "L1", "--reason", "small")
+        self.ok("stage", "intent", "--note", "n")
+        self.ok("stage", "plan", "--note", "p")
+        self.ok("stage", "verify", "--note", "ran")
+        (self.repo / "check.py").write_text("import sys; sys.exit(0 if open('flag').read().strip() == 'fixed' else 1)\n")
+        (self.repo / "flag").write_text("broken\n")
+        self.converge_spec(f"`{PY} check.py` exits 0.")
+        self.git("add", "-A")
+        self.git("commit", "-qm", "check")
+        self.ok("tier", "L2", "--reason", "feature", "--new")
+        self.ok("stage", "intent", "--ref", "spec.md", "--approved-by", "human:me")
+        self.ok("stage", "plan", "--ref", "plan.md")
+        self.ok("stage", "review", "--ref", "review.md")
+        self.fails("stage", "verify", "--note", "ran", message="no converge run for spec.md")
+        self.assertEqual(self.run_cli("converge", "spec.md")[0], 1)
+        self.fails("stage", "verify", "--note", "ran", message="converge failed for R1")
+        (self.repo / "flag").write_text("fixed\n")
+        self.ok("converge", "spec.md")
+        (self.repo / "app.py").write_text("print('changed')\n")
+        self.fails("stage", "verify", "--note", "ran", message="stale")
+        self.ok("converge", "spec.md")
+        (self.repo / "notes.md").write_text("notes\n")
+        (self.repo / "knowledge/note.md").write_text("notes\n")
+        self.ok("stage", "verify", "--note", "ran")
+
+    def test_verify_requires_review_note_for_manual_checks(self) -> None:  # R6
+        self.converge_spec(f"`{PY} -c pass` exits 0.", "A reviewer confirms the greeting text.")
+        self.approve()
+        self.ok("stage", "plan", "--ref", "plan.md")
+        self.ok("stage", "review", "--ref", "review.md")
+        self.assertIn("R2 MANUAL", self.ok("converge", "spec.md").splitlines())
+        self.fails("stage", "verify", "--note", "ran", message="manual check(s) R2 not cited in '## Validation Reviewed' of review.md")
+        (self.repo / "review.md").write_text(REVIEW_OK + "\n## Validation Reviewed\nR1 PASS per converge.\n\n## Notes\nR2\n")
+        self.ok("stage", "review", "--ref", "review.md")
+        self.fails("stage", "verify", "--note", "ran", message="R2 not cited")
+        (self.repo / "review.md").write_text(REVIEW_OK + "\n## Validation Reviewed\nR2 checked by reading the output.\n")
+        self.ok("stage", "review", "--ref", "review.md")
+        self.ok("stage", "verify", "--note", "ran")
+
+    def test_converge_runs_commands_with_disk_backed_scratch_and_non_utf8_output(self) -> None:  # R4
+        self.converge_spec(
+            f"`{PY} -c \"import os; open('seen', 'w').write(os.environ['TMPDIR'])\"` exits 0.",
+            f"`{PY} -c \"import sys; sys.stdout.buffer.write(bytes([255]))\"` exits 0.",
+        )
+        self.approve()
+        previous = os.environ.get("TMPDIR")
+        self.addCleanup(lambda: os.environ.__setitem__("TMPDIR", previous) if previous is not None else os.environ.pop("TMPDIR", None))
+        os.environ["TMPDIR"] = "/tmp"
+        self.assertEqual(self.ok("converge", "spec.md").splitlines()[:2], ["R1 PASS", "R2 PASS"])
+        self.assertEqual(Path((self.repo / "seen").read_text()), lifecycle.scratch.directory(self.repo))
+
+    def test_converge_refuses_without_disk_backed_scratch(self) -> None:  # R4
+        self.converge_spec(f"`{PY} -c \"open('marker', 'w').close()\"` exits 0.")
+        self.approve()
+        real = lifecycle.scratch.environment
+
+        def unusable(*_: object, **__: object) -> dict:
+            raise ValueError("scratch must be outside system temporary storage")
+
+        lifecycle.scratch.environment = unusable
+        self.addCleanup(setattr, lifecycle.scratch, "environment", real)
+        self.fails("converge", "spec.md", message="nothing was run: no disk-backed scratch directory")
+        self.assertFalse((self.repo / "marker").exists())
+
+    def test_l3_spec_ref_requires_converge_and_queue_intent_does_not(self) -> None:  # R6
+        self.converge_spec(f"`{PY} -c pass` exits 0.")
+        self.ok("tier", "L3", "--reason", "milestone")
+        self.ok("stage", "intent", "--ref", "spec.md", "--approved-by", "human:me")
+        self.ok("stage", "plan", "--ref", "plan.md")
+        self.ok("stage", "review", "--ref", "review.md")
+        self.fails("stage", "verify", "--note", "ran", message="no converge run for spec.md")
+        self.ok("converge", "spec.md")
+        self.ok("stage", "verify", "--note", "ran")
+        (self.repo / "knowledge/project").mkdir(parents=True, exist_ok=True)
+        (self.repo / "knowledge/project/work-queue.md").write_text("# Work queue\n")
+        self.ok("tier", "L3", "--reason", "queue batch", "--new")
+        self.ok("stage", "intent", "--note", "queue:T1", "--approved-by", "human:me")
+        self.ok("stage", "plan", "--note", "queue:T1")
+        self.ok("stage", "review", "--ref", "review.md")
+        self.ok("stage", "verify", "--note", "ran")
+
+    def test_reapproved_spec_or_new_head_stales_the_run(self) -> None:  # R6
+        text = self.converge_spec(f"`{PY} -c pass` exits 0.")
+        self.approve()
+        self.ok("stage", "plan", "--ref", "plan.md")
+        self.ok("stage", "review", "--ref", "review.md")
+        self.ok("converge", "spec.md")
+        (self.repo / "spec.md").write_text(text.replace("check 1", "check one"))
+        self.ok("stage", "intent", "--ref", "spec.md", "--approved-by", "human:me")
+        self.fails("stage", "verify", "--note", "ran", message="spec.md changed since the run")
+        self.ok("converge", "spec.md")
+        (self.repo / "knowledge").mkdir(exist_ok=True)
+        (self.repo / "knowledge/note.md").write_text("records only\n")
+        self.git("add", "knowledge/note.md")
+        self.git("commit", "-qm", "wip: records")
+        self.fails("stage", "verify", "--note", "ran", message="HEAD or a source file changed since the run")
 
 
 if __name__ == "__main__":
