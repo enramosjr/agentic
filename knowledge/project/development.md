@@ -47,7 +47,7 @@ sources:
     resource: ../../.ai/scripts/tests/test_sync_check.py
   - id: readme-md
     resource: ../../README.md
-verified: { by: "process:python3 .ai/scripts/lifecycle.py reuse framework-regression", at: 2026-10-19T19:43:08Z }
+verified: { by: "process:python3 -m unittest discover -s .ai/scripts/tests -p test_lifecycle_conformance.py", at: 2026-10-19T21:16:44Z }
 ---
 
 # Framework development and validation
@@ -62,6 +62,8 @@ From the framework repository root:
 mkdir -p .git/okf-test-tmp
 PYTHONDONTWRITEBYTECODE=1 TMPDIR="$PWD/.git/okf-test-tmp" python3 -m unittest discover -s .ai/scripts/tests
 ```
+
+`python3 .ai/scripts/run_tests.py` runs the same tests with one process per test class (about four times faster; see [Run the script tests](../playbooks/run-script-tests.md)). Without `TMPDIR`, test modules move fixtures to `$XDG_CACHE_HOME/okf-tests` (default `~/.cache/okf-tests`) when the system temp dir is memory-backed.
 
 Disk-backed repository scratch is required for workflow tests; lifecycle scratch rejects `/tmp`, `/var/tmp`, and memory filesystems. Disable bytecode generation so imported fixture tests do not add untracked cache files that fail the fixture's synchronization gate. The installer slice is selected with `-p test_install.py`. Bootstrap fixtures additionally bound Git discovery so scratch directories below the framework's Git metadata represent independent projects.
 

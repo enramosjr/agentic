@@ -14,6 +14,7 @@ import io
 
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
+import disk_tmp  # noqa: F401
 import lifecycle
 
 OLD = '- EXPORT-R1: The exporter MUST write UTF-8.\n  - Scenario utf8: Write café.\n'

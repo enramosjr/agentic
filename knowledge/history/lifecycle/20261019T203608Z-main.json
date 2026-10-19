@@ -1,0 +1,48 @@
+{
+  "branch": "main",
+  "head": "9e13fce5b17edd8ca50b8ec2ba6c7d8d09117eef",
+  "history": [],
+  "kind": "bugfix",
+  "reason": "test fixtures land in /tmp, which scratch.py rejects; test-only fix, no contract effect",
+  "redgreen": [
+    {
+      "cmd": "sh -c cd .ai/scripts/tests && python3 -m unittest -q test_scratch test_lifecycle test_autonomy_validation test_pr_sync test_autonomy test_install test_lifecycle_eval",
+      "green": {
+        "at": "2026-10-19T20:40:37Z",
+        "exit": 0,
+        "work": "185725aa031f9e82d76ba8d3b2c6eff89cbda9ef"
+      },
+      "red": {
+        "at": "2026-10-19T20:37:49Z",
+        "exit": 1,
+        "work": "2c3657afd93642a9298fc63fe9c039ecedf45b9f"
+      }
+    }
+  ],
+  "stages": {
+    "intent": {
+      "at": "2026-10-19T20:36:08Z",
+      "level": "L1",
+      "note": "Goal: script tests pass when the system temp dir is /tmp or tmpfs. Success: scratch-dependent modules pass with default TMPDIR. Assumption: scratch.py's disk-only rule is intended and stays unchanged."
+    },
+    "plan": {
+      "at": "2026-10-19T20:36:08Z",
+      "level": "L1",
+      "note": "Add tests/disk_tmp.py that redirects tempfile/TMPDIR to ~/.cache/okf-tests only when scratch.require_disk rejects gettempdir(); import it in the 10 affected test modules; red/green on those modules."
+    },
+    "review": {
+      "at": "2026-10-19T20:43:59Z",
+      "level": "L1",
+      "note": "Self-review: 1 new test helper (redirects only when scratch.require_disk rejects gettempdir, re-checks the target), 6 one-line imports in base test modules; no production code touched; scratch.py rule unchanged."
+    },
+    "verify": {
+      "at": "2026-10-19T20:43:59Z",
+      "level": "L1",
+      "note": "red: affected modules FAILED (105 failures, 50 errors, scratch-in-/tmp); green: same command PASS; full suite default TMPDIR: 484 tests, only 5 pre-existing errors from missing knowledge/ docs"
+    }
+  },
+  "task": "20261019T203608Z-main",
+  "tier": "L1",
+  "user_set": false,
+  "version": 1
+}

@@ -15,7 +15,7 @@ sources:
     resource: ../../.ai/scripts/tests/test_lifecycle.py
   - id: ai-scripts-tests-test-lifecycle-conformance-py
     resource: ../../.ai/scripts/tests/test_lifecycle_conformance.py
-verified: { by: "process:python3 .ai/scripts/okf.py records", at: 2026-10-19T19:37:49Z }
+verified: { by: "process:python3 -m unittest discover -s .ai/scripts/tests -p test_lifecycle*.py", at: 2026-10-19T21:17:50Z }
 ---
 
 # Lifecycle gates and evidence

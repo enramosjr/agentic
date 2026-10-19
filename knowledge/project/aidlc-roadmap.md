@@ -13,7 +13,7 @@ sources:
     resource: ../../.ai/agents/analyst.md
   - id: ai-scripts-tests-test-brownfield-deltas-py
     resource: ../../.ai/scripts/tests/test_brownfield_deltas.py
-verified: { by: "process:python3 .ai/scripts/okf.py records", at: 2026-10-19T19:37:49Z }
+verified: { by: "process:python3 -m unittest discover -s .ai/scripts/tests -p test_brownfield_deltas.py", at: 2026-10-19T21:17:33Z }
 ---
 
 # Capability baseline approval boundary

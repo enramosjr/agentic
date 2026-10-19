@@ -15,7 +15,7 @@ sources:
     resource: ../../.ai/scripts/tests/test_learning_loop.py
   - id: ai-lifecycle-md
     resource: ../../.ai/lifecycle.md
-verified: { by: "process:python3 .ai/scripts/okf.py records", at: 2026-10-19T19:37:49Z }
+verified: { by: "process:python3 -m unittest discover -s .ai/scripts/tests -p test_learning_loop.py", at: 2026-10-19T21:17:15Z }
 ---
 
 # Optional lessons and approved project rules

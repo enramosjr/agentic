@@ -1,0 +1,243 @@
+{
+  "branch": "perf/efficiency-pass",
+  "converge": {
+    "at": "2026-10-19T21:16:33Z",
+    "results": [
+      {
+        "cmd": "python3 -m unittest discover -s .ai/scripts/tests -p test_efficiency.py -k DiskTmp",
+        "exit": 0,
+        "id": "R1",
+        "status": "PASS"
+      },
+      {
+        "cmd": "python3 -m unittest discover -s .ai/scripts/tests -p test_efficiency.py -k HookDedupe",
+        "exit": 0,
+        "id": "R2",
+        "status": "PASS"
+      },
+      {
+        "cmd": "python3 -m unittest discover -s .ai/scripts/tests -p test_efficiency.py -k HookFastPath",
+        "exit": 0,
+        "id": "R3",
+        "status": "PASS"
+      },
+      {
+        "cmd": "python3 -m unittest discover -s .ai/scripts/tests -p test_efficiency.py -k Runner",
+        "exit": 0,
+        "id": "R4",
+        "status": "PASS"
+      },
+      {
+        "cmd": "python3 -m unittest discover -s .ai/scripts/tests -p test_lifecycle_conformance.py -k AgentsBudget",
+        "exit": 0,
+        "id": "R5",
+        "status": "PASS"
+      }
+    ],
+    "spec": "knowledge/specifications/efficiency-pass.md",
+    "spec_sha256": "4373fed2e838ed151a0182c7d6496d2aefc2a2b916f1e8fe29fbde56f90ef1db",
+    "tree": "aabb9070f63bd04c9e4428fded10ea913f7c24a77f45c2dca01261c09abaf4db"
+  },
+  "head": "9e13fce5b17edd8ca50b8ec2ba6c7d8d09117eef",
+  "history": [],
+  "kind": "feature",
+  "ledger": [
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/run_tests.py"
+      ],
+      "at": "2026-10-19T21:12:22Z",
+      "duration": 46.639,
+      "exit": 1,
+      "head": "df47201984945b01d3de68dde202f5b7d0b6b10e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "framework-regression-parallel",
+      "tree": "aabb9070f63bd04c9e4428fded10ea913f7c24a77f45c2dca01261c09abaf4db"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/run_tests.py"
+      ],
+      "at": "2026-10-19T21:13:15Z",
+      "duration": 46.559,
+      "exit": 0,
+      "head": "df47201984945b01d3de68dde202f5b7d0b6b10e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "framework-regression-parallel",
+      "tree": "aabb9070f63bd04c9e4428fded10ea913f7c24a77f45c2dca01261c09abaf4db"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".ai/scripts/tests"
+      ],
+      "at": "2026-10-19T21:16:26Z",
+      "duration": 191.374,
+      "exit": 0,
+      "head": "df47201984945b01d3de68dde202f5b7d0b6b10e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "framework-regression",
+      "tree": "aabb9070f63bd04c9e4428fded10ea913f7c24a77f45c2dca01261c09abaf4db"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".ai/scripts/tests",
+        "-p",
+        "test_efficiency.py",
+        "-k",
+        "DiskTmp"
+      ],
+      "at": "2026-10-19T21:16:33Z",
+      "duration": 0.068,
+      "exit": 0,
+      "head": "df47201984945b01d3de68dde202f5b7d0b6b10e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R1",
+      "tree": "aabb9070f63bd04c9e4428fded10ea913f7c24a77f45c2dca01261c09abaf4db"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".ai/scripts/tests",
+        "-p",
+        "test_efficiency.py",
+        "-k",
+        "HookDedupe"
+      ],
+      "at": "2026-10-19T21:16:33Z",
+      "duration": 0.235,
+      "exit": 0,
+      "head": "df47201984945b01d3de68dde202f5b7d0b6b10e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R2",
+      "tree": "aabb9070f63bd04c9e4428fded10ea913f7c24a77f45c2dca01261c09abaf4db"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".ai/scripts/tests",
+        "-p",
+        "test_efficiency.py",
+        "-k",
+        "HookFastPath"
+      ],
+      "at": "2026-10-19T21:16:33Z",
+      "duration": 0.318,
+      "exit": 0,
+      "head": "df47201984945b01d3de68dde202f5b7d0b6b10e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R3",
+      "tree": "aabb9070f63bd04c9e4428fded10ea913f7c24a77f45c2dca01261c09abaf4db"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".ai/scripts/tests",
+        "-p",
+        "test_efficiency.py",
+        "-k",
+        "Runner"
+      ],
+      "at": "2026-10-19T21:16:33Z",
+      "duration": 0.244,
+      "exit": 0,
+      "head": "df47201984945b01d3de68dde202f5b7d0b6b10e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R4",
+      "tree": "aabb9070f63bd04c9e4428fded10ea913f7c24a77f45c2dca01261c09abaf4db"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".ai/scripts/tests",
+        "-p",
+        "test_lifecycle_conformance.py",
+        "-k",
+        "AgentsBudget"
+      ],
+      "at": "2026-10-19T21:16:33Z",
+      "duration": 0.056,
+      "exit": 0,
+      "head": "df47201984945b01d3de68dde202f5b7d0b6b10e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R5",
+      "tree": "aabb9070f63bd04c9e4428fded10ea913f7c24a77f45c2dca01261c09abaf4db"
+    }
+  ],
+  "lessons": [
+    {
+      "at": "2026-10-19T21:07:05Z",
+      "number": 1,
+      "sha256": "ef9ca849d5b0f4f5888985f617f6401bf994732d8bfcd96fc50b513d878787cf",
+      "stage": "review",
+      "text": "A sabotage (broken-variant) check must toggle, run, and restore in sequential tool calls; batching them in parallel restores the file before the test runs and fakes a red."
+    }
+  ],
+  "reason": "Efficiency pass: new parallel test runner command, hook config changes in distributed harness files, AGENTS.md restructure",
+  "redgreen": [],
+  "stages": {
+    "intent": {
+      "approved_by": "human:enramosjr",
+      "at": "2026-10-19T20:51:21Z",
+      "level": "L2",
+      "ref": "knowledge/specifications/efficiency-pass.md",
+      "sha256": "4373fed2e838ed151a0182c7d6496d2aefc2a2b916f1e8fe29fbde56f90ef1db"
+    },
+    "plan": {
+      "at": "2026-10-19T20:51:21Z",
+      "level": "L2",
+      "ref": "knowledge/specifications/efficiency-pass-plan.md",
+      "sha256": "eb5bf770de703419a28e09de73b36ed9b82834050331b3e00ebe472ba6839fa3"
+    },
+    "review": {
+      "at": "2026-10-19T21:03:47Z",
+      "level": "L2",
+      "ref": "knowledge/specifications/efficiency-pass-review.md",
+      "sha256": "d623dc6b3b028674a133b100e5664cb852ec82c2adfc04aae1558b414978d1c0"
+    },
+    "verify": {
+      "at": "2026-10-19T21:20:36Z",
+      "level": "L2",
+      "note": "framework-regression-parallel exit=0 tree=aabb907; framework-regression exit=0 tree=aabb907; converge:R1 exit=0 tree=aabb907; converge:R2 exit=0 tree=aabb907; converge:R3 exit=0 tree=aabb907; converge:R4 exit=0 tree=aabb907; converge:R5 exit=0 tree=aabb907"
+    }
+  },
+  "task": "20261019T204937Z-perf_efficiency-pass",
+  "tier": "L2",
+  "user_set": false,
+  "version": 1
+}

@@ -13,7 +13,7 @@ sources:
     resource: ../../.ai/scripts/tests/test_install.py
   - id: readme-md
     resource: ../../README.md
-verified: { by: "process:python3 .ai/scripts/lifecycle.py reuse framework-regression", at: 2026-10-19T19:43:08Z }
+verified: { by: "process:python3 -m unittest discover -s .ai/scripts/tests -p test_install.py", at: 2026-10-19T21:17:24Z }
 ---
 
 # Unified project bootstrap delivery

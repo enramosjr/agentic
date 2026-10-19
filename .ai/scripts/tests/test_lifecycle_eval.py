@@ -21,6 +21,7 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
 
+import disk_tmp  # noqa: E402,F401
 import lifecycle_eval  # noqa: E402
 import eval_process  # noqa: E402
 import eval_results  # noqa: E402

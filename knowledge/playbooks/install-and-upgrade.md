@@ -11,7 +11,7 @@ sources:
     resource: ../../.ai/scripts/install.py
   - id: readme-md
     resource: ../../README.md
-verified: { by: "process:python3 .ai/scripts/okf.py records", at: 2026-10-19T19:37:49Z }
+verified: { by: "process:python3 -m unittest discover -s .ai/scripts/tests -p test_install.py", at: 2026-10-19T21:20:27Z }
 ---
 
 # Bootstrap an adopter project
