@@ -228,6 +228,9 @@ def main() -> int:
         return 0
     roots = data.get("workspace_roots") or []
     root = Path(os.environ.get("CLAUDE_PROJECT_DIR") or (roots[0] if roots else "") or data.get("cwd") or os.getcwd())
+    # Cursor also runs .claude/settings.json hooks; its own .cursor/hooks.json entry makes the same decision.
+    if "--skip-in-cursor" in sys.argv[1:] and "cursor_version" in data and (root / ".cursor/hooks.json").is_file():
+        return 0
     try:
         verdict = judge(command, root)
     except Exception:  # noqa: BLE001 - a guard bug must never block work

@@ -6,6 +6,8 @@ The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", and "MAY" in this docu
 
 **Start here:** pick the lifecycle tier (§2.5), then follow `.ai/lifecycle.md` for the stages that tier requires: Intent, Plan, Implement, Review, Verify & Sync, Ship.
 
+**Reference material** lives verbatim in [`.ai/agents-reference.md`](.ai/agents-reference.md) and is as binding as this file. When a rule below names a section, load it: `python3 .ai/scripts/okf.py show .ai/agents-reference.md --section HEADING`.
+
 ---
 
 ## 1. Core Mandate: Open Knowledge Format (OKF) Synchronization
@@ -52,7 +54,7 @@ Depending on the operational stage of the task, agents MUST align with the appro
 | Reviewing plans, designs, diffs, or completed work | [`.ai/agents/reviewer.md`](.ai/agents/reviewer.md) | Evidence-based findings, severity, validation quality |
 | Managing the work queue, dispatching and integrating tasks in autonomous mode (§9) | [`.ai/agents/orchestrator.md`](.ai/agents/orchestrator.md) | Task selection, delegation, integration, checkpoints |
 
-The analyst, planner, implementer, and reviewer are also registered as subagents in `.claude/agents/` (read by Claude Code and Cursor) and `.codex/agents/` (read by Codex). Delegated analysis, planning, and review SHOULD use them. In Claude Code and Cursor the analyst, planner, and reviewer run read-only by tool restriction. Codex custom agents cannot set a sandbox, so their read-only rule is an instruction only, and Codex spawns subagents only when asked: name the role in the prompt (for example "have reviewer check this diff").
+The analyst, planner, implementer, and reviewer are also registered as subagents in `.claude/agents/` (read by Claude Code and Cursor) and `.codex/agents/` (read by Codex). Delegated analysis, planning, and review SHOULD use them. Per-harness behavior (read-only enforcement, Codex spawning): section `Subagents`.
 
 ### 2.3 Operational Loading Rules
 
@@ -92,89 +94,27 @@ Every task, from a one-line prompt to an autonomous milestone, follows one lifec
 
 ## 3. OKF Structure Overview
 
-The OKF bundle resides in the `knowledge/` directory and follows the OKF v0.2 layout. `okf.py init` creates the root files and the standard sections below:
-
-| Path | Purpose | Update Trigger |
-|------|---------|----------------|
-| `knowledge/index.md` | Entry point & root index for the OKF bundle | Adding or removing root bundle sections |
-| `knowledge/log.md` | Chronological log of all OKF updates | **Mandatory on every OKF update** |
-| `knowledge/project/` | Architecture, development setup, evidence rules, boundaries | Architectural shifts, directory re-organizations, boundary/policy updates |
-| `knowledge/capabilities/` | What the product does: features and user-visible behavior | Adding, modifying, or deprecating capabilities |
-| `knowledge/specifications/` | Normalized views of product contracts | Updating product contracts or implementation guidance |
-| `knowledge/history/` | Dated implementation arc and delivery milestones | Updating implementation history or milestones |
-| `knowledge/concepts/` | Domain concepts, data models, or protocol definitions | Introducing new core domain models or protocol definitions |
-| `knowledge/playbooks/` | Operational, setup, and troubleshooting playbooks | Adding or revising developer or deployment operational guides |
-| `knowledge/project/work-queue.md` | Execution state of planned tasks (§9); created by `okf.py init --autonomous` | Claiming, completing, blocking, or decomposing a task |
-| `knowledge/project/status.md` | Recovery checkpoint a fresh agent resumes from (§9) | Every checkpoint; overwritten in place |
-| `knowledge/project/work-queue-archive.md` | Closed tasks moved out of the queue (§9.3); written by `okf.py queue --archive` | Closing tasks |
+The OKF bundle resides in `knowledge/` (OKF v0.2 layout; `okf.py init` creates it): `index.md`, `log.md`, and the sections `project/`, `capabilities/`, `specifications/`, `history/`, `concepts/`, `playbooks/`, plus the §9 work queue and status under `project/`. What each holds and when it changes: `.ai/agents-reference.md` section `Bundle layout`.
 
 ### 3.1 OKF Tooling (`.ai/scripts/okf.py`) — Script First
 
-Any OKF operation the script covers MUST go through it instead of reading, grepping, or hand-editing `knowledge/`. It is deterministic, stdlib-only (Python 3.9+), and prints compact output. Read a full document only when you need its prose.
-
-| Need | Command (`python3 .ai/scripts/okf.py …`) |
-|------|------------------------------------------|
-| Discover context when no queue handoff/worker brief is available | `context [--log N]` |
-| Create the bundle skeleton | `init` |
-| Discover docs (one line each) | `list [--type T] [--tag T] [--status S] [--under DIR] [--long]` |
-| Read cheaply (several docs per call) | `show PATH [PATH…]` (frontmatter + outline with line numbers), `--outline --depth N`, `--section HEADING`, `--lines A-B`, `--meta`, `--body` |
-| Load a persona, role file, or any repo `.md` selectively (no bundle needed) | `show .ai/personas/X.md --outline --depth 2`, then `show … --section HEADING` |
-| Find text across the bundle (skips `log.md`) | `search PATTERN [--regex 'a\|b'] [--under DIR\|FILE] [--count] [--include-log] [--limit N]` |
-| Which docs a change affects | `affected [PATHS…]` (default: git changes vs `HEAD`; matches `sources[].resource`) |
-| New concept doc with full frontmatter | `new PATH --type T --title X --description D [--tags a,b] [--source path[=Title]]…` |
-| Edit frontmatter in place | `set PATH key=value…`, `stamp verified PATH… --by "process:<command>"` |
-| Log entry (dated, newest-first) | `log "message" [--date YYYY-MM-DD]` |
-| Regenerate `index.md` listings | `reindex [--check]` (only rewrites the `okf:index` marker block) |
-| Gate 4 structural check | `validate [--strict] [--json]` (exit 1 on errors) |
-| Commit-boundary records gate (validate errors + `reindex --check` + `git diff --check`) in one call | `records [--base REV]` |
-| Run a long check without model polling (`.ai/scripts/wait_check.py`) | `wait_check.py start --log LOG -- CMD`, then `wait_check.py wait --log LOG [--fail RX] [--done RX] --max SECONDS` |
-| Create the work queue and status checkpoint | `init --autonomous` |
-| Task states (READY computed from dependencies) and what to start next | `queue [--next] [--state S] [--limit N] [--json]` |
-| Move DONE and CANCELLED tasks to the archive | `queue --archive` |
-| Is the repository resumable right now? | `checkpoint [--json]` (exit 1 when unsafe) |
-| Resume material from repository state | `handoff` (digest), `handoff --prompt [--role orchestrator]` (fresh-session prompt), `handoff --task ID` (worker brief) |
-| Run the queue as fresh agent sessions (`.ai/scripts/autonomy_driver.py`) | `autonomy_driver.py [--role orchestrator] -- AGENT_COMMAND` |
-| Merge parallel branches' log, index, queue and status without conflicts (once per clone) | `git-setup` |
-| Keep agent PRs mergeable after base-branch merges (`.ai/scripts/pr_sync.py`) | `pr_sync.py [--dry-run]` |
-| Declare the tier, record and gate lifecycle stages, record red/green evidence (`.ai/scripts/lifecycle.py`) | `lifecycle.py tier L0\|L1\|L2\|L3 --reason T [--kind K]`, `stage NAME [--ref P] [--note T] [--approved-by A]`, `gate TARGET`, `status`, `redgreen red\|green -- CMD`, `analyze SPEC`, `converge SPEC` |
-| Check spec → plan → tests coverage, and turn a spec into work-queue entries | `lifecycle.py trace SPEC [--plan P] [--tests PATH…]`, `lifecycle.py queue-from-spec SPEC [--group G]` |
-| Run the lifecycle scenario evals against a real agent (`.ai/scripts/lifecycle_eval.py`) | `lifecycle_eval.py list\|check\|run [--scenario ID] -- AGENT_COMMAND` |
-
-Path conventions follow the OKF SPEC (§6.1, §6.2): links and path fields are either URLs, bundle-relative paths beginning with `/`, or paths relative to the containing document. `new --source` and `affected` take **repo-relative** paths and convert them for you. Set `OKF_ACTOR` (e.g. `agent/<model-id>`) so `generated.by` is attributed. `stamp verified` records only the actor you pass, so stamp only after the cited command actually ran and passed (§8.5). Tests: `python3 -m unittest discover -s .ai/scripts/tests`.
+Any OKF operation the script covers MUST go through it instead of reading, grepping, or hand-editing `knowledge/`. It is deterministic, stdlib-only (Python 3.9+), and prints compact output. Read a full document only when you need its prose. The command for each need: section `Script commands`, or `okf.py --help`.
 
 **When a command fails**, its error is one line and names the fix (a missing doc lists close matches; `affected` outside git asks for explicit paths). Correct the invocation and rerun; you MUST NOT fall back to reading or grepping `knowledge/` by hand.
 
 **Allowed field values and `validate` rules** are printed by `okf.py --help`; per-command options by `okf.py COMMAND --help`. Agents MUST NOT grep or read `okf.py` source to learn them.
 
-**Files the script does not cover** (source code, configuration, tests, and OKF body prose): use the harness's own tools and MUST NOT use the shell. They take structured arguments and return bounded, line-numbered output, so there is no command to compose.
+**Files the script does not cover** (source code, configuration, tests, and OKF body prose): use the harness's own tools and MUST NOT use the shell. They take structured arguments and return bounded, line-numbered output, so there is no command to compose. Read with `Read`, search with `Grep`, find with `Glob`, edit with `Write`/`Edit`/`StrReplace`/`apply_patch`; never `cat`, `head`, `tail`, `sed`, `awk`, `grep`, `rg`, `ls`, `find`, heredocs, or `echo >` (full map: section `Harness tools`).
 
-| Need | Claude Code | Cursor | Codex | Never |
-|------|-------------|--------|-------|-------|
-| Read a file or line range | `Read` (`offset`, `limit`) | `Read` | `python3 .ai/scripts/repo.py read PATH [--lines A-B]` | `cat`, `head`, `tail`, `sed -n`, `awk`, whole-file `repo.py grep '^'` |
-| Search contents | `python3 .ai/scripts/repo.py grep PATTERN [--regex] [-i] [--glob G] [--under DIR] [--count]` | `Grep` | `repo.py grep …` | `grep`, `rg`, `git grep` |
-| Find files | `python3 .ai/scripts/repo.py files 'GLOB'… [--under DIR] [--depth N]` | `Glob` | `repo.py files …` | `ls`, `find`, `tree`, `git ls-files` |
-| Create or edit a file | `Write`, `Edit` | `Write`, `StrReplace` | `apply_patch` | heredocs, `sed -i`, `tee`, `echo >`, Python scripts that write files |
+Claude Code has no `Glob` or `Grep` tool and Codex has no file-read tool, so `repo.py` fills those gaps (`python3 .ai/scripts/repo.py read|grep|files`). Agents MUST use it in any harness that lacks those tools.
 
-Claude Code has no `Glob` or `Grep` tool and Codex has no file-read tool, so `repo.py` fills those gaps: it respects `.gitignore`, skips binaries, and caps output (`--limit`; `read` prints at most 250 numbered lines and names the next range). Agents MUST use it in any harness that lacks those tools. Read source by range: find the lines with `repo.py grep`, then read only those. Shell is for running things: builds, tests, git, `okf.py`, and `repo.py`. Piping a command's output through `head`, `tail`, or `rg` is fine.
-
-**Enforcement.** `.ai/scripts/shell_guard.py` runs before every shell command (`.claude/settings.json` for Claude Code, `.cursor/hooks.json` for Cursor, `.codex/hooks.json` for Codex, which loads project hooks only from a trusted `.codex/` layer and after review with `/hooks`). It rejects the "Never" column above, and any shell read of `knowledge/` or `.ai/**.md`, with a message naming the replacement. Paths outside the project and under `/tmp` are allowed. When a command is blocked, switch to the named tool or script; you MUST NOT rephrase the command to slip past the guard (`git ls-files`, `git grep`, or a Python one-liner doing the same job). If the named tool does not exist in your session, use the `repo.py` / `okf.py` command from the message. A human MAY disable it by launching the agent with `OKF_SHELL_GUARD=off`.
+**Enforcement.** `.ai/scripts/shell_guard.py` blocks those commands before they run and names the replacement. When a command is blocked, switch to the named tool or script; you MUST NOT rephrase the command to slip past the guard (`git ls-files`, `git grep`, or a Python one-liner doing the same job). A human MAY disable it by launching the agent with `OKF_SHELL_GUARD=off`.
 
 ---
 
 ## 4. OKF Relevance Trigger Matrix
 
-`okf.py affected` is the first-pass detector: it maps changed files to the docs that cite them in `sources` and lists changed files no doc covers. Agents MUST also check their changes against this matrix, which covers changes that `sources` mappings cannot see:
-
-| Category of Change | Typical Workspace Paths | Required OKF Action | OKF Target Section |
-|--------------------|-------------------------|---------------------|--------------------|
-| **User-visible behavior** | Feature code, UI, CLI commands, endpoints | Add or update the capability doc | `knowledge/capabilities/` |
-| **Public contracts** | API definitions, schemas, wire formats, config formats, exported interfaces | Update the specification mirror | `knowledge/specifications/` |
-| **Architecture & boundaries** | New, moved, or removed modules, packages, services; dependency direction | Update architecture and boundary docs | `knowledge/project/` |
-| **Build, toolchain, dependencies** | Build files, lockfiles, CI configuration, developer scripts | Update the development guide and setup playbooks | `knowledge/project/`, `knowledge/playbooks/` |
-| **Operational procedures** | Deployment, release, migration, troubleshooting steps | Add or revise the playbook | `knowledge/playbooks/` |
-| **Domain models** | Core entities, data models, protocols | Add or update the concept doc | `knowledge/concepts/` |
-| **Delivered milestones** | A completed, verified feature slice | Record the milestone | `knowledge/history/` |
-| **Any OKF update** | `knowledge/**` | Append change entry | `knowledge/log.md` |
+`okf.py affected` is the first-pass detector: it maps changed files to the docs that cite them in `sources` and lists changed files no doc covers. Agents MUST also check their changes against this matrix, which covers changes that `sources` mappings cannot see: user-visible behavior → `capabilities/`; public contracts → `specifications/`; architecture, boundaries, build, toolchain, dependencies → `project/` (and `playbooks/` for setup); operational procedures → `playbooks/`; domain models → `concepts/`; delivered milestones → `history/`; any OKF update → a `log.md` entry. Full matrix: section `Trigger matrix`.
 
 Vendored code or submodules that carry their own OKF bundle SHOULD have behavior changes recorded in that bundle; this bundle tracks only the integration boundary.
 
@@ -184,35 +124,7 @@ Vendored code or submodules that carry their own OKF bundle SHOULD have behavior
 
 ### 5.1 Required YAML Frontmatter (OKF v0.2)
 
-Follow the public [OKF SPEC](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md) for reserved files and concept frontmatter:
-
-| File | Frontmatter rule |
-|------|------------------|
-| Bundle-root `knowledge/index.md` | MAY contain **only** `okf_version: "0.2"` (SPEC §8 / §12) |
-| Any other `index.md` | **No** frontmatter (directory listing body only) (SPEC §8) |
-| Any `log.md` | **No** frontmatter; date headings `## YYYY-MM-DD`, newest first (SPEC §9) |
-| All other `.md` concept documents | **Required** parseable YAML frontmatter with non-empty `type` (SPEC §4 / §11) |
-
-Concept documents SHOULD also carry the recommended and project-extension fields:
-
-```yaml
----
-type: Architecture | Capability | Specification Mirror | Concept | Historical Record | Playbook | Development Guide | Product Boundary
-title: Short Descriptive Title
-description: One sentence summary of the knowledge document.
-tags: [tag1, tag2, tag3]
-status: stable | draft | deprecated
-evidence: implementation-and-current-specifications | project-documentation | validated-runtime
-generated: { by: "agent-name/model-id", at: 2026-07-27T00:00:00Z }
-verified: { by: "process:test-suite", at: 2026-07-27T00:00:00Z }
-sources:
-  - id: source-identifier
-    resource: ../../src/module/file.ext
-    title: Human-readable source description
----
-```
-
-`type` values are producer-defined, not centrally registered (SPEC §4.1). `evidence` is a repository extension key; consumers MUST tolerate unknown keys (SPEC §4.1). `verified` may be a single `{ by, at }` map or a list of them (SPEC §5.2). Actor strings in `generated.by` / `verified.by` follow SPEC §7: `<producer>/<version>` for agents and tools, `human:<id>` for people (required for human-authored or human-confirmed content), `process:<id>` for automated processes.
+Reserved `index.md` and `log.md` files carry no concept frontmatter (the bundle root `index.md` only `okf_version`); every other document needs YAML frontmatter with a non-empty `type`. `okf.py new` writes the recommended fields and `okf.py validate` checks them. Per-file rules, the field template, and actor string formats: section `Frontmatter`.
 
 ### 5.2 Strict Evidence Hierarchy
 Claims in OKF documents MUST adhere to this evidence hierarchy:
@@ -230,35 +142,10 @@ Claims in OKF documents MUST adhere to this evidence hierarchy:
 
 Every agent executing a task in this repository MUST pass through the following 4 gates:
 
-```
-  ┌─────────────────────────────────────────────────────────────┐
-  │ Gate 1: Pre-Task Discovery & Persona Selection              │
-  │ • okf.py context, then show --section on target OKF docs    │
-  │ • Detect file context & load relevant .ai/ persona/agent    │
-  └──────────────────────────────┬──────────────────────────────┘
-                                 │
-                                 ▼
-  ┌─────────────────────────────────────────────────────────────┐
-  │ Gate 2: In-Flight Impact Evaluation                         │
-  │ • Track code, spec, and architectural modifications         │
-  │ • Apply loaded persona guidelines to code changes           │
-  └──────────────────────────────┬──────────────────────────────┘
-                                 │
-                                 ▼
-  ┌─────────────────────────────────────────────────────────────┐
-  │ Gate 3: OKF Synchronization Gate                            │
-  │ • Evaluate relevance trigger matrix                         │
-  │ • Update/create knowledge/ documents                        │
-  │ • Append update log entry to knowledge/log.md               │
-  └──────────────────────────────┬──────────────────────────────┘
-                                 │
-                                 ▼
-  ┌─────────────────────────────────────────────────────────────┐
-  │ Gate 4: Final Verification & Sign-Off                       │
-  │ • Run the repository's build and test commands              │
-  │ • Verify OKF links, YAML frontmatter, and evidence integrity│
-  └─────────────────────────────────────────────────────────────┘
-```
+1. **Discovery & persona**: `okf.py context`, then `show --section` on target docs; load the matching persona and role.
+2. **In-flight impact**: track code, spec, and architecture changes; apply the persona to them.
+3. **OKF sync**: evaluate the trigger matrix, update `knowledge/`, append a `log.md` entry.
+4. **Verification & sign-off**: run the build and tests; verify OKF links, frontmatter, and evidence.
 
 ### Gate 1: Pre-Task Discovery & Persona Selection
 Before making edits, select the lifecycle tier (§2.5) and run the stages it requires. Then:
@@ -266,7 +153,7 @@ Before making edits, select the lifecycle tier (§2.5) and run the stages it req
 1. When neither handoff nor worker brief is available, run `okf.py context` once. Then load only missing task-specific docs with `okf.py show PATH [PATH…] [--section …]`. Reuse existing acceptance, dependency and ownership material; do not reread the global catalog or rewrite a batch plan before source work. You MUST NOT `ls`, `find`, or `cat` your way around `knowledge/` or `.ai/`.
 2. Identify the active file context and load the corresponding persona from `.ai/personas/` and task role from `.ai/agents/` (Planner, Implementer, or Reviewer) by outline and section, as in §2.3.
 
-Startup is not a completion audit: `handoff` checks actionable queue/Git readiness and reports the full checkpoint NOT AUDITED. Resolve task eligibility, required acceptance and genuine overlapping/unowned writes before affected implementation. Whole-corpus documentation checks and unrelated record repairs do not block source dispatch; the driver runs a read-only diagnostic alongside the worker. Full checkpoint/OKF validation remains mandatory at actual handoff and sign-off.
+Startup is not a completion audit; what startup must resolve and what waits for sign-off: section `Startup`.
 
 ### Gate 2: In-Flight Impact Evaluation
 As you modify source, configuration, scripts, or specification files:
@@ -334,14 +221,7 @@ A slice is done only when **all** of the following hold:
 
 ### 8.3 What counts as a real E2E
 
-| Claim | Minimum acceptable E2E |
-|-------|------------------------|
-| CLI command works | Invoke the built command with realistic arguments; assert exit status, output, and resulting side effects |
-| HTTP/RPC endpoint works | Call the running service; assert status, response body, and persisted state |
-| UI flow works | Drive the UI through the flow (browser or device automation); assert the visible end state |
-| Library/package works | Install the built artifact into a clean environment and exercise its public API |
-| Data migration works | Run the migration against representative data; assert schema and data afterward, and rollback if supported |
-| Deployment/installer works | Deploy or install into a clean target; assert the installed system reaches its expected running state |
+An E2E drives the claimed surface the way its user does (built CLI, running service, UI automation, installed artifact, migrated data, clean deployment) and asserts the end state, not just that it started. Minimum per claim type: section `E2E minimums`.
 
 Smoke checks that only prove startup MAY be used as additional diagnostics but MUST NOT be the sole proof for a behavioral claim.
 
@@ -358,7 +238,7 @@ Before sign-off, agents MUST run every row that intersects the change, using the
 | User-visible flows | The applicable E2E from §8.3 |
 | Build, packaging, dependencies | Clean build, and artifact installation where applicable |
 | `knowledge/**` | `python3 .ai/scripts/okf.py records` exits 0 (includes `validate`) |
-| `.ai/scripts/**` | `python3 -m unittest discover -s .ai/scripts/tests` |
+| `.ai/scripts/**` | `python3 -m unittest discover -s .ai/scripts/tests` (`python3 .ai/scripts/run_tests.py` runs the same tests in parallel) |
 | Lifecycle, role, skill, or hook changes | The same suite (it checks documents, registrations, skills, hooks, and runs `lifecycle_eval.py` against scripted agents); `lifecycle_eval.py run -- AGENT_COMMAND` on a real agent when the change alters tier or stage rules |
 
 If the environment cannot run a required verification (missing hardware, privileges, services, or artifacts), the agent MUST say so explicitly, MUST NOT invent a PASS, and MUST NOT upgrade OKF evidence beyond what ran.
@@ -382,23 +262,12 @@ These rules decide when a test is written and when a cause is established. They 
 
 ## 9. Autonomous Execution Protocol
 
-**Driver supervision and run controls** live in [`.ai/autonomous-execution.md`](.ai/autonomous-execution.md) §9.12. Load that section before launching or monitoring `autonomy_driver.py`, and as the orchestrator. Its binding core:
-
-- The chat that launches a driver keeps its turn open and relays the child's public progress at phase changes and at least once per minute, using the read → visible commentary → `ack` sequence of `.ai/scripts/autonomy_progress.py`. The parent MUST NOT renew acknowledgements in a loop or before posting; a driver child (`OKF_AUTONOMOUS=1`) MUST NOT acknowledge itself or start a nested driver. `--headless` requires an explicit user choice. If the relay stops, the parent MUST say monitoring ended.
-- Unattended implementation runs only through `autonomy_driver.py`, never as an unbounded interactive conversation. Circuit-breaker stops override keep-going instructions; agents MUST NOT auto-restart to bypass them.
-- Full validation is submitted with `autonomy_validation.py submit` and runs outside the model session; no model stays open merely to wait. Full-gate processes MUST NOT be launched under the model process group. SAFE and validation PASS do not alone authorize DONE.
-- Dispatch before paperwork: record task, owner, worktree and next check, start the work, and persist records at the next real boundary.
+Before launching or monitoring `autonomy_driver.py`, as the orchestrator, or when planning or shipping a milestone, agents MUST load section `Autonomous execution` of `.ai/agents-reference.md` (driver supervision, batch delivery, and one PR per milestone) and `.ai/autonomous-execution.md` §9.12. Unattended implementation runs only through `autonomy_driver.py`.
 
 **Interactive sessions reset context per slice.** When a slice is delivered (its PR opened or the user names the next slice), start the next slice in a fresh conversation from `okf.py handoff --prompt`, not by continuing the same thread; compaction is not a reset. Hand long gates to a subagent or a background `wait_check.py` job so no large-context model polls them (§8.4).
-When `knowledge/project/work-queue.md` exists, long-running work follows the Autonomous Execution Protocol in [`.ai/autonomous-execution.md`](.ai/autonomous-execution.md). Its sections keep the §9.x numbers cited across `.ai/`. Load it by section (`okf.py show .ai/autonomous-execution.md --outline`, then `--section`) only when you run the loop yourself: in solo mode, or as the orchestrator. Workers and reviewers that receive an `okf.py handoff --task` brief skip it.
+When `knowledge/project/work-queue.md` exists, long-running work follows [`.ai/autonomous-execution.md`](.ai/autonomous-execution.md) (its sections keep the §9.x numbers cited across `.ai/`). Load it by section only when you run the loop yourself (solo or orchestrator); a worker or reviewer with an `okf.py handoff --task` brief skips it.
 
-The repository is the memory. Each session works one bounded batch of related requirements (or one orchestrator batch round), ends with a safe checkpoint (`okf.py checkpoint`), and the next session starts with a fresh context. `.ai/scripts/autonomy_driver.py` runs those sessions with the required progress/acknowledgement paths (see the playbook); terminal-only `--headless` requires an explicit user choice. Agents MAY push branches and MUST NOT merge into the default branch.
-
-**Deliver usable flows in batches.** Select flows from the repository's objective, current roadmap/delivery plan, acceptance and queue. Project-specific priorities belong in project knowledge and task briefs. An empty queue requires a minimal first-flow claim followed by implementation in the same session (§9.11), not a mandatory planner, full-corpus inventory or bootstrap-only checkpoint/commit. Expand the remaining scope alongside disjoint worker work and finish records at actual handoff. The generated handoff already supplies objective and ready tasks; do not fetch it again or reload whole policies without missing/changed context. Preserve canonical requirement IDs, acceptance criteria and prerequisite gates. Plan dependency waves, assign disjoint files and shared integration surfaces, and run independent lanes in parallel where dependencies and resources allow. A downstream batch member can use a reviewed, integrated prerequisite after focused acceptance checks; that work remains provisional until the full integrated batch gate passes. External dependencies must already be DONE. Run the full expensive required suite once per integrated batch (§8.4), then attach that evidence to its individual requirements.
-
-**Milestones are the PR basis: exactly one PR per milestone.** All work for a milestone, including its tasks, fixes, tests, OKF updates and execution-state records, is committed or merged into the same milestone branch and PR targeting the default branch. Agents MUST reuse that PR across tasks and sessions and MUST NOT open a PR per task, subtask, worker, slice, or run-state update. Title it `M<N>: <Title>`, for example `M1: Headless foundation and core contracts`, with a title describing the overall milestone scope. Task branches and worktrees are internal implementation units, not PR units. The milestone PR MUST remain a draft until the entire milestone and its exit criteria pass review and validation on the integrated head (§9.9). The queue and status have one writer on the run branch, and that state is included in the milestone branch before readiness. Combine branches only by merging; `okf.py git-setup` and `pr_sync.py` keep shared bundle files and milestone PRs mergeable.
-
-The milestone PR body MUST list every feature/task in the milestone as a Markdown checklist item (`- [ ] <feature/task>`), including pending and blocked work. An item MUST be marked complete (`- [x]`) only after its work is integrated into the milestone branch and passes review and required validation. Update the body as items are completed; reopen the checkbox if further work is needed (§9.9).
+Agents MAY push branches and MUST NOT merge into the default branch.
 
 ---
 

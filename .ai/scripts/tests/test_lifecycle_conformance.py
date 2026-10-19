@@ -16,6 +16,7 @@ SCRIPTS = Path(__file__).resolve().parents[1]
 ROOT = SCRIPTS.parents[1]
 sys.path.insert(0, str(SCRIPTS))
 
+import disk_tmp  # noqa: E402,F401
 import lifecycle  # noqa: E402
 
 PLACEHOLDER = re.compile(r"<|\bPATH\b|\bHEADING\b|\bNAME\b|X\.md|…|\.\.\.")
@@ -120,8 +121,43 @@ class Relocation(unittest.TestCase):
             self.assertIn(rule, policy)
             self.assertNotIn(rule, agents)
 
+
+
+class AgentsBudget(unittest.TestCase):  # efficiency-pass R5
+    BASELINE = "9e13fce"  # AGENTS.md before reference material moved to .ai/agents-reference.md.
+    NORMATIVE = re.compile(r"\b(?:MUST|SHOULD|MAY)\b")
+
+    def baseline(self) -> str:
+        shown = subprocess.run(["git", "-C", str(ROOT), "show", f"{self.BASELINE}:AGENTS.md"], capture_output=True, text=True)
+        if shown.returncode:
+            self.skipTest(f"commit {self.BASELINE} is not in this clone")
+        return shown.stdout
+
+    @staticmethod
+    def flat(body: str) -> str:
+        return re.sub(r"\s+", " ", body)
+
     def test_agents_md_stays_below_its_cold_start_budget(self) -> None:
-        self.assertLess(len(text("AGENTS.md").encode()), 46_000)
+        self.assertLess(len(text("AGENTS.md").encode()), 30_000)
+
+    def test_every_heading_survives(self) -> None:
+        current = text("AGENTS.md").splitlines()
+        for line in self.baseline().splitlines():
+            if re.match(r"#{1,3} ", line):
+                self.assertIn(line, current)
+
+    def test_every_normative_sentence_survives_in_agents_md_or_a_linked_ai_doc(self) -> None:
+        agents = text("AGENTS.md")
+        linked = sorted(p for p in set(re.findall(r"\.ai/[\w./-]+\.md", agents)) if (ROOT / p).is_file())
+        self.assertIn(".ai/agents-reference.md", linked)
+        corpus = self.flat("\n".join([agents, *(text(path) for path in linked)]))
+        missing = []
+        for line in self.baseline().splitlines():
+            line = re.sub(r"^\s*(?:>\s*)?(?:[-*]|\d+\.)?\s*", "", line)
+            for sentence in re.split(r"(?<=\.)\s+", line):
+                if self.NORMATIVE.search(sentence) and self.flat(sentence).strip() not in corpus:
+                    missing.append(sentence)
+        self.assertEqual(missing, [])
 
 
 class Tiers(unittest.TestCase):

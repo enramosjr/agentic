@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -37,10 +38,24 @@ sys.dont_write_bytecode = True  # Bytecode beside the scripts would dirty the wo
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import scratch  # noqa: E402
-import brownfield  # noqa: E402
-import okf  # noqa: E402
-import learning  # noqa: E402
-import difflib
+
+
+def lazy(name: str):
+    """Import NAME on first attribute use: the hook runs before every shell command and rarely needs it."""
+    if name in sys.modules:
+        return sys.modules[name]
+    spec = importlib.util.find_spec(name)
+    spec.loader = importlib.util.LazyLoader(spec.loader)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+brownfield = lazy("brownfield")
+okf = lazy("okf")
+learning = lazy("learning")
+import difflib  # noqa: E402
 from datetime import date
 
 TIERS = ("L0", "L1", "L2", "L3")
@@ -1239,7 +1254,7 @@ def emit(data: dict, event: str, message: str | None, context: str | None = None
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": text}}))
 
 
-def cmd_hook(_: argparse.Namespace) -> int:
+def cmd_hook(args: argparse.Namespace) -> int:
     try:
         data = json.load(sys.stdin)
     except ValueError:
@@ -1255,6 +1270,14 @@ def cmd_hook(_: argparse.Namespace) -> int:
     try:
         roots = data.get("workspace_roots") or []
         start = os.environ.get("CLAUDE_PROJECT_DIR") or (roots[0] if roots else "") or data.get("cwd") or os.getcwd()
+        # Cursor also runs .claude/settings.json hooks; its own .cursor/hooks.json entry makes the same decision.
+        if args.skip_in_cursor and "cursor_version" in data and (Path(start) / ".cursor/hooks.json").is_file():
+            return 0
+        command = (data.get("tool_input") or {}).get("command")
+        if (data.get("tool_name") in ("Bash", "Shell") and isinstance(command, str)
+                and not HOOK_COMMIT.search(command) and not HOOK_PR.search(command)):
+            emit(data, "PreToolUse", None)
+            return 0
         root = repo_root(Path(start))
         if event.lower() == "sessionstart":
             emit(data, "SessionStart", None, project_rules_context(root) if bypass else router_text(root))
@@ -1330,6 +1353,8 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--prefix", default=None)
     p.set_defaults(func=cmd_queue_from_spec)
     p = sub.add_parser("hook", help="harness hook: reads the event JSON on stdin")
+    p.add_argument("--skip-in-cursor", action="store_true",
+                   help="do nothing when Cursor runs this and the project has .cursor/hooks.json (for .claude/settings.json)")
     p.set_defaults(func=cmd_hook)
     return main
 
