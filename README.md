@@ -51,28 +51,43 @@ If it tries to skip a stage, the hook says no and names the missing one. Approva
 
 The agent picks the lowest tier whose conditions hold, and it cannot lower a tier you set. Tiers scale the spec, plan, review, and gate breadth. They never relax the evidence rules.
 
-## Install
+## Quick start
 
-AGENTIC is files in your repository, plus stdlib-only Python scripts that read them. You need **Python 3.9+** and **Git**.
+AGENTIC installs its complete workflow and management kit **inside your project**. You need **Python 3.9+** and **Git**.
 
-1. Copy `AGENTS.md`, `CLAUDE.md`, and `.ai/` into your project, plus the directory for each agent you use:
+Get a local checkout once, in a separate folder from the projects you want to bootstrap:
 
-   | Agent | Copy | Notes |
-   | --- | --- | --- |
-   | Claude Code | `.claude/` | Hooks, subagents, and the stage skills. `CLAUDE.md` imports `AGENTS.md`. |
-   | Codex | `.codex/`, `.agents/skills/` | Trust the `.codex/` layer and review hooks with `/hooks`. `.agents/skills/` is a symlink to `.claude/skills/`. |
-   | Cursor | `.cursor/hooks.json`, `.claude/agents/` | Cursor reads the subagents from `.claude/agents/`. |
-   | Anything else | `AGENTS.md` | Have the agent load it and follow its tool instructions. Without hooks, enforcement is by instruction only. |
+```sh
+git clone https://github.com/enramosjr/agentic.git /path/to/agentic
+```
 
-2. Create your project's knowledge bundle, unless it already has one:
+Then use the same command for an existing project or a new folder:
 
-   ```sh
-   python3 .ai/scripts/okf.py init
-   ```
+```sh
+python3 /path/to/agentic/.ai/scripts/install.py TARGET
+```
 
-3. Ask your agent for a bounded change and watch it declare a tier.
+Replace `TARGET` with the project folder, quoting paths that contain spaces. For example:
 
-Run tooling from the repository root. Every script answers `--help`.
+```sh
+python3 /path/to/agentic/.ai/scripts/install.py "/path/to/my project"
+```
+
+The installer creates missing folders and initializes Git when needed. For a project already in Git, choose its worktree root. It installs governance, roles, personas, stage skills, hooks for all supported agents, management scripts, and an ordinary project knowledge bundle. Existing instructions and hook settings are merged, existing knowledge is retained, and conflicting adopter files are kept and reported with a nonzero exit. No commit or Git remote is created.
+
+Everything is local to `TARGET`, including `.ai/`, `.claude/`, `.codex/`, `.cursor/`, and `.agents/skills/`. Global agent settings remain unchanged. The source checkout's knowledge, Git history, and agent session files are excluded. Autonomous execution remains opt-in; see below.
+
+Open the target project in your coding agent. For Codex, trust the project's `.codex/` layer and review hooks with `/hooks`; installation alone does not activate that trust. Claude Code uses the local settings, subagents, and skills; Cursor uses its local hooks and the shared subagents. Other agents can follow `AGENTS.md` by instruction. Ask for a bounded change and watch the agent declare a tier.
+
+Rerun the same installer command to update a project from your source checkout. Check an installation without changing files:
+
+```sh
+python3 /path/to/agentic/.ai/scripts/install.py --check TARGET
+```
+
+An unchanged installation reports `up to date`. Existing Git projects retain dirty-path protection: commit or stash files the installer would change, or explicitly use `--force` after reviewing them. That flag still preserves conflicting adopter files. Exit codes are 0 for success, 1 for drift/conflicts or I/O failure, and 2 for refused input.
+
+After bootstrap, run project tooling from the target root. Every script answers `--help`.
 
 ## The basic workflow
 
@@ -124,7 +139,7 @@ Read the [autonomous execution protocol](.ai/autonomous-execution.md), especiall
 | `autonomy_driver.py` and friends | Supervised multi-session execution and out-of-session validation |
 | `lifecycle_eval.py` | Scenario evals (L0 to L3) you can run against a real agent |
 
-**Knowledge.** AGENTIC ships no knowledge of its own. It is the machinery that keeps your project's OKF v0.2 `knowledge/` bundle honest, and `okf.py init` creates the empty bundle in your repository.
+**Knowledge.** The installer creates your project's empty OKF v0.2 `knowledge/` bundle, keeping existing knowledge when present. Knowledge about the AGENTIC framework stays in its source checkout and is never installed into adopter projects. `okf.py init` can also initialize a bundle explicitly.
 
 ## Philosophy
 
@@ -141,7 +156,7 @@ Changes under `.ai/scripts/` run the regression suite, which also checks lifecyc
 
 ```sh
 mkdir -p .git/okf-test-tmp
-TMPDIR="$PWD/.git/okf-test-tmp" python3 -m unittest discover -s .ai/scripts/tests
+PYTHONDONTWRITEBYTECODE=1 TMPDIR="$PWD/.git/okf-test-tmp" python3 -m unittest discover -s .ai/scripts/tests
 ```
 
 In a project that uses AGENTIC, `python3 .ai/scripts/okf.py records` checks that project's knowledge bundle. The suite above covers the framework only. It does not establish the correctness of your application, which keeps its own build, lint, and end-to-end commands.
