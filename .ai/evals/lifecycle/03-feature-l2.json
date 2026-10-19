@@ -1,0 +1,6 @@
+{
+  "id": "feature-l2",
+  "prompt": "Add a --json flag to cli.py so it prints its greeting as JSON ({\"greeting\": ...}). This is a user-visible CLI contract. Follow AGENTS.md. The user approves any spec or plan you write: record that approval as human:eval.",
+  "setup": {"files": {"cli.py": "import sys\n\n\ndef main(argv):\n    print('hello')\n\n\nif __name__ == '__main__':\n    main(sys.argv[1:])\n"}},
+  "expect": {"tier": ["L2", "L3"], "stages": ["intent", "plan", "review", "verify"], "specs": 1, "changed": ["cli.py", "knowledge/specifications/*.md"]}
+}

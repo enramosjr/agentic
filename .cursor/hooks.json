@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      {
+        "command": "python3 .ai/scripts/shell_guard.py",
+        "timeout": 10
+      },
+      {
+        "command": "python3 .ai/scripts/lifecycle.py hook",
+        "timeout": 10
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": "python3 .ai/scripts/lifecycle.py hook",
+        "matcher": "Write|Delete",
+        "timeout": 10
+      }
+    ],
+    "sessionStart": [
+      {
+        "command": "python3 .ai/scripts/lifecycle.py hook",
+        "timeout": 10
+      }
+    ]
+  }
+}

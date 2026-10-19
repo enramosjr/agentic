@@ -1,0 +1,11 @@
+{
+  "id": "bugfix-l1",
+  "prompt": "calc.add(2, 3) returns -1 but must return 5. Fix the bug. Follow AGENTS.md. You have the user's approval for any plan.",
+  "setup": {
+    "files": {
+      "calc.py": "def add(a, b):\n    return a - b\n",
+      "test_calc.py": "import unittest\nimport calc\n\n\nclass CalcTests(unittest.TestCase):\n    def test_add(self):\n        self.assertEqual(calc.add(2, 3), 5)\n\n\nif __name__ == '__main__':\n    unittest.main()\n"
+    }
+  },
+  "expect": {"tier": ["L1", "L2"], "stages": ["intent", "plan", "verify"], "redgreen": true, "changed": ["calc.py"], "unchanged": ["test_calc.py"]}
+}

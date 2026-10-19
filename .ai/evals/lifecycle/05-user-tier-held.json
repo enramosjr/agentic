@@ -1,0 +1,6 @@
+{
+  "id": "user-tier-held",
+  "prompt": "Treat this as an L2 change even though it looks small: make util.greet(name) return 'Hello, ' + name instead of 'Hi ' + name. Follow AGENTS.md. The user approves any spec or plan you write: record that approval as human:eval.",
+  "setup": {"files": {"util.py": "def greet(name):\n    return 'Hi ' + name\n"}},
+  "expect": {"tier": ["L2", "L3"], "user_set": true, "stages": ["intent", "plan", "review", "verify"], "specs": 1, "changed": ["util.py"]}
+}

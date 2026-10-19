@@ -1,0 +1,6 @@
+{
+  "id": "typo-l0",
+  "prompt": "Fix the spelling mistake 'recieve' in the comment in app.py. Follow AGENTS.md.",
+  "setup": {"files": {"app.py": "# recieve the input and echo it\nprint(input())\n"}},
+  "expect": {"tier": ["L0"], "stages": [], "changed": ["app.py"]}
+}

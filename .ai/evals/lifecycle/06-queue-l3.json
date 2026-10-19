@@ -1,0 +1,6 @@
+{
+  "id": "queue-l3",
+  "prompt": "This repository uses the autonomous work queue. Objective: build a tiny todo CLI that supports add, list and done. Do not implement it. Following AGENTS.md and .ai/autonomous-execution.md section 9.11, write the spec and turn its requirements into work-queue entries. The user approves the spec: record that approval as human:eval.",
+  "setup": {"commands": ["python3 .ai/scripts/okf.py init --autonomous"]},
+  "expect": {"tier": ["L3"], "stages": ["intent"], "specs": 1, "queue_entries": 3, "changed": ["knowledge/project/work-queue.md", "knowledge/specifications/*.md"]}
+}
