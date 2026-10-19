@@ -177,8 +177,8 @@ class StageTests(LifecycleCase):
         (self.repo / "review.md").write_text(REVIEW_OK)
         self.ok("stage", "review", "--ref", "review.md")
         self.converge_green()
-        self.fails("stage", "verify", message="--note")
-        self.ok("stage", "verify", "--note", "unit tests PASS")
+        self.ok("stage", "verify", "--note", "unit tests PASS")  # At L2 the note is optional: the converge ledger entries are the evidence.
+        self.assertTrue(lifecycle.load(self.repo)["stages"]["verify"]["note"].endswith("| agent note: unit tests PASS"))
         self.ok("stage", "ship")
         self.assertIn("no active lifecycle", self.ok("status"))
 
@@ -239,6 +239,7 @@ class StageTests(LifecycleCase):
     def test_verify_runs_the_records_gate_when_a_bundle_exists(self) -> None:
         shutil.copytree(SCRIPTS, self.repo / ".ai/scripts", ignore=shutil.ignore_patterns("tests", "__pycache__"))
         subprocess.run([sys.executable, ".ai/scripts/okf.py", "init"], cwd=self.repo, check=True, capture_output=True)
+        (self.repo / "knowledge/project/sync-ignore").write_text(".ai/*\n")
         (self.repo / "knowledge/capabilities/broken.md").write_text("no frontmatter\n")
         self.ok("tier", "L1", "--reason", "x")
         self.ok("stage", "intent", "--note", "n")
@@ -413,6 +414,7 @@ class AuditTrailTests(LifecycleCase):
     def test_first_record_in_a_bundle_keeps_okf_records_passing(self) -> None:  # R1 with the Constraints' okf rule
         shutil.copytree(SCRIPTS, self.repo / ".ai/scripts", ignore=shutil.ignore_patterns("tests", "__pycache__"))
         subprocess.run([sys.executable, ".ai/scripts/okf.py", "init"], cwd=self.repo, check=True, capture_output=True)
+        (self.repo / "knowledge/project/sync-ignore").write_text(".ai/*\n")
         self.ok("tier", "L1", "--reason", "x")
         self.ok("stage", "intent", "--note", "n")
         self.ok("stage", "plan", "--note", "p")
@@ -845,6 +847,7 @@ class ConvergeTests(LifecycleCase):
         self.ok("stage", "intent", "--note", "queue:T1", "--approved-by", "human:me")
         self.ok("stage", "plan", "--note", "queue:T1")
         self.ok("stage", "review", "--ref", "review.md")
+        self.ok("run", "unit", "--", PY, "-c", "pass")  # The queue intent has no converge run, so the ledger must supply the evidence.
         self.ok("stage", "verify", "--note", "ran")
 
     def test_reapproved_spec_or_new_head_stales_the_run(self) -> None:  # R6

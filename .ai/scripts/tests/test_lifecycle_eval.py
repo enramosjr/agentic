@@ -85,6 +85,7 @@ def spec_plan_review_verify():
 def finish_l2():
     okf("log", "Specified and implemented the requested change.")
     okf("reindex")
+    Path("knowledge/project/sync-ignore").write_text("*.py\n*.md\n")  # The scenario repository has no docs for its code (Gate 3 sync-check).
     lc("converge", "knowledge/specifications/change.md")
     Path("review.md").write_text("# Review Report\n\n## Verdict\nApproved\n")
     lc("stage", "review", "--ref", "review.md")

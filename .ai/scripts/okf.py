@@ -985,6 +985,66 @@ def affected(bundle: Path, changed: list[str]) -> tuple[dict[str, list[str]], li
     return hits, [path for path in changed if path not in covered]
 
 
+SYNC_IGNORE = "project/sync-ignore"
+SYNC_RULES = ("a-doc-unchanged", "b-uncovered", "c-no-log", "d-verified-stale")
+
+
+def _sync_ignore_globs(bundle: Path) -> list[str]:
+    path = bundle / SYNC_IGNORE
+    if not path.is_file():
+        return []
+    lines = (line.split("#", 1)[0].strip() for line in path.read_text(encoding="utf-8").splitlines())
+    return [line for line in lines if line]
+
+
+def _sync_ignored(path: str, globs: list[str]) -> bool:
+    return any(fnmatch.fnmatchcase(path, glob) or (glob.endswith("/") and path.startswith(glob)) for glob in globs)
+
+
+def _verified_epoch(meta: dict) -> float:
+    """Latest ``verified.at`` as a UTC timestamp; absent or unparsable counts as the epoch."""
+    verified = meta.get("verified")
+    events = verified if isinstance(verified, list) else [verified]
+    latest = 0.0
+    for event in events:
+        raw = str(event.get("at", "")) if isinstance(event, dict) else ""
+        try:
+            stamp = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        latest = max(latest, stamp.timestamp())
+    return latest
+
+
+def sync_violations(bundle: Path, rev: str) -> list[dict[str, str]]:
+    """Gate 3 as rules: changed code must be matched by changed, freshly verified docs and a log entry."""
+    repo = bundle.parent
+    prefix = bundle.name + "/"
+    changed = set(_git_changed(repo, rev))
+    code = sorted(path for path in changed if not path.startswith(prefix))
+    hits, uncovered = affected(bundle, code)
+    found: list[dict[str, str]] = []
+    for doc_path, files in hits.items():
+        if doc_path not in changed:
+            found.append({"rule": "a-doc-unchanged", "path": doc_path, "detail": "covers changed " + ", ".join(files)})
+    ignore = _sync_ignore_globs(bundle)
+    for path in uncovered:
+        if not _sync_ignored(path, ignore):
+            found.append({"rule": "b-uncovered", "path": path, "detail": f"no doc lists it in sources and {SYNC_IGNORE} does not ignore it"})
+    if code and f"{prefix}log.md" not in changed:
+        found.append({"rule": "c-no-log", "path": f"{prefix}log.md", "detail": "no log entry for this change; run `okf.py log`"})
+    docs = {display(bundle, doc.rel): doc for doc in iter_docs(bundle)}
+    for doc_path, files in hits.items():
+        verified = _verified_epoch(docs[doc_path].meta or {})
+        # File mtimes carry sub-second precision, `verified.at` does not.
+        stale = [f for f in files if (repo / f).exists() and int((repo / f).stat().st_mtime) > verified]
+        if stale:
+            found.append({"rule": "d-verified-stale", "path": doc_path, "detail": "verified before " + ", ".join(stale) + " changed; run `okf.py stamp verified`"})
+    return found
+
+
 # --------------------------------------------------------------------------
 # Work queue, recovery checkpoint and handoff (autonomous execution)
 # --------------------------------------------------------------------------
@@ -2367,9 +2427,44 @@ def cmd_stamp(bundle: Path, args: argparse.Namespace) -> int:
     at = args.at or utc_now()
     if not _TIMESTAMP_RE.match(at):
         raise OkfError(f"--at must be an ISO-8601 timestamp like 2026-07-27T00:00:00Z, got {at!r}")
-    written = [_edit_frontmatter(bundle, raw, {args.field: {"by": args.by, "at": at}}) for raw in args.paths]
+    by = args.by
+    if args.run:
+        if args.field != "verified":
+            raise OkfError("--run is only for `stamp verified`")
+        if args.by:
+            raise OkfError("--run cannot be combined with --by")
+        by = "process:" + " ".join(args.run)
+        _run_for_stamp(bundle.parent, args.run)  # Raises, writing nothing, unless the command exits 0.
+    elif not by:
+        raise OkfError("give --run CMD... (stamps the command that just passed) or --by ACTOR")
+    elif args.field == "verified" and by.startswith(("process:", "agent")):
+        if by.startswith("process:") and os.environ.get("OKF_STRICT_STAMP") == "1":
+            raise OkfError(f"OKF_STRICT_STAMP=1: use `stamp verified PATH... --run CMD...` instead of --by {by!r}")
+        print("okf: warning: `stamp verified --by` is deprecated for process and agent actors; use `--run CMD...`", file=sys.stderr)
+    written = [_edit_frontmatter(bundle, raw, {args.field: {"by": by, "at": at}}) for raw in args.paths]
     _print_written(bundle, written)
     return 0
+
+
+def _run_for_stamp(repo: Path, command: list[str]) -> None:
+    """Run COMMAND as argv with the disk-backed scratch TMPDIR (as scratch.py does); fail unless it exits 0."""
+    try:
+        common = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "--path-format=absolute", "--git-common-dir"], text=True, stderr=subprocess.PIPE).strip()
+    except (subprocess.CalledProcessError, OSError) as error:
+        raise OkfError("--run needs a git work tree for its scratch directory") from error
+    scratch = Path(common).resolve() / "okf-scratch"
+    if any(scratch == p or p in scratch.parents for p in (Path("/tmp"), Path("/var/tmp"), Path("/dev/shm"))):
+        raise OkfError(f"scratch must be outside system temporary storage: {scratch}")
+    scratch.mkdir(parents=True, exist_ok=True)
+    env = {**os.environ, "TMPDIR": str(scratch), "TMP": str(scratch), "TEMP": str(scratch)}
+    try:
+        result = subprocess.run(command, cwd=repo, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace")
+    except OSError as error:
+        raise OkfError(f"cannot run {command[0]!r}: {error}; nothing stamped") from error
+    if result.returncode != 0:
+        for line in (result.stdout + result.stderr).strip().splitlines()[-12:]:
+            print(f"    {line}", file=sys.stderr)
+        raise OkfError(f"{' '.join(command)!r} exited {result.returncode}; nothing stamped")
 
 
 def cmd_log(bundle: Path, args: argparse.Namespace) -> int:
@@ -2459,6 +2554,20 @@ def cmd_affected(bundle: Path, args: argparse.Namespace) -> int:
         for path in uncovered:
             print(f"  {path}")
     return 0
+
+
+def cmd_sync_check(bundle: Path, args: argparse.Namespace) -> int:
+    require_bundle(bundle)
+    found = sync_violations(bundle, args.base or "HEAD")
+    if args.json:
+        print(json.dumps({"violations": found}, indent=2))
+    elif found:
+        for item in found:
+            print(f"{item['rule']} {item['path']}: {item['detail']}")
+        print(f"sync-check: FAIL ({len(found)} violations)")
+    else:
+        print("sync-check: OK")
+    return 1 if found else 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -2569,8 +2678,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("stamp", help="set generated/verified to {by, at: now} on docs")
     p.add_argument("field", choices=("generated", "verified"))
     p.add_argument("paths", nargs="+")
-    p.add_argument("--by", required=True, help="actor, e.g. 'process:make test' or 'agent/model'")
+    p.add_argument("--by", help="actor, e.g. 'human:id' (deprecated for 'process:...' and 'agent...' on verified; OKF_STRICT_STAMP=1 rejects process:)")
     p.add_argument("--at", help="timestamp (default: now, UTC)")
+    p.add_argument("--run", nargs=argparse.REMAINDER, metavar="CMD", help="verified only, last option: run CMD as argv and stamp 'process:CMD' only if it exits 0")
     p.set_defaults(handler=cmd_stamp)
 
     p = sub.add_parser("log", help="append an entry under today's date in log.md")
@@ -2597,6 +2707,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--git", nargs="?", const="HEAD", metavar="REV", help="also include git changes vs REV")
     p.add_argument("--json", action="store_true")
     p.set_defaults(handler=cmd_affected)
+
+    p = sub.add_parser("sync-check", help="Gate 3 as a check: changed code needs changed, freshly verified docs and a log entry")
+    p.add_argument("--base", metavar="REV", help="compare against REV (default: HEAD)")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(handler=cmd_sync_check)
 
     p = sub.add_parser("queue", help="work queue tasks with computed states; --next lists what to start")
     action = p.add_mutually_exclusive_group()
