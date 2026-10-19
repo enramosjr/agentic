@@ -15,6 +15,7 @@ sources:
     resource: ../../.ai/scripts/shell_guard.py
   - id: claude-settings-json
     resource: ../../.claude/settings.json
+verified: { by: "process:python3 -m unittest discover -s .ai/scripts/tests -p test_[ea]*.py", at: 2026-10-19T21:19:16Z }
 ---
 
 # Spec: Efficiency pass: faster tests and hooks, smaller always-loaded instructions

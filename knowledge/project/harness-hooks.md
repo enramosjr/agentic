@@ -17,6 +17,7 @@ sources:
     resource: ../../.ai/scripts/shell_guard.py
   - id: ai-scripts-lifecycle-py
     resource: ../../.ai/scripts/lifecycle.py
+verified: { by: "process:python3 -m unittest discover -s .ai/scripts/tests -p test_[ea]*.py", at: 2026-10-19T21:19:16Z }
 ---
 
 # Harness hook wiring

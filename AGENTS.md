@@ -6,7 +6,7 @@ The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", and "MAY" in this docu
 
 **Start here:** pick the lifecycle tier (§2.5), then follow `.ai/lifecycle.md` for the stages that tier requires: Intent, Plan, Implement, Review, Verify & Sync, Ship.
 
-**Reference material** lives verbatim in [`.ai/agents-reference.md`](.ai/agents-reference.md) and is as binding as this file. When a rule below names a section, load it: `python3 .ai/scripts/okf.py show .ai/agents-reference.md --section HEADING`.
+**Reference material** lives verbatim in [`.ai/agents-reference.md`](.ai/agents-reference.md) and is as binding as this file. Load a section a rule names with `python3 .ai/scripts/okf.py show .ai/agents-reference.md --section HEADING`.
 
 ---
 
@@ -94,11 +94,11 @@ Every task, from a one-line prompt to an autonomous milestone, follows one lifec
 
 ## 3. OKF Structure Overview
 
-The OKF bundle resides in `knowledge/` (OKF v0.2 layout; `okf.py init` creates it): `index.md`, `log.md`, and the sections `project/`, `capabilities/`, `specifications/`, `history/`, `concepts/`, `playbooks/`, plus the §9 work queue and status under `project/`. What each holds and when it changes: `.ai/agents-reference.md` section `Bundle layout`.
+The OKF bundle resides in `knowledge/` (OKF v0.2 layout; `okf.py init` creates it): `index.md`, `log.md`, and the sections `project/`, `capabilities/`, `specifications/`, `history/`, `concepts/`, `playbooks/`, plus the §9 work queue and status under `project/`. What each holds and when it changes: section `Bundle layout`.
 
 ### 3.1 OKF Tooling (`.ai/scripts/okf.py`) — Script First
 
-Any OKF operation the script covers MUST go through it instead of reading, grepping, or hand-editing `knowledge/`. It is deterministic, stdlib-only (Python 3.9+), and prints compact output. Read a full document only when you need its prose. The command for each need: section `Script commands`, or `okf.py --help`.
+Any OKF operation the script covers MUST go through it instead of reading, grepping, or hand-editing `knowledge/`. It is deterministic, stdlib-only (Python 3.9+), and prints compact output. Read a full document only when you need its prose. The command for each need: section `Script commands` or `okf.py --help`; record checks with `lifecycle.py run` and `stamp verified --run`.
 
 **When a command fails**, its error is one line and names the fix (a missing doc lists close matches; `affected` outside git asks for explicit paths). Correct the invocation and rerun; you MUST NOT fall back to reading or grepping `knowledge/` by hand.
 
@@ -173,7 +173,7 @@ If the corpus is not up to date, perform the following actions:
 - Append a dated entry to `knowledge/log.md` describing what knowledge was added, updated, or verified (`okf.py log "…"`).
 
 ### Gate 4: Final Verification & Sign-Off
-Record the result with `lifecycle.py stage verify --note "<commands and outcomes>"` once the checks below pass (it reruns `okf.py records`). Verify that:
+Run each check with `lifecycle.py run LABEL -- CMD`, then `lifecycle.py stage verify`: it derives its note from that ledger (L1 keeps `--note`) and runs `okf.py sync-check`, `lifecycle.py scan-diff` and `okf.py records`. Verify that:
 - Relevant builds succeed using the repository's own build commands.
 - **Applicable end-to-end tests for the changed slice actually pass** (not merely that a script exists). See §8.
 - All relative file links inside updated OKF documents resolve correctly (`okf.py validate` exits 0; it also checks frontmatter, log ordering, index freshness, and evidence claims).
@@ -229,7 +229,7 @@ Smoke checks that only prove startup MAY be used as additional diagnostics but M
 
 Before sign-off, agents MUST run every row that intersects the change, using the repository's actual commands (build files, package scripts, CI configuration):
 
-**Execution rules (normative, loaded on demand).** The rules for when to run focused versus full checks, batch sizing, test proportionality, evidence reuse, and waiting on long checks live verbatim in [`.ai/validation-policy.md`](.ai/validation-policy.md). Agents MUST load it by section (`python3 .ai/scripts/okf.py show .ai/validation-policy.md --outline`, then `--section`) before the first Gate 4 run of a task and before launching or repeating any check that takes minutes. The binding core: run focused checks in the loop and the slice's narrowest E2E once when its edits are complete; run the full gate once per frozen candidate; never rerun an unchanged check; defer batch-level suites to one validator on the integrated head.
+**Execution rules (normative, loaded on demand).** The rules for when to run focused versus full checks, batch sizing, test proportionality, evidence reuse, and waiting on long checks live verbatim in [`.ai/validation-policy.md`](.ai/validation-policy.md). Agents MUST load it by section (`python3 .ai/scripts/okf.py show .ai/validation-policy.md --outline`, then `--section`) before the first Gate 4 run of a task and before launching or repeating any check that takes minutes. The binding core: run focused checks in the loop and the slice's narrowest E2E once when its edits are complete; run the full gate once per frozen candidate; never rerun an unchanged check; defer batch-level suites to one validator on the integrated head. Before repeating a check, MUST run `lifecycle.py reuse LABEL_OR_CMD`: on REUSE, MUST NOT rerun it.
 
 | Touched area | Required verification |
 |--------------|----------------------|
@@ -238,7 +238,7 @@ Before sign-off, agents MUST run every row that intersects the change, using the
 | User-visible flows | The applicable E2E from §8.3 |
 | Build, packaging, dependencies | Clean build, and artifact installation where applicable |
 | `knowledge/**` | `python3 .ai/scripts/okf.py records` exits 0 (includes `validate`) |
-| `.ai/scripts/**` | `python3 -m unittest discover -s .ai/scripts/tests` (`python3 .ai/scripts/run_tests.py` runs the same tests in parallel) |
+| `.ai/scripts/**` | `python3 -m unittest discover -s .ai/scripts/tests` (or `.ai/scripts/run_tests.py`, in parallel) |
 | Lifecycle, role, skill, or hook changes | The same suite (it checks documents, registrations, skills, hooks, and runs `lifecycle_eval.py` against scripted agents); `lifecycle_eval.py run -- AGENT_COMMAND` on a real agent when the change alters tier or stage rules |
 
 If the environment cannot run a required verification (missing hardware, privileges, services, or artifacts), the agent MUST say so explicitly, MUST NOT invent a PASS, and MUST NOT upgrade OKF evidence beyond what ran.
@@ -262,7 +262,7 @@ These rules decide when a test is written and when a cause is established. They 
 
 ## 9. Autonomous Execution Protocol
 
-Before launching or monitoring `autonomy_driver.py`, as the orchestrator, or when planning or shipping a milestone, agents MUST load section `Autonomous execution` of `.ai/agents-reference.md` (driver supervision, batch delivery, and one PR per milestone) and `.ai/autonomous-execution.md` §9.12. Unattended implementation runs only through `autonomy_driver.py`.
+Before launching or monitoring `autonomy_driver.py`, as the orchestrator, or when planning or shipping a milestone, agents MUST load section `Autonomous execution` of `.ai/agents-reference.md` (driver supervision, batch delivery, and one PR per milestone) and `.ai/autonomous-execution.md` §9.12.
 
 **Interactive sessions reset context per slice.** When a slice is delivered (its PR opened or the user names the next slice), start the next slice in a fresh conversation from `okf.py handoff --prompt`, not by continuing the same thread; compaction is not a reset. Hand long gates to a subagent or a background `wait_check.py` job so no large-context model polls them (§8.4).
 When `knowledge/project/work-queue.md` exists, long-running work follows [`.ai/autonomous-execution.md`](.ai/autonomous-execution.md) (its sections keep the §9.x numbers cited across `.ai/`). Load it by section only when you run the loop yourself (solo or orchestrator); a worker or reviewer with an `okf.py handoff --task` brief skips it.

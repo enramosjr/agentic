@@ -13,6 +13,10 @@ sources:
     resource: ../../.ai/scripts/tests/disk_tmp.py
   - id: ai-scripts-tests-test-efficiency-py
     resource: ../../.ai/scripts/tests/test_efficiency.py
+  - id: ai-scripts-tests-test-autonomy-py
+    resource: ../../.ai/scripts/tests/test_autonomy.py
+    title: Imports disk_tmp; test_scratch, test_autonomy_validation and test_pr_sync inherit it
+verified: { by: "process:python3 -m unittest discover -s .ai/scripts/tests -p test_[ea]*.py", at: 2026-10-19T21:19:16Z }
 ---
 
 # Run the script test suite

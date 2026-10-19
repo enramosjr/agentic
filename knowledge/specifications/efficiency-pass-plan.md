@@ -9,6 +9,7 @@ generated: { by: agent/cursor, at: 2026-10-19T20:50:28Z }
 sources:
   - id: ai-scripts-tests-disk-tmp-py
     resource: ../../.ai/scripts/tests/disk_tmp.py
+verified: { by: "process:python3 -m unittest discover -s .ai/scripts/tests -p test_[ea]*.py", at: 2026-10-19T21:19:16Z }
 ---
 
 # Implementation Plan: efficiency pass

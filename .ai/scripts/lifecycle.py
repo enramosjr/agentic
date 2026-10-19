@@ -31,6 +31,7 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -55,6 +56,8 @@ def lazy(name: str):
 brownfield = lazy("brownfield")
 okf = lazy("okf")
 learning = lazy("learning")
+ledger = lazy("ledger")
+scan = lazy("scan")
 import difflib  # noqa: E402
 from datetime import date
 
@@ -482,6 +485,7 @@ def audit_problems(root: Path, record: object) -> list[str]:
             brownfield.receipt_schema(record["merge"])
         except brownfield.DeltaError as error:
             problems.append(str(error))
+    problems += ledger.audit(record.get("ledger"))
     if record.get("tier") not in TIERS:
         problems.append(f"invalid tier {record.get('tier')!r}")
     stages = record.get("stages")
@@ -628,6 +632,9 @@ def cmd_stage(args: argparse.Namespace) -> int:
     elif stage == "review":
         if tier == "L1" and not args.note:
             raise LifecycleError("L1 review needs --note (self-review of the diff)")
+        problem = scan_problem(root, state)
+        if problem:
+            raise LifecycleError(problem)
         if high:
             if ref is None:
                 raise LifecycleError(f"{tier} review needs --ref REVIEW_REPORT with a '## Verdict' section")
@@ -635,7 +642,7 @@ def cmd_stage(args: argparse.Namespace) -> int:
             if not verdict.lower().startswith("approved"):
                 raise LifecycleError(f"review verdict is not Approved: {verdict or 'no ## Verdict section'}")
     elif stage == "verify":
-        if not args.note:
+        if not args.note and not high:
             raise LifecycleError("verify needs --note naming the commands run and their outcomes (AGENTS.md Gate 4)")
         problems = record_audit(root, state)
         if problems:
@@ -646,8 +653,21 @@ def cmd_stage(args: argparse.Namespace) -> int:
         problem = converge_problem(root, state)
         if problem:
             raise LifecycleError(problem)
+        if high:  # Evidence comes from the ledger, not from the agent's words; `LIFECYCLE_GUARD` and `OKF_AUTONOMOUS` are not read here.
+            entries, tree = state.get("ledger") or [], tree_hash(root)
+            problem = ledger.verify_problem(root, entries, tree)
+            if problem:
+                raise LifecycleError(problem)
+            record["note"] = ledger.note(ledger.current_entries(root, entries, tree)) + (f" | agent note: {args.note}" if args.note else "")
+        problem = scan_problem(root, state)
+        if problem:
+            raise LifecycleError(problem)
         if (root / "knowledge/index.md").is_file():  # A bundle, not just the audit record directory.
-            result = subprocess.run([sys.executable, str(root / ".ai/scripts/okf.py"), "records"], cwd=root, capture_output=True, text=True)
+            okf_cli = [sys.executable, str(root / ".ai/scripts/okf.py")]
+            result = subprocess.run([*okf_cli, "sync-check", "--base", state.get("head") or "HEAD"], cwd=root, capture_output=True, text=True)
+            if result.returncode != 0:
+                raise LifecycleError("okf.py sync-check failed:\n" + (result.stdout + result.stderr).strip()[-800:])
+            result = subprocess.run([*okf_cli, "records"], cwd=root, capture_output=True, text=True)
             if result.returncode != 0:
                 raise LifecycleError("okf.py records failed:\n" + (result.stdout + result.stderr).strip()[-800:])
     elif stage == "ship":
@@ -828,6 +848,70 @@ def cmd_redgreen(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_run(args: argparse.Namespace) -> int:
+    root = repo_root()
+    state = require_state(root)
+    command = args.run_command
+    if not command:
+        raise LifecycleError("give the command after `--`: lifecycle.py run LABEL -- CMD")
+    try:
+        globs = ledger.check_globs(args.inputs or [])
+        env = scratch.environment(root)  # Checks build fixtures with tempfile; scratch refuses /tmp and tmpfs.
+    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+        raise LifecycleError(f"run refused, nothing was run: {error}") from error
+    started, code, output = time.monotonic(), None, ""
+    try:
+        result = subprocess.run(command, cwd=root, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace", timeout=args.timeout)
+        code, output = result.returncode, result.stdout + result.stderr
+    except subprocess.TimeoutExpired as error:
+        output = decoded(error.stdout) + decoded(error.stderr) + "\ntimeout"
+    except (ValueError, OSError) as error:
+        output = f"cannot run: {error}"
+    entry = ledger.make_entry(args.label, command, code, tree_hash(root), head_sha(root), time.monotonic() - started, now(), globs, ledger.inputs_digest(root, globs))
+    ledger.append(state, entry)
+    save(root, state)
+    print(f"run {args.label}: exit={code if code is not None else 'none'} tree={entry['tree'][:7]}")
+    if code != 0:
+        for line in output.strip().splitlines()[-12:]:
+            print(f"    {line}")
+    return 1 if code is None else code
+
+
+def cmd_reuse(args: argparse.Namespace) -> int:
+    """Print REUSE or RERUN for a ledger entry; it runs nothing and writes nothing."""
+    root = repo_root()
+    state = require_state(root)
+    reusable, text = ledger.verdict(root, state.get("ledger") or [], args.target)
+    print(text)
+    return 0 if reusable else 1
+
+
+def scan_problem(root: Path, state: dict) -> str | None:
+    """Unwaived Critical findings in everything added since the task's head, one `RULE path:line` per line."""
+    try:
+        report = scan.scan(root, state.get("head") or None, exempt)
+    except scan.ScanError as error:
+        raise LifecycleError(str(error)) from error
+    found = scan.blocking(report)
+    if not found:
+        return None
+    return "scan-diff found unwaived Critical findings (fix them, or waive with `lifecycle:allow RULE -- reason`):\n  - " + "\n  - ".join(f"{f['rule']} {f['path']}:{f['line']}" for f in found)
+
+
+def cmd_scan_diff(args: argparse.Namespace) -> int:
+    """Scan added lines for stubs and weak tests; exit 1 only on an unwaived Critical finding."""
+    root = repo_root()
+    try:
+        report = scan.scan(root, args.base, exempt)
+    except scan.ScanError as error:
+        raise LifecycleError(str(error)) from error
+    if args.json:
+        print(json.dumps(report, indent=2))
+    else:
+        print("\n".join(scan.render(report)))
+    return 1 if scan.blocking(report) else 0
+
+
 def converge_refusal(root: Path, state: dict | None, spec: str | None) -> str | None:
     """Why `converge` must not run SPEC's commands: only the active L2+ task's approved, unedited spec may run."""
     if state is None or not is_active(state, root):
@@ -895,6 +979,7 @@ def cmd_converge(args: argparse.Namespace) -> int:
         raise LifecycleError(f"converge refused, nothing was run: no disk-backed scratch directory ({error})") from error
     model = spec_model(root / spec)
     results: list[dict] = []
+    durations: dict[str, float] = {}
     for rid in model["requirements"]:
         match = BACKTICK.search(model["acceptance"].get(rid, ""))
         if match is None:
@@ -902,6 +987,7 @@ def cmd_converge(args: argparse.Namespace) -> int:
             print(f"{rid} MANUAL")
             continue
         entry: dict = {"id": rid, "cmd": match.group(1), "status": "FAIL", "exit": None}
+        started = time.monotonic()
         try:
             argv = shlex.split(entry["cmd"])
             if not argv:
@@ -922,7 +1008,12 @@ def cmd_converge(args: argparse.Namespace) -> int:
             for line in output.strip().splitlines()[-12:]:
                 print(f"    {line}")
         results.append(entry)
-    state["converge"] = {"spec": spec, "spec_sha256": ref_hash(root / spec), "tree": tree_hash(root), "at": now(), "results": results}
+        durations[rid] = time.monotonic() - started
+    tree = tree_hash(root)
+    for entry in results:  # Each acceptance command is also ledger evidence (output-free); MANUAL checks ran nothing.
+        if entry["cmd"] is not None:
+            ledger.append(state, ledger.make_entry(f"converge:{entry['id']}", words(entry["cmd"]), entry["exit"], tree, head_sha(root), durations[entry["id"]], now(), [], None))
+    state["converge"] = {"spec": spec, "spec_sha256": ref_hash(root / spec), "tree": tree, "at": now(), "results": results}
     save(root, state)
     counts = {status: sum(r["status"] == status for r in results) for status in ("PASS", "FAIL", "MANUAL")}
     print(f"converge: {counts['PASS']} PASS, {counts['FAIL']} FAIL, {counts['MANUAL']} MANUAL")
@@ -1328,6 +1419,18 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--timeout", type=int, default=600)
     p.add_argument("command", nargs=argparse.REMAINDER)
     p.set_defaults(func=cmd_redgreen)
+    p = sub.add_parser("run", help="run CMD (argv, no shell) in scratch and record it in the evidence ledger; exits with CMD's status")
+    p.add_argument("label")
+    p.add_argument("--inputs", nargs="+", metavar="GLOB", help="repo-relative globs whose content `reuse` re-checks")
+    p.add_argument("--timeout", type=float, default=600)
+    p.set_defaults(func=cmd_run, run_command=[])
+    p = sub.add_parser("reuse", help="print REUSE or RERUN for a recorded check (label or exact command); exit 1 on RERUN")
+    p.add_argument("target", metavar="LABEL_OR_CMD")
+    p.set_defaults(func=cmd_reuse)
+    p = sub.add_parser("scan-diff", help="scan added lines for stubs, deferred work and weak tests; exit 1 on an unwaived Critical finding")
+    p.add_argument("--base", metavar="REV", help="compare against REV (default: the working tree against HEAD)")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_scan_diff)
     p = sub.add_parser("audit", help="check a committed lifecycle record against the repository; exit 1 on problems")
     p.add_argument("record", nargs="?", help=f"record path (default: the active task's file under {RECORD_DIR}/)")
     p.set_defaults(func=cmd_audit)
@@ -1360,7 +1463,14 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    command: list[str] = []
+    if argv[:1] == ["run"] and "--" in argv:  # The command is everything after the first `--`, verbatim.
+        split = argv.index("--")
+        argv, command = argv[:split], argv[split + 1 :]
     args = parser().parse_args(argv)
+    if args.command == "run":
+        args.run_command = command
     try:
         return args.func(args)
     except LifecycleError as error:

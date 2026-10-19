@@ -37,7 +37,8 @@ class DeltaCase(unittest.TestCase):
             shutil.copy2(source, self.scripts / source.name)
         self.git('init', '-q')
         self.cli('okf.py', 'init')
-        self.cap = self.root / 'knowledge/capabilities/export.md'
+        (self.root / 'knowledge/project/sync-ignore').write_text('*.md\n')
+        self.cap =self.root / 'knowledge/capabilities/export.md'
         self.cap.write_text('---\ntype: Capability\ntitle: Export\nnamespace: EXPORT\n'
                             'status: draft\n---\n\n# Export\n\nKeep this prose.\n\n'
                             '## Requirements\n\n' + OLD + '\n' + DROP + '\n' + KEEP +

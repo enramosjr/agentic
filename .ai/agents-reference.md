@@ -36,11 +36,12 @@ The OKF bundle resides in the `knowledge/` directory and follows the OKF v0.2 la
 | Find text across the bundle (skips `log.md`) | `search PATTERN [--regex 'a\|b'] [--under DIR\|FILE] [--count] [--include-log] [--limit N]` |
 | Which docs a change affects | `affected [PATHS…]` (default: git changes vs `HEAD`; matches `sources[].resource`) |
 | New concept doc with full frontmatter | `new PATH --type T --title X --description D [--tags a,b] [--source path[=Title]]…` |
-| Edit frontmatter in place | `set PATH key=value…`, `stamp verified PATH… --by "process:<command>"` |
+| Edit frontmatter in place | `set PATH key=value…`, `stamp verified PATH… --run CMD…` (runs CMD, stamps only on exit 0) |
 | Log entry (dated, newest-first) | `log "message" [--date YYYY-MM-DD]` |
 | Regenerate `index.md` listings | `reindex [--check]` (only rewrites the `okf:index` marker block) |
 | Gate 4 structural check | `validate [--strict] [--json]` (exit 1 on errors) |
 | Commit-boundary records gate (validate errors + `reindex --check` + `git diff --check`) in one call | `records [--base REV]` |
+| Gate 3 as a check: changed code needs changed docs, a fresh `verified`, a log entry (ignore list: `knowledge/project/sync-ignore`) | `sync-check [--base REV] [--json]` (exit 1 on any violation) |
 | Run a long check without model polling (`.ai/scripts/wait_check.py`) | `wait_check.py start --log LOG -- CMD`, then `wait_check.py wait --log LOG [--fail RX] [--done RX] --max SECONDS` |
 | Run the script test suite in parallel, printing only failures and a summary (`.ai/scripts/run_tests.py`) | `run_tests.py [-j N] [-s DIR]` |
 | Create the work queue and status checkpoint | `init --autonomous` |
@@ -52,10 +53,11 @@ The OKF bundle resides in the `knowledge/` directory and follows the OKF v0.2 la
 | Merge parallel branches' log, index, queue and status without conflicts (once per clone) | `git-setup` |
 | Keep agent PRs mergeable after base-branch merges (`.ai/scripts/pr_sync.py`) | `pr_sync.py [--dry-run]` |
 | Declare the tier, record and gate lifecycle stages, record red/green evidence (`.ai/scripts/lifecycle.py`) | `lifecycle.py tier L0\|L1\|L2\|L3 --reason T [--kind K]`, `stage NAME [--ref P] [--note T] [--approved-by A]`, `gate TARGET`, `status`, `redgreen red\|green -- CMD`, `analyze SPEC`, `converge SPEC` |
+| Record a check in the evidence ledger, ask whether to rerun it, scan added lines for stubs (`.ai/scripts/lifecycle.py`) | `lifecycle.py run LABEL [--inputs GLOB…] -- CMD`, `lifecycle.py reuse LABEL_OR_CMD` (REUSE or RERUN), `lifecycle.py scan-diff [--base REV] [--json]` |
 | Check spec → plan → tests coverage, and turn a spec into work-queue entries | `lifecycle.py trace SPEC [--plan P] [--tests PATH…]`, `lifecycle.py queue-from-spec SPEC [--group G]` |
 | Run the lifecycle scenario evals against a real agent (`.ai/scripts/lifecycle_eval.py`) | `lifecycle_eval.py list\|check\|run [--scenario ID] -- AGENT_COMMAND` |
 
-Path conventions follow the OKF SPEC (§6.1, §6.2): links and path fields are either URLs, bundle-relative paths beginning with `/`, or paths relative to the containing document. `new --source` and `affected` take **repo-relative** paths and convert them for you. Set `OKF_ACTOR` (e.g. `agent/<model-id>`) so `generated.by` is attributed. `stamp verified` records only the actor you pass, so stamp only after the cited command actually ran and passed (§8.5). Tests: `python3 -m unittest discover -s .ai/scripts/tests`, or the same tests in parallel with `python3 .ai/scripts/run_tests.py`.
+Path conventions follow the OKF SPEC (§6.1, §6.2): links and path fields are either URLs, bundle-relative paths beginning with `/`, or paths relative to the containing document. `new --source` and `affected` take **repo-relative** paths and convert them for you. Set `OKF_ACTOR` (e.g. `agent/<model-id>`) so `generated.by` is attributed. `stamp verified --run CMD…` runs CMD itself, so the stamp cannot outrun the check (§8.5); `--by process:…` is deprecated. Tests: `python3 -m unittest discover -s .ai/scripts/tests`, or the same tests in parallel with `python3 .ai/scripts/run_tests.py`.
 
 ## Harness tools
 

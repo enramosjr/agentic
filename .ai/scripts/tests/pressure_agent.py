@@ -47,6 +47,7 @@ def approve(spec, ids):
 def complete(spec):
     okf("log", "Scripted fixture implementation; no real-agent evidence.")
     okf("reindex")
+    Path("knowledge/project/sync-ignore").write_text("*.py\n*.md\n")  # The fixture repository has no docs for its code (Gate 3 sync-check).
     lc("converge", spec)
     # The test supplies a synthetic observation separately. This file alone cannot
     # establish independent review and is never used as live evidence.

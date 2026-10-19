@@ -1,0 +1,13 @@
+{
+  "branch": "main",
+  "head": "9e13fce5b17edd8ca50b8ec2ba6c7d8d09117eef",
+  "history": [],
+  "kind": "feature",
+  "reason": "unify project-local bootstrap for existing and new folders",
+  "redgreen": [],
+  "stages": {},
+  "task": "20261019T191757Z-main",
+  "tier": "L2",
+  "user_set": false,
+  "version": 1
+}

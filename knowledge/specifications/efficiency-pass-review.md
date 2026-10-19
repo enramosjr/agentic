@@ -9,6 +9,7 @@ generated: { by: agent/cursor, at: 2026-10-19T21:03:30Z }
 sources:
   - id: ai-scripts-tests-test-efficiency-py
     resource: ../../.ai/scripts/tests/test_efficiency.py
+verified: { by: "process:python3 -m unittest discover -s .ai/scripts/tests -p test_[ea]*.py", at: 2026-10-19T21:19:16Z }
 ---
 
 # Review: efficiency pass

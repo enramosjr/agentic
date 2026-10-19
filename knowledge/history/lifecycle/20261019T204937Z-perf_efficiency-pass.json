@@ -1,7 +1,7 @@
 {
   "branch": "perf/efficiency-pass",
   "converge": {
-    "at": "2026-10-19T21:03:39Z",
+    "at": "2026-10-19T21:16:33Z",
     "results": [
       {
         "cmd": "python3 -m unittest discover -s .ai/scripts/tests -p test_efficiency.py -k DiskTmp",
@@ -36,11 +36,169 @@
     ],
     "spec": "knowledge/specifications/efficiency-pass.md",
     "spec_sha256": "4373fed2e838ed151a0182c7d6496d2aefc2a2b916f1e8fe29fbde56f90ef1db",
-    "tree": "eacc4f1d3dc6245b289eb2f73ba8252aeb120ccc4036b6657d140dfd6f8c10d8"
+    "tree": "aabb9070f63bd04c9e4428fded10ea913f7c24a77f45c2dca01261c09abaf4db"
   },
   "head": "9e13fce5b17edd8ca50b8ec2ba6c7d8d09117eef",
   "history": [],
   "kind": "feature",
+  "ledger": [
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/run_tests.py"
+      ],
+      "at": "2026-10-19T21:12:22Z",
+      "duration": 46.639,
+      "exit": 1,
+      "head": "df47201984945b01d3de68dde202f5b7d0b6b10e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "framework-regression-parallel",
+      "tree": "aabb9070f63bd04c9e4428fded10ea913f7c24a77f45c2dca01261c09abaf4db"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/run_tests.py"
+      ],
+      "at": "2026-10-19T21:13:15Z",
+      "duration": 46.559,
+      "exit": 0,
+      "head": "df47201984945b01d3de68dde202f5b7d0b6b10e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "framework-regression-parallel",
+      "tree": "aabb9070f63bd04c9e4428fded10ea913f7c24a77f45c2dca01261c09abaf4db"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".ai/scripts/tests"
+      ],
+      "at": "2026-10-19T21:16:26Z",
+      "duration": 191.374,
+      "exit": 0,
+      "head": "df47201984945b01d3de68dde202f5b7d0b6b10e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "framework-regression",
+      "tree": "aabb9070f63bd04c9e4428fded10ea913f7c24a77f45c2dca01261c09abaf4db"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".ai/scripts/tests",
+        "-p",
+        "test_efficiency.py",
+        "-k",
+        "DiskTmp"
+      ],
+      "at": "2026-10-19T21:16:33Z",
+      "duration": 0.068,
+      "exit": 0,
+      "head": "df47201984945b01d3de68dde202f5b7d0b6b10e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R1",
+      "tree": "aabb9070f63bd04c9e4428fded10ea913f7c24a77f45c2dca01261c09abaf4db"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".ai/scripts/tests",
+        "-p",
+        "test_efficiency.py",
+        "-k",
+        "HookDedupe"
+      ],
+      "at": "2026-10-19T21:16:33Z",
+      "duration": 0.235,
+      "exit": 0,
+      "head": "df47201984945b01d3de68dde202f5b7d0b6b10e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R2",
+      "tree": "aabb9070f63bd04c9e4428fded10ea913f7c24a77f45c2dca01261c09abaf4db"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".ai/scripts/tests",
+        "-p",
+        "test_efficiency.py",
+        "-k",
+        "HookFastPath"
+      ],
+      "at": "2026-10-19T21:16:33Z",
+      "duration": 0.318,
+      "exit": 0,
+      "head": "df47201984945b01d3de68dde202f5b7d0b6b10e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R3",
+      "tree": "aabb9070f63bd04c9e4428fded10ea913f7c24a77f45c2dca01261c09abaf4db"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".ai/scripts/tests",
+        "-p",
+        "test_efficiency.py",
+        "-k",
+        "Runner"
+      ],
+      "at": "2026-10-19T21:16:33Z",
+      "duration": 0.244,
+      "exit": 0,
+      "head": "df47201984945b01d3de68dde202f5b7d0b6b10e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R4",
+      "tree": "aabb9070f63bd04c9e4428fded10ea913f7c24a77f45c2dca01261c09abaf4db"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".ai/scripts/tests",
+        "-p",
+        "test_lifecycle_conformance.py",
+        "-k",
+        "AgentsBudget"
+      ],
+      "at": "2026-10-19T21:16:33Z",
+      "duration": 0.056,
+      "exit": 0,
+      "head": "df47201984945b01d3de68dde202f5b7d0b6b10e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R5",
+      "tree": "aabb9070f63bd04c9e4428fded10ea913f7c24a77f45c2dca01261c09abaf4db"
+    }
+  ],
   "lessons": [
     {
       "at": "2026-10-19T21:07:05Z",
@@ -73,9 +231,9 @@
       "sha256": "d623dc6b3b028674a133b100e5664cb852ec82c2adfc04aae1558b414978d1c0"
     },
     "verify": {
-      "at": "2026-10-19T21:06:58Z",
+      "at": "2026-10-19T21:20:36Z",
       "level": "L2",
-      "note": "converge efficiency-pass: R1-R5 PASS; unittest discover .ai/scripts/tests: 497 tests, only the 5 pre-existing template-doc FileNotFoundError errors (179 s); run_tests.py: 497 tests, same 5 ids (46 s); okf.py records OK"
+      "note": "framework-regression-parallel exit=0 tree=aabb907; framework-regression exit=0 tree=aabb907; converge:R1 exit=0 tree=aabb907; converge:R2 exit=0 tree=aabb907; converge:R3 exit=0 tree=aabb907; converge:R4 exit=0 tree=aabb907; converge:R5 exit=0 tree=aabb907"
     }
   },
   "task": "20261019T204937Z-perf_efficiency-pass",

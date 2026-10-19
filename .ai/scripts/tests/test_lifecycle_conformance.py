@@ -124,14 +124,17 @@ class Relocation(unittest.TestCase):
 
 
 class AgentsBudget(unittest.TestCase):  # efficiency-pass R5
-    BASELINE = "9e13fce"  # AGENTS.md before reference material moved to .ai/agents-reference.md.
+    BASELINES = ("9e13fce", "cc75e1a")  # AGENTS.md before reference material moved to .ai/agents-reference.md.
     NORMATIVE = re.compile(r"\b(?:MUST|SHOULD|MAY)\b")
 
     def baseline(self) -> str:
-        shown = subprocess.run(["git", "-C", str(ROOT), "show", f"{self.BASELINE}:AGENTS.md"], capture_output=True, text=True)
-        if shown.returncode:
-            self.skipTest(f"commit {self.BASELINE} is not in this clone")
-        return shown.stdout
+        bodies = []
+        for rev in self.BASELINES:
+            shown = subprocess.run(["git", "-C", str(ROOT), "show", f"{rev}:AGENTS.md"], capture_output=True, text=True)
+            if shown.returncode:
+                self.skipTest(f"commit {rev} is not in this clone")
+            bodies.append(shown.stdout)
+        return "\n".join(bodies)
 
     @staticmethod
     def flat(body: str) -> str:
@@ -183,6 +186,43 @@ class Tiers(unittest.TestCase):
             self.assertIn("lifecycle.py analyze", text(path), path)
             self.assertIn("lifecycle.py converge", text(path), path)
         self.assertIn("cites a passing converge run of an identical command on the current tree", text(".ai/validation-policy.md"))
+
+
+class MechanicalDocs(unittest.TestCase):
+    """Mechanical governance checks (ledger, reuse, scan-diff, sync-check) are documented and stdlib-only."""
+
+    LIFECYCLE_COMMANDS = ("run", "reuse", "scan-diff")
+    OKF_COMMANDS = ("sync-check",)
+    STDLIB = {"__future__", "fnmatch", "hashlib", "json", "re", "shlex", "subprocess", "sys", "time", "pathlib", "typing"}
+
+    def test_new_commands_documented_in_agents_and_lifecycle(self) -> None:  # mechanical-governance R32
+        for command in self.LIFECYCLE_COMMANDS:
+            result = subprocess.run([sys.executable, str(SCRIPTS / "lifecycle.py"), command, "--help"], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, f"lifecycle.py {command} is not a subcommand: {result.stderr}")
+        for command in self.OKF_COMMANDS:
+            result = subprocess.run([sys.executable, str(SCRIPTS / "okf.py"), command, "--help"], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, f"okf.py {command} is not a subcommand: {result.stderr}")
+        for path in ("AGENTS.md", ".ai/lifecycle.md"):
+            doc = text(path)
+            for command in self.LIFECYCLE_COMMANDS:
+                self.assertIn(f"lifecycle.py {command}", doc, f"{path} must document lifecycle.py {command}")
+            for command in self.OKF_COMMANDS:
+                self.assertIn(f"okf.py {command}", doc, f"{path} must document okf.py {command}")
+            self.assertIn("stamp verified", doc, path)
+            self.assertIn("--run", doc, path)
+        agents = text("AGENTS.md")
+        self.assertRegex(agents, r"(?s)### 8\.4.*lifecycle\.py reuse.*### 8\.5")
+        self.assertRegex(agents, r"(?s)### 3\.1.*lifecycle\.py run.*## 4\.")
+
+    def test_new_code_imports_only_stdlib(self) -> None:  # mechanical-governance R33
+        for name in ("ledger.py", "scan.py"):
+            source = text(f".ai/scripts/{name}")
+            self.assertIn("sys.dont_write_bytecode = True", source, name)
+            modules = set(re.findall(r"^(?:import|from) ([A-Za-z_][A-Za-z0-9_]*)", source, re.M))
+            self.assertLessEqual(modules, self.STDLIB, f"{name} imports outside the standard library: {modules - self.STDLIB}")
+        okf_source = text(".ai/scripts/okf.py")
+        for module in ("ledger", "scan"):  # Tests copy okf.py into repositories that hold a fixed script subset.
+            self.assertNotRegex(okf_source, rf"^(?:import|from) {module}\b", module)
 
 
 class HarnessWiring(unittest.TestCase):
