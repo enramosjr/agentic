@@ -117,8 +117,8 @@ Read the [autonomous execution protocol](.ai/autonomous-execution.md), especiall
 
 | Script | Purpose |
 | --- | --- |
-| `lifecycle.py` | Declare tiers, record and gate stages, record red/green evidence, trace spec to plan to tests |
-| `okf.py` | Read, search, validate, and update the knowledge bundle; queue, checkpoint, and handoff |
+| `lifecycle.py` | Declare tiers, record and gate stages, record red/green evidence, trace spec to plan to tests; `run` and `reuse` keep an output-free evidence ledger, `scan-diff` flags stubs in added lines |
+| `okf.py` | Read, search, validate, and update the knowledge bundle; `sync-check` and `stamp verified --run` make Gate 3 mechanical; queue, checkpoint, and handoff |
 | `repo.py` | Bounded read, grep, and file listing for harnesses without those tools |
 | `shell_guard.py` | Rejects shell patterns that waste tokens or bypass the structured tools |
 | `autonomy_driver.py` and friends | Supervised multi-session execution and out-of-session validation |

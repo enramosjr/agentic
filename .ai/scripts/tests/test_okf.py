@@ -371,5 +371,59 @@ class RecordsTests(BundleTestCase):
         self.assertIn("git diff --check no-such-ref failed", err)
 
 
+@unittest.skipUnless(shutil.which("git"), "git not installed")
+class StampRunTests(BundleTestCase):
+    """`stamp verified --run CMD...` stamps only a command that just exited 0; `--by` is deprecated for verified."""
+
+    DOC = "capabilities/build.md"
+
+    def setUp(self) -> None:
+        super().setUp()
+        subprocess.run(["git", "-C", str(self.repo), "init", "-q"], check=True)
+        self.new_doc()
+        self.verified_line = lambda: next((l for l in (self.bundle / self.DOC).read_text().splitlines() if l.startswith("verified:")), "")
+
+    def test_run_stamps_only_on_exit_zero_and_rejects_by_combination(self) -> None:
+        probe = "import os, sys; open('probe.txt', 'w').write(repr([sys.argv[1:], os.environ['TMPDIR'], os.getcwd()]))"
+        self.assertEqual(self.verified_line(), "")
+        code, out, err = self.run_cli("stamp", "verified", self.DOC, "--run", sys.executable, "-c", probe, "a;touch shell_ran")
+        self.assertEqual(code, 0, out + err)
+        self.assertIn(f'by: "process:{sys.executable} -c {probe} a;touch shell_ran"', self.verified_line())
+        self.assertFalse((self.repo / "shell_ran").exists())  # argv, no shell.
+        argv, tmpdir, cwd = eval((self.repo / "probe.txt").read_text())
+        self.assertEqual(argv, ["a;touch shell_ran"])
+        self.assertEqual(Path(tmpdir).resolve(), (self.repo / ".git/okf-scratch").resolve())
+        self.assertEqual(Path(cwd).resolve(), self.repo)
+        before = (self.bundle / self.DOC).read_bytes()
+        code, out, err = self.run_cli("stamp", "verified", self.DOC, "--at", "2030-01-01T00:00:00Z", "--run", sys.executable, "-c", "raise SystemExit(3)")
+        self.assertEqual(code, 1)
+        self.assertEqual((self.bundle / self.DOC).read_bytes(), before)
+        for argv in (("stamp", "verified", self.DOC, "--by", "human:me", "--run", "true"), ("stamp", "generated", self.DOC, "--run", "true")):
+            code, out, err = self.run_cli(*argv)
+            self.assertEqual(code, 1, argv)
+            self.assertIn("--run", err)
+        self.assertEqual((self.bundle / self.DOC).read_bytes(), before)
+        self.assertEqual(self.run_cli("stamp", "verified", self.DOC)[0], 1)  # Neither --by nor --run.
+
+    def test_by_verified_warns_for_process_and_agent_not_human(self) -> None:
+        for actor, warns in (("process:make test", True), ("agent/test", True), ("human:me", False)):
+            code, out, err = self.run_cli("stamp", "verified", self.DOC, "--by", actor)
+            self.assertEqual(code, 0, err)
+            self.assertEqual("--run" in err, warns, (actor, err))
+            self.assertIn(actor, self.verified_line())
+        code, out, err = self.run_cli("stamp", "generated", self.DOC, "--by", "process:make test")
+        self.assertEqual((code, err), (0, ""))
+
+    def test_strict_env_rejects_process_by(self) -> None:
+        before = (self.bundle / self.DOC).read_bytes()
+        with mock.patch.dict(os.environ, {"OKF_STRICT_STAMP": "1"}):
+            code, out, err = self.run_cli("stamp", "verified", self.DOC, "--by", "process:make test")
+            self.assertEqual(code, 1)
+            self.assertIn("--run", err)
+            self.assertEqual((self.bundle / self.DOC).read_bytes(), before)
+            self.assertEqual(self.run_cli("stamp", "verified", self.DOC, "--by", "human:me")[0], 0)
+            self.assertEqual(self.run_cli("stamp", "verified", self.DOC, "--run", "true")[0], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

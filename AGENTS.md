@@ -122,11 +122,12 @@ Any OKF operation the script covers MUST go through it instead of reading, grepp
 | Find text across the bundle (skips `log.md`) | `search PATTERN [--regex 'a\|b'] [--under DIR\|FILE] [--count] [--include-log] [--limit N]` |
 | Which docs a change affects | `affected [PATHS…]` (default: git changes vs `HEAD`; matches `sources[].resource`) |
 | New concept doc with full frontmatter | `new PATH --type T --title X --description D [--tags a,b] [--source path[=Title]]…` |
-| Edit frontmatter in place | `set PATH key=value…`, `stamp verified PATH… --by "process:<command>"` |
+| Edit frontmatter in place | `set PATH key=value…`, `stamp verified PATH… --run CMD…` (runs CMD, stamps only on exit 0) |
 | Log entry (dated, newest-first) | `log "message" [--date YYYY-MM-DD]` |
 | Regenerate `index.md` listings | `reindex [--check]` (only rewrites the `okf:index` marker block) |
 | Gate 4 structural check | `validate [--strict] [--json]` (exit 1 on errors) |
 | Commit-boundary records gate (validate errors + `reindex --check` + `git diff --check`) in one call | `records [--base REV]` |
+| Gate 3 as a check: changed code needs changed docs, a fresh `verified`, a log entry (ignore list: `knowledge/project/sync-ignore`) | `sync-check [--base REV] [--json]` (exit 1 on any violation) |
 | Run a long check without model polling (`.ai/scripts/wait_check.py`) | `wait_check.py start --log LOG -- CMD`, then `wait_check.py wait --log LOG [--fail RX] [--done RX] --max SECONDS` |
 | Create the work queue and status checkpoint | `init --autonomous` |
 | Task states (READY computed from dependencies) and what to start next | `queue [--next] [--state S] [--limit N] [--json]` |
@@ -137,10 +138,11 @@ Any OKF operation the script covers MUST go through it instead of reading, grepp
 | Merge parallel branches' log, index, queue and status without conflicts (once per clone) | `git-setup` |
 | Keep agent PRs mergeable after base-branch merges (`.ai/scripts/pr_sync.py`) | `pr_sync.py [--dry-run]` |
 | Declare the tier, record and gate lifecycle stages, record red/green evidence (`.ai/scripts/lifecycle.py`) | `lifecycle.py tier L0\|L1\|L2\|L3 --reason T [--kind K]`, `stage NAME [--ref P] [--note T] [--approved-by A]`, `gate TARGET`, `status`, `redgreen red\|green -- CMD`, `analyze SPEC`, `converge SPEC` |
+| Record a check in the evidence ledger, ask whether to rerun it, scan added lines for stubs (`.ai/scripts/lifecycle.py`) | `lifecycle.py run LABEL [--inputs GLOB…] -- CMD`, `lifecycle.py reuse LABEL_OR_CMD` (REUSE or RERUN), `lifecycle.py scan-diff [--base REV] [--json]` |
 | Check spec → plan → tests coverage, and turn a spec into work-queue entries | `lifecycle.py trace SPEC [--plan P] [--tests PATH…]`, `lifecycle.py queue-from-spec SPEC [--group G]` |
 | Run the lifecycle scenario evals against a real agent (`.ai/scripts/lifecycle_eval.py`) | `lifecycle_eval.py list\|check\|run [--scenario ID] -- AGENT_COMMAND` |
 
-Path conventions follow the OKF SPEC (§6.1, §6.2): links and path fields are either URLs, bundle-relative paths beginning with `/`, or paths relative to the containing document. `new --source` and `affected` take **repo-relative** paths and convert them for you. Set `OKF_ACTOR` (e.g. `agent/<model-id>`) so `generated.by` is attributed. `stamp verified` records only the actor you pass, so stamp only after the cited command actually ran and passed (§8.5). Tests: `python3 -m unittest discover -s .ai/scripts/tests`.
+Path conventions follow the OKF SPEC (§6.1, §6.2): links and path fields are either URLs, bundle-relative paths beginning with `/`, or paths relative to the containing document. `new --source` and `affected` take **repo-relative** paths and convert them for you. Set `OKF_ACTOR` (e.g. `agent/<model-id>`) so `generated.by` is attributed. `stamp verified --run CMD…` runs CMD itself, so the stamp cannot outrun the check (§8.5); `--by process:…` is deprecated. Tests: `python3 -m unittest discover -s .ai/scripts/tests`.
 
 **When a command fails**, its error is one line and names the fix (a missing doc lists close matches; `affected` outside git asks for explicit paths). Correct the invocation and rerun; you MUST NOT fall back to reading or grepping `knowledge/` by hand.
 
@@ -286,7 +288,7 @@ If the corpus is not up to date, perform the following actions:
 - Append a dated entry to `knowledge/log.md` describing what knowledge was added, updated, or verified (`okf.py log "…"`).
 
 ### Gate 4: Final Verification & Sign-Off
-Record the result with `lifecycle.py stage verify --note "<commands and outcomes>"` once the checks below pass (it reruns `okf.py records`). Verify that:
+Run each check with `lifecycle.py run LABEL -- CMD`, then `lifecycle.py stage verify`: it derives its note from that ledger (L1 keeps `--note`) and runs `okf.py sync-check`, `lifecycle.py scan-diff` and `okf.py records`. Verify that:
 - Relevant builds succeed using the repository's own build commands.
 - **Applicable end-to-end tests for the changed slice actually pass** (not merely that a script exists). See §8.
 - All relative file links inside updated OKF documents resolve correctly (`okf.py validate` exits 0; it also checks frontmatter, log ordering, index freshness, and evidence claims).
@@ -349,7 +351,7 @@ Smoke checks that only prove startup MAY be used as additional diagnostics but M
 
 Before sign-off, agents MUST run every row that intersects the change, using the repository's actual commands (build files, package scripts, CI configuration):
 
-**Execution rules (normative, loaded on demand).** The rules for when to run focused versus full checks, batch sizing, test proportionality, evidence reuse, and waiting on long checks live verbatim in [`.ai/validation-policy.md`](.ai/validation-policy.md). Agents MUST load it by section (`python3 .ai/scripts/okf.py show .ai/validation-policy.md --outline`, then `--section`) before the first Gate 4 run of a task and before launching or repeating any check that takes minutes. The binding core: run focused checks in the loop and the slice's narrowest E2E once when its edits are complete; run the full gate once per frozen candidate; never rerun an unchanged check; defer batch-level suites to one validator on the integrated head.
+**Execution rules (normative, loaded on demand).** The rules for when to run focused versus full checks, batch sizing, test proportionality, evidence reuse, and waiting on long checks live verbatim in [`.ai/validation-policy.md`](.ai/validation-policy.md). Agents MUST load it by section (`python3 .ai/scripts/okf.py show .ai/validation-policy.md --outline`, then `--section`) before the first Gate 4 run of a task and before launching or repeating any check that takes minutes. The binding core: run focused checks in the loop and the slice's narrowest E2E once when its edits are complete; run the full gate once per frozen candidate; never rerun an unchanged check; defer batch-level suites to one validator on the integrated head. Before repeating a check, MUST run `lifecycle.py reuse LABEL_OR_CMD`: on REUSE, MUST NOT rerun it.
 
 | Touched area | Required verification |
 |--------------|----------------------|
