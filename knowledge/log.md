@@ -12,6 +12,8 @@
 - Independent reviewer approved the lifecycle enforcement change in two rounds (knowledge/history/lifecycle-enforcement-review.md); round-2 fixes: wip short-flag clusters, stale verify dropped on escalation. python3 -m unittest discover -s .ai/scripts/tests -> 268 tests PASS.
 - Replaced the duplicated .agents/skills tree with a symlink to ../.claude/skills (one copy); conformance test asserts the symlink. python3 -m unittest discover -s .ai/scripts/tests -> PASS.
 - Rewrote README.md to lead with the enforced AI development lifecycle (tiers, stage gates, evidence rules); no behavior or contract change.
+- Rewrote README.md as the AGENTIC project README (acronym, vendor-neutral framing, pillars, lifecycle, layout); removed template framing; no behavior or contract change.
+- Re-rewrote README.md after reviewing spec-kit and superpowers READMEs: pitch-first (why enforced process), how-it-works narrative, choose-your-process table, per-agent install, stage workflow, philosophy; no behavior or contract change.
 
 ## 2026-10-17
 
