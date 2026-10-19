@@ -77,6 +77,11 @@ The installer creates missing folders and initializes Git when needed. For a pro
 
 Everything is local to `TARGET`, including `.ai/`, `.claude/`, `.codex/`, `.cursor/`, and `.agents/skills/`. Global agent settings remain unchanged. The source checkout's knowledge, Git history, and agent session files are excluded. Autonomous execution remains opt-in; see below.
 
+The [distributed tooling guide](.ai/README.md) and its references travel with the
+kit. Regression checks use those references rather than an adopter's application
+README or private knowledge. Installed kits can be reused as templates: only the
+managed governance body is exported, excluding source-only adopter instructions.
+
 Open the target project in your coding agent. For Codex, trust the project's `.codex/` layer and review hooks with `/hooks`; installation alone does not activate that trust. Claude Code uses the local settings, subagents, and skills; Cursor uses its local hooks and the shared subagents. Other agents can follow `AGENTS.md` by instruction. Ask for a bounded change and watch the agent declare a tier.
 
 Rerun the same installer command to update a project from your source checkout. Check an installation without changing files:
@@ -105,6 +110,11 @@ Check where you are at any point:
 ```sh
 python3 .ai/scripts/lifecycle.py status
 ```
+
+Invoke state-mutating lifecycle commands directly. Wrapping them in
+`lifecycle.py run` is refused within the same repository to preserve acceptance
+and ledger evidence; read-only inspection and independent fixture repositories
+remain supported. See the [distributed lifecycle guide](.ai/docs/lifecycle.md).
 
 ## Autonomous execution
 

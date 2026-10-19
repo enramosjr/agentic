@@ -38,6 +38,12 @@ class InstallerCase(unittest.TestCase):
             else:
                 shutil.copy2(source, dest)
         self.target.mkdir()
+        # The default fixture models an unwrapped template. Re-export is tested
+        # separately with explicit wrapped source bytes and expected outcomes.
+        governance = self.template / 'AGENTS.md'
+        raw = governance.read_bytes()
+        if install.BEGIN in raw:
+            governance.write_bytes(raw.split(install.BEGIN + b'\n', 1)[1].split(install.END, 1)[0])
         self.git("init", "-q")
         self.write("src/app.py", "print('ours')\n")
         self.commit()
@@ -247,7 +253,7 @@ class BootstrapWorkflowTests(BootstrapCase):
 class BootstrapDocumentationTests(BootstrapCase):
     # R1: execute the documented route, rather than only testing matching prose.
     def test_documented_command_bootstraps_both_folder_states(self):
-        readme = (ROOT / "README.md").read_text()
+        readme = (ROOT / ".ai/README.md").read_text()
         section = readme.split("## Quick start\n", 1)[1].split("\n## ", 1)[0]
         command = "python3 /path/to/agentic/.ai/scripts/install.py TARGET"
         self.assertIn(command, section)
@@ -599,6 +605,75 @@ class RefusalTests(InstallerCase):
 
 
 class InstallE2ETests(InstallerCase):
+    def test_installed_documentation_does_not_depend_on_adopter_readme_or_knowledge(self):
+        self.write('README.md', '# Application-only README\n')
+        self.write('knowledge/private.txt', 'retained project knowledge\n')
+        self.commit()
+        self.run_install()
+        self.assertEqual((self.target / 'README.md').read_text(), '# Application-only README\n')
+        self.assertEqual((self.target / 'knowledge/private.txt').read_text(), 'retained project knowledge\n')
+        self.assertFalse((self.target / 'knowledge/project/lifecycle.md').exists())
+        refs = {
+            '.ai/docs/install-and-upgrade.md': ('--check', '--force', '--no-knowledge', 'conflict', '/hooks'),
+            '.ai/docs/lifecycle.md': ('lifecycle.py analyze', 'lifecycle.py converge', 'lifecycle.py audit', 'knowledge/history/lifecycle/'),
+            '.ai/docs/learning-loop.md': ('learn', 'promote', 'retire', '--lessons-from', '8,192'),
+            '.ai/docs/learning-loop-playbook.md': ('learn', 'promote', 'retire', '--lessons-from', '8,192'),
+        }
+        for name, terms in refs.items():
+            content = (self.target / name).read_text()
+            for term in terms:
+                self.assertIn(term, content, (name, term))
+        result = subprocess.run([
+            sys.executable, '-m', 'unittest',
+            'test_lifecycle_conformance.Distribution.test_readme_and_playbook_document_the_installer',
+            'test_lifecycle_conformance.Tiers.test_the_committed_audit_record_is_documented',
+            'test_lifecycle_conformance.Tiers.test_analyze_and_converge_are_documented',
+            'test_brownfield_deltas.DocumentationTests.test_workflow_and_hold_documented',
+            'test_learning_loop.LearningLoopTests.test_documented_contract',
+        ], cwd=self.target, capture_output=True, text=True,
+            env={**os.environ, 'PYTHONPATH': str(self.target / '.ai/scripts/tests')})
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_installed_template_reuse_keeps_one_block_and_normalized_hash(self):
+        # R4: a distributed kit can itself be used as an installation source.
+        body = b'# Shared governance\n'
+        self.write('AGENTS.md', b'# Source-only rules\n' + install.BEGIN + b'\n' + body + install.END + b'\n# Source-only suffix\n', template=True)
+        self.write('AGENTS.md', '# Target-only rules\n')
+        self.commit()
+        self.run_install()
+        expected = b'# Target-only rules\n\n' + install.BEGIN + b'\n' + body + install.END + b'\n'
+        self.assertEqual((self.target / 'AGENTS.md').read_bytes(), expected)
+        self.assertEqual(self.manifest()['agents_block'], install.digest(body))
+        self.commit()
+        before = self.snapshot()
+        self.run_install()
+        self.run_install('--check')
+        self.assertEqual(self.snapshot(), before)
+        # Re-export the installed target and repeat, including CLI --check.
+        self.template = self.target
+        self.target = self.target.parent / 'second adopter'
+        self.target.mkdir()
+        subprocess.run(['git', 'init', '-q', str(self.target)], check=True, capture_output=True)
+        self.run_install()
+        self.assertEqual((self.target / 'AGENTS.md').read_bytes(), install.BEGIN + b'\n' + body + install.END + b'\n')
+        self.assertEqual(self.manifest()['agents_block'], install.digest(body))
+        self.commit()
+        self.run_install('--check')
+
+    def test_malformed_source_markers_refuse_before_target_mutation(self):
+        malformed = (
+            install.BEGIN,
+            install.END + b'\n' + install.BEGIN,
+            install.BEGIN + b'\n' + install.BEGIN + b'\nbody\n' + install.END + b'\n' + install.END,
+            install.BEGIN + b'\nbody\n' + install.END + b'\n' + install.BEGIN + b'\nbody\n' + install.END,
+        )
+        for body in malformed:
+            with self.subTest(body=body):
+                self.write('AGENTS.md', body, template=True)
+                before = self.snapshot()
+                self.run_install(code=2)
+                self.assertEqual(self.snapshot(), before)
+
     # R6, R11
     def test_install_into_existing_repo(self):
         self.write("AGENTS.md", "# Ours\n")
