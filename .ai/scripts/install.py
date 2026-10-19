@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install or check the governance kit in a Git worktree. Python 3.9+, stdlib only."""
+"""Bootstrap or check AGENTIC inside an existing or new project folder. Python 3.9+, Git, stdlib only."""
 from __future__ import annotations
 
 import argparse
@@ -154,6 +154,28 @@ def dirty_paths(target):
     return result
 
 
+def needs_git_init(target):
+    """Discover the worktree before creating anything, including for missing targets."""
+    ancestor = target
+    while not ancestor.exists():
+        ancestor = ancestor.parent
+    if not ancestor.is_dir():
+        raise Refusal("TARGET: choose a directory, not a file or a path beneath one")
+    result = subprocess.run(["git", "-C", str(ancestor), "rev-parse", "--show-toplevel"],
+                            capture_output=True, text=True, timeout=30,
+                            env={**os.environ, "LC_ALL": "C"})
+    if result.returncode == 0:
+        if Path(result.stdout.strip()).resolve() != target:
+            raise Refusal("TARGET: choose the top level of the Git work tree")
+        return False
+    # Git errors (including bare repos, invalid metadata and ownership errors)
+    # must not become permission to initialize a new or nested repository.
+    metadata = (ancestor / ".git").exists() or (ancestor / ".git").is_symlink()
+    if metadata or result.returncode != 128 or not result.stderr.startswith("fatal: not a git repository"):
+        raise Refusal("TARGET: cannot inspect Git work tree: " + result.stderr.strip())
+    return True
+
+
 def atomic_write(path, data, mode=0o644):
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp = tempfile.mkstemp(prefix=".kit-", dir=path.parent)
@@ -196,8 +218,10 @@ def install(target, template, check=False, force=False, no_knowledge=False):
     target, template = target.resolve(), template.resolve()
     if target == template:
         raise Refusal("TARGET is the template root: choose a different repository")
-    if Path(os.fsdecode(git(target, "rev-parse", "--show-toplevel")).strip()).resolve() != target:
-        raise Refusal("TARGET: choose the top level of the Git work tree")
+    initialize_git = needs_git_init(target)
+    if check and initialize_git:
+        print("not installed (Git initialization required)")
+        return 1
     try:
         raw_version = (template / ".ai/VERSION").read_text()
     except OSError as error:
@@ -364,10 +388,13 @@ def install(target, template, check=False, force=False, no_knowledge=False):
         changing.update(n.replace(".claude/skills/", ".agents/skills/", 1) for n in skill_names)
     for name in changing:
         safe(name)
-    if not force:
+    if not force and not initialize_git:
         for dirty in dirty_paths(target):
             if any(dirty == n or dirty.startswith(n + "/") or n.startswith(dirty + "/") for n in changing):
                 raise Refusal(f"{dirty}: commit or stash changing paths, or use --force")
+    if initialize_git:
+        target.mkdir(parents=True, exist_ok=True)
+        git(target, "init", "--quiet")
     for name, (data, file_mode) in writes.items():
         if name == MANIFEST:
             continue
@@ -402,10 +429,10 @@ def install(target, template, check=False, force=False, no_knowledge=False):
 
 def main(argv=None, template=ROOT):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--check", action="store_true")
-    parser.add_argument("--force", action="store_true")
-    parser.add_argument("--no-knowledge", action="store_true")
-    parser.add_argument("target", type=Path)
+    parser.add_argument("--check", action="store_true", help="report installation drift without writing files or initializing Git")
+    parser.add_argument("--force", action="store_true", help="allow changing dirty paths; conflicting adopter files are still kept")
+    parser.add_argument("--no-knowledge", action="store_true", help="skip creating the project's knowledge bundle")
+    parser.add_argument("target", type=Path, help="existing project root or new folder; initializes Git when needed")
     args = parser.parse_args(argv)
     try:
         return install(args.target, template, args.check, args.force, args.no_knowledge)

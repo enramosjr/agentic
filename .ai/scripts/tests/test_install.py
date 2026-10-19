@@ -75,6 +75,196 @@ class InstallerCase(unittest.TestCase):
         self.commit()
 
 
+def tree_state(root):
+    """Include directories and Git metadata when proving a command made no writes."""
+    return {str(p.relative_to(root)): ("link", os.readlink(p)) if p.is_symlink() else
+            ("dir",) if p.is_dir() else (p.read_bytes(), p.stat().st_mode, p.stat().st_mtime_ns)
+            for p in root.rglob("*")}
+
+
+class BootstrapCase(InstallerCase):
+    def setUp(self):
+        super().setUp()
+        self.target = self.target.parent / "new project with spaces"
+        # Fixtures live under the outer repo's .git scratch. Treat each fixture
+        # as an independent project while still discovering its own repositories.
+        environment = patch.dict(os.environ, {"GIT_CEILING_DIRECTORIES": str(Path(self.temp.name).parent)})
+        environment.start()
+        self.addCleanup(environment.stop)
+
+    def assert_bootstrapped(self):
+        self.assertEqual(Path(self.git("rev-parse", "--show-toplevel").strip()).resolve(), self.target)
+        head = subprocess.run(["git", "-C", str(self.target), "rev-parse", "--verify", "HEAD"], capture_output=True)
+        self.assertNotEqual(head.returncode, 0, "bootstrap must not create a commit")
+        self.assertEqual(self.git("remote"), "")
+        self.manifest()
+        for name in install.plain_files(self.template):
+            self.assertEqual((self.target / name).read_bytes(), (self.template / name).read_bytes(), name)
+        self.assertTrue((self.target / "knowledge/index.md").is_file())
+        self.assertFalse((self.target / "knowledge/project/work-queue.md").exists())
+
+
+class BootstrapNewFolderTests(BootstrapCase):
+    # R2: real CLI bootstrap, including missing parent directories.
+    def test_missing_and_empty_folder(self):
+        for existing in (False, True):
+            with self.subTest(existing=existing):
+                self.target = self.target.parent / ("empty project" if existing else "missing parent/new project")
+                if existing:
+                    self.target.mkdir(parents=True)
+                self.run_install()
+                self.assert_bootstrapped()
+
+
+class BootstrapExistingFolderTests(BootstrapCase):
+    # R3: preserve adopter bytes and merge existing untracked instructions/hooks.
+    def test_populated_non_git_folder(self):
+        app = self.write("src/app.py", b"application\x00\xff")
+        self.write("AGENTS.md", "# Adopter instructions\n")
+        self.write("CLAUDE.md", "# Adopter Claude instructions\n")
+        for name in install.HOOK_FILES:
+            hook = {"command": "adopter-command"}
+            entry = hook if name == ".cursor/hooks.json" else {"hooks": [hook]}
+            self.write(name, json.dumps({"custom": "keep", "hooks": {"adopter-event": [entry]}}))
+        subprocess.run([sys.executable, str(self.template / ".ai/scripts/okf.py"), "--bundle",
+                        str(self.target / "knowledge"), "init"], check=True, capture_output=True)
+        self.write("knowledge/private.txt", b"project knowledge\xff")
+        knowledge = tree_state(self.target / "knowledge")
+        self.run_install()
+        self.assertEqual(app.read_bytes(), b"application\x00\xff")
+        self.assertEqual(tree_state(self.target / "knowledge"), knowledge)
+        self.assertTrue((self.target / "AGENTS.md").read_text().startswith("# Adopter instructions\n"))
+        self.assertEqual((self.target / "CLAUDE.md").read_text(), "# Adopter Claude instructions\n\n@AGENTS.md\n")
+        for name in install.HOOK_FILES:
+            data = json.loads((self.target / name).read_bytes())
+            self.assertEqual(data["custom"], "keep")
+            self.assertIn("adopter-command", install.commands(data, name == ".cursor/hooks.json"))
+            self.assertTrue(set(install.commands(json.loads((self.template / name).read_bytes()),
+                                                name == ".cursor/hooks.json")).issubset(
+                install.commands(data, name == ".cursor/hooks.json")))
+        self.assert_bootstrapped()
+
+    def test_plain_file_conflict_keeps_adopter_copy(self):
+        self.write(".ai/VERSION", "adopter-owned\n")
+        self.assertIn("conflict: .ai/VERSION", self.run_install(code=1))
+        self.assertEqual((self.target / ".ai/VERSION").read_text(), "adopter-owned\n")
+        self.assertNotIn(".ai/VERSION", self.manifest()["files"])
+
+    def test_invalid_inputs_refuse_before_git_initialization(self):
+        for name, content in ((".claude/settings.json", "{broken"), ("AGENTS.md", install.BEGIN)):
+            with self.subTest(name=name):
+                path = self.write(name, content)
+                before = tree_state(self.target)
+                self.run_install(code=2)
+                self.assertEqual(tree_state(self.target), before)
+                self.assertFalse((self.target / ".git").exists())
+                path.unlink()
+
+
+class BootstrapLocalityTests(BootstrapCase):
+    # R5: home/config directories and template-private state never become kit files.
+    def test_complete_kit_is_project_local(self):
+        private = ("knowledge/private.txt", ".claude/settings.local.json", ".claude/projects/session.json",
+                   ".codex/sessions/session.json", ".cursor/session.json")
+        for name in private:
+            self.write(name, "template-private", template=True)
+        subprocess.run(["git", "init", "-q", str(self.template)], check=True, capture_output=True)
+        self.write(".git/template-private", "history marker", template=True)
+        home = self.target.parent / "isolated home"
+        for name in (".codex/config.toml", ".claude/settings.json", ".cursor/settings.json"):
+            path = home / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("global sentinel")
+        before = tree_state(home)
+        with patch.dict(os.environ, {"HOME": str(home), "CODEX_HOME": str(home / ".codex"),
+                                    "CLAUDE_CONFIG_DIR": str(home / ".claude"),
+                                    "XDG_CONFIG_HOME": str(home / ".config")}):
+            self.run_install()
+        self.assertEqual(tree_state(home), before)
+        self.assert_bootstrapped()
+        for name in (*private, ".git/template-private"):
+            self.assertFalse((self.target / name).exists(), name)
+        for name in (*install.HOOK_FILES, "AGENTS.md", "CLAUDE.md", ".agents/skills/spec/SKILL.md"):
+            self.assertTrue((self.target / name).is_file(), name)
+
+
+class BootstrapWorkflowTests(BootstrapCase):
+    # R6: read-only checks and the actual installed enforcement/records path.
+    def test_check_missing_and_non_git_is_read_only(self):
+        for existing in (False, True):
+            with self.subTest(existing=existing):
+                if existing:
+                    self.write("src/app.py", "adopter bytes")
+                before = tree_state(self.target.parent)
+                self.assertIn("not installed", self.run_install("--check", code=1))
+                self.assertEqual(tree_state(self.target.parent), before)
+
+    def test_bootstrap_repeat_check_records_and_hook(self):
+        self.run_install()
+        before = tree_state(self.target)
+        self.assertIn("up to date", self.run_install())
+        self.run_install("--check")
+        self.assertEqual(tree_state(self.target), before)
+        result = subprocess.run([sys.executable, ".ai/scripts/okf.py", "records"], cwd=self.target,
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        env = {k: v for k, v in os.environ.items() if k not in ("LIFECYCLE_GUARD", "OKF_AUTONOMOUS")}
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
+        payload = {"hook_event_name": "PreToolUse", "tool_name": "Edit",
+                   "tool_input": {"file_path": str(self.target / "src/app.py")}, "cwd": str(self.target)}
+        result = subprocess.run([sys.executable, ".ai/scripts/lifecycle.py", "hook"], cwd=self.target,
+                                input=json.dumps(payload), capture_output=True, text=True, env=env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"], "deny")
+
+    def test_nested_targets_and_file_refuse_without_mutation(self):
+        parent = self.target.parent / "parent repo"
+        parent.mkdir()
+        subprocess.run(["git", "init", "-q", str(parent)], check=True, capture_output=True)
+        (parent / "existing").mkdir()
+        (parent / "file").write_text("keep")
+        for target in (parent / "existing", parent / "missing/deep", parent / "file", parent / "file/child"):
+            with self.subTest(target=target):
+                self.target = target
+                before = tree_state(parent)
+                self.run_install(code=2)
+                self.assertEqual(tree_state(parent), before)
+
+    def test_bare_and_invalid_repository_metadata_refuse(self):
+        for bare in (False, True):
+            with self.subTest(bare=bare):
+                self.target = self.target.parent / ("bare project" if bare else "invalid project")
+                if bare:
+                    subprocess.run(["git", "init", "--bare", "-q", str(self.target)], check=True, capture_output=True)
+                else:
+                    self.write(".git", "invalid git metadata\n")
+                before = tree_state(self.target)
+                self.run_install(code=2)
+                self.assertEqual(tree_state(self.target), before)
+
+
+class BootstrapDocumentationTests(BootstrapCase):
+    # R1: execute the documented route, rather than only testing matching prose.
+    def test_documented_command_bootstraps_both_folder_states(self):
+        readme = (ROOT / "README.md").read_text()
+        section = readme.split("## Quick start\n", 1)[1].split("\n## ", 1)[0]
+        command = "python3 /path/to/agentic/.ai/scripts/install.py TARGET"
+        self.assertIn(command, section)
+        self.assertIn("existing", section.lower())
+        self.assertIn("new", section.lower())
+        self.assertNotIn("1. Copy", section)
+        for existing in (False, True):
+            with self.subTest(existing=existing):
+                self.target = self.target.parent / ("documented existing" if existing else "documented new")
+                if existing:
+                    self.target.mkdir()
+                args = [sys.executable, str(self.template / ".ai/scripts/install.py"), str(self.target)]
+                result = subprocess.run(args, capture_output=True, text=True,
+                                        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assert_bootstrapped()
+
+
 class CopyTests(InstallerCase):
     # R2
     def test_files_copied_byte_equal_with_modes_and_skills_symlink(self):
