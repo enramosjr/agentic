@@ -58,8 +58,8 @@ class Distribution(unittest.TestCase):
                 self.assertFalse((work / name).exists(), name)
 
     def test_readme_and_playbook_document_the_installer(self) -> None:  # installer R12
-        self.assertIn(".ai/scripts/install.py", text("README.md").split("## Quick start", 1)[1].split("\n## ", 1)[0])
-        playbook = text("knowledge/playbooks/install-and-upgrade.md")
+        self.assertIn(".ai/scripts/install.py", text(".ai/README.md").split("## Quick start", 1)[1].split("\n## ", 1)[0])
+        playbook = text(".ai/docs/install-and-upgrade.md")
         for term in ("--check", "--force", "--no-knowledge", "conflict", "/hooks"):
             self.assertIn(term, playbook)
         self.assertRegex(text(".ai/VERSION"), r"^\d+\.\d+\.\d+\n$")
@@ -177,12 +177,12 @@ class Tiers(unittest.TestCase):
         self.assertEqual(set(lifecycle.STAGES), {"intent", "plan", "review", "verify", "ship"})
 
     def test_the_committed_audit_record_is_documented(self) -> None:
-        for path in (".ai/lifecycle.md", "knowledge/project/lifecycle.md"):
+        for path in (".ai/lifecycle.md", ".ai/docs/lifecycle.md"):
             self.assertIn("knowledge/history/lifecycle/", text(path), path)
             self.assertIn("lifecycle.py audit", text(path), path)
 
     def test_analyze_and_converge_are_documented(self) -> None:  # spec-analysis-convergence R8
-        for path in (".ai/lifecycle.md", "knowledge/project/lifecycle.md", ".ai/validation-policy.md"):
+        for path in (".ai/lifecycle.md", ".ai/docs/lifecycle.md", ".ai/validation-policy.md"):
             self.assertIn("lifecycle.py analyze", text(path), path)
             self.assertIn("lifecycle.py converge", text(path), path)
         self.assertIn("cites a passing converge run of an identical command on the current tree", text(".ai/validation-policy.md"))

@@ -382,7 +382,7 @@ class LearningLoopTests(LifecycleCase):
         root = SCRIPTS.parents[1]
         agents = (root / 'AGENTS.md').read_text()
         self.assertIn('approved project rules', agents)
-        for name in ('knowledge/capabilities/learning-loop.md', 'knowledge/playbooks/learning-loop.md'):
+        for name in ('.ai/docs/learning-loop.md', '.ai/docs/learning-loop-playbook.md'):
             text = (root / name).read_text()
             for phrase in ('learn', 'promote', 'retire', '--lessons-from', '8,192'):
                 self.assertIn(phrase, text)

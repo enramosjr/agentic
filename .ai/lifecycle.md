@@ -52,6 +52,12 @@ At L2 and above the order is OKF sync, then `python3 .ai/scripts/lifecycle.py co
 
 ## Stage 4: Verify and sync
 
+Do not wrap lifecycle mutations (including converge, run, stage and merge apply)
+in `lifecycle.py run`. Invoke them directly. An inherited repository-owner stack
+refuses same-repository descendant mutations before their bodies execute, avoiding
+lost acceptance/ledger evidence. Read-only inspection, merge --dry-run and
+independent fixture repositories remain supported; ancestor ownership is retained.
+
 Run `AGENTS.md` Gate 3 then Gate 4 at the tier's breadth. Run each check with `python3 .ai/scripts/lifecycle.py run LABEL [--inputs GLOB...] -- CMD` (argv, no shell, scratch environment; the ledger keeps exit status, tree and head, never output) and ask `lifecycle.py reuse LABEL_OR_CMD` before repeating one: REUSE means the recorded pass still covers HEAD, RERUN means run it again. At L2 and above `stage verify` requires a current passing ledger entry, fails when the newest entry for the current tree failed, and writes its own note from the ledger (`--note` becomes an optional `agent note:`); L1 keeps `--note`. At L1 and above `stage review` and `stage verify` run `lifecycle.py scan-diff`, which fails on an unwaived stub, `pass` with a deferred-work comment, or "future work" in added lines (waive one with `lifecycle:allow RULE -- reason`), and report weak-test findings without failing. Where a bundle exists, `stage verify` also runs `okf.py sync-check --base <task head>`: every changed file must be covered by a changed doc or listed in `knowledge/project/sync-ignore`, that doc's `verified` must postdate the change, and `knowledge/log.md` must change. Stamp docs with `okf.py stamp verified PATH... --run CMD...`, which runs CMD and stamps only on exit 0. A spec that has shipped is folded into `knowledge/capabilities/` and its status moves from `draft` to `stable`, or to `deprecated` when superseded.
 
 For delta intent, preview and apply the approved spec with `lifecycle.py merge SPEC --dry-run` then `lifecycle.py merge SPEC` before Verify. Run current convergence and the existing gates. Verify additionally requires a completed merge receipt, matching postimages, removed-ID absence and target provenance/bookkeeping. Do not defer the delta fold to post-commit Ship.

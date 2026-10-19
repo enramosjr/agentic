@@ -79,6 +79,8 @@ HOOK_PR = re.compile(r"\bgh\s+pr\s+(?:create|ready)\b")
 HOOK_WIP = re.compile(r"""(?:-[a-zA-Z]*m|--message)[ =]*["']?wip:""")  # Only a message that starts with `wip:` is exempt.
 HOOK_ADD = re.compile(r"\bgit\s+add\b([^;&|]*)")
 RECORD_DIR = "knowledge/history/lifecycle"
+RUN_ROOTS_ENV = "_AGENTIC_LIFECYCLE_RUN_ROOTS"
+MUTATING_COMMANDS = frozenset({'tier', 'stage', 'redgreen', 'run', 'converge', 'merge', 'learn', 'promote', 'retire'})
 RECORD_KEYS = ("version", "task", "branch", "head", "tier", "reason", "user_set", "history", "stages", "redgreen")
 DEFAULT_VAGUE_TERMS = (
     "fast", "quickly", "robust", "intuitive", "user-friendly", "appropriate", "as needed", "easy",
@@ -848,6 +850,17 @@ def cmd_redgreen(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_roots() -> list[str]:
+    """Inherited owner roots protect ancestor evidence across independent fixtures."""
+    try:
+        roots = json.loads(os.environ.get(RUN_ROOTS_ENV, '[]'))
+    except ValueError as error:
+        raise LifecycleError('invalid lifecycle run ownership metadata') from error
+    if not isinstance(roots, list) or any(not isinstance(root, str) for root in roots):
+        raise LifecycleError('invalid lifecycle run ownership metadata')
+    return roots
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     root = repo_root()
     state = require_state(root)
@@ -857,6 +870,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     try:
         globs = ledger.check_globs(args.inputs or [])
         env = scratch.environment(root)  # Checks build fixtures with tempfile; scratch refuses /tmp and tmpfs.
+        env[RUN_ROOTS_ENV] = json.dumps([*run_roots(), str(root.resolve())])
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         raise LifecycleError(f"run refused, nothing was run: {error}") from error
     started, code, output = time.monotonic(), None, ""
@@ -1472,6 +1486,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "run":
         args.run_command = command
     try:
+        verb = args.func.__name__.removeprefix('cmd_')
+        if verb in MUTATING_COMMANDS and not (verb == 'merge' and args.dry_run):
+            roots = run_roots()
+            if roots and str(repo_root().resolve()) in roots:
+                raise LifecycleError('invoke lifecycle mutations directly, outside lifecycle.py run; ancestor run owns this repository evidence')
         return args.func(args)
     except LifecycleError as error:
         print(f"lifecycle: {error}", file=sys.stderr)

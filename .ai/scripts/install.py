@@ -122,6 +122,18 @@ def merge_hooks(adopter, kit, previous=(), flat=False):
     return result
 
 
+def agents_body(source):
+    """Extract only shared governance when an installed kit is used as a template."""
+    lines = source.splitlines(keepends=True)
+    begins = [i for i, line in enumerate(lines) if line.rstrip(b"\r\n") == BEGIN]
+    ends = [i for i, line in enumerate(lines) if line.rstrip(b"\r\n") == END]
+    if not begins and not ends:
+        return source
+    if len(begins) != 1 or len(ends) != 1 or begins[0] >= ends[0]:
+        raise Refusal("template AGENTS.md: repair to exactly one ordered begin/end marker pair")
+    return b"".join(lines[begins[0] + 1:ends[0]])
+
+
 def agents_content(current, body):
     lines = current.splitlines(keepends=True)
     begins = [i for i, line in enumerate(lines) if line.rstrip(b"\r\n") == BEGIN]
@@ -305,7 +317,7 @@ def install(target, template, check=False, force=False, no_knowledge=False):
             put(name, encoded(merged), stat.S_IMODE((target / name).stat().st_mode) if raw is not None else 0o644)
             problems.append(f"hooks: {name}")
 
-    body = (template / "AGENTS.md").read_bytes()
+    body = agents_body((template / "AGENTS.md").read_bytes())
     current = read("AGENTS.md") or b""
     managed = agents_content(current, body)
     put("AGENTS.md", managed, stat.S_IMODE((target / "AGENTS.md").stat().st_mode) if current else 0o644)

@@ -7,8 +7,10 @@ Run: python3 .ai/scripts/tests/test_ledger.py
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import sys
+import subprocess
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -34,6 +36,86 @@ class LedgerCase(LifecycleCase):
 
 
 class LedgerRunTests(LedgerCase):
+    def prepare_convergence(self):
+        spec = self.repo / 'spec.md'
+        spec.write_text(spec.read_text().replace(
+            'python3 -m unittest test_greet.GreetTests.test_hello', 'python3 acceptance.py'
+        ).replace('python3 -m unittest test_greet.GreetTests.test_empty', 'python3 acceptance.py'))
+        (self.repo / 'counter').write_text('0')
+        (self.repo / 'acceptance.py').write_text(
+            'from pathlib import Path\np=Path("counter")\np.write_text(str(int(p.read_text())+1))\n'
+        )
+        self.ok('tier', 'L2', '--reason', 'nested evidence fixture')
+        self.ok('stage', 'intent', '--ref', 'spec.md', '--approved-by', 'human:fixture')
+        self.ok('converge', 'spec.md')
+        self.assertEqual((self.repo / 'counter').read_text(), '2')
+
+    def test_nested_mutations_preserve_existing_convergence_and_ledger(self):
+        self.prepare_convergence()
+        script = str(SCRIPTS / 'lifecycle.py')
+        commands = [
+            [PY, script, 'converge', 'spec.md'],
+            [PY, script, 'tier', 'L0', '--new', '--reason', 'nested'],
+            [PY, script, 'learn', 'nested observation'],
+            [PY, script, 'stage', 'intent', '--ref', 'spec.md', '--approved-by', 'human:fixture'],
+            [PY, script, 'redgreen', 'red', '--', PY, '-c', 'raise SystemExit(1)'],
+            [PY, script, 'merge', 'spec.md'],
+            [PY, script, 'promote', 'missing.json#1', '--approved-by', 'human:fixture'],
+            [PY, script, 'retire', 'missing', '--reason', 'nested', '--approved-by', 'human:fixture'],
+            [PY, script, 'run', 'inner', '--', PY, '-c', 'open("forbidden", "w").write("ran")'],
+            [PY, '-c', f'import sys; sys.path.insert(0, {str(SCRIPTS)!r}); import lifecycle; raise SystemExit(lifecycle.main(["converge", "spec.md"]))'],
+        ]
+        for command in commands:
+            with self.subTest(command=command):
+                before = lifecycle.load(self.repo)
+                code, out, err = self.run_cli('run', 'nested', '--', *command)
+                self.assertEqual(code, 1, out + err)
+                self.assertIn('invoke lifecycle mutations directly', out + err)
+                after = lifecycle.load(self.repo)
+                self.assertEqual(after['task'], before['task'])
+                self.assertEqual(after['converge'], before['converge'])
+                self.assertEqual(after['ledger'][:-1], before['ledger'])
+                self.assertEqual(after['ledger'][-1]['exit'], 1)
+                self.assertEqual((self.repo / 'counter').read_text(), '2')
+                self.assertFalse((self.repo / 'forbidden').exists())
+                record = json.loads(lifecycle.record_path(self.repo, after).read_text())
+                self.assertEqual(record['converge'], before['converge'])
+
+    def test_nested_read_only_and_independent_repository_commands_remain_usable(self):
+        self.prepare_convergence()
+        script = str(SCRIPTS / 'lifecycle.py')
+        self.ok('run', 'inspect', '--', PY, script, 'status')
+        self.assertEqual(self.entries()[-1]['label'], 'inspect')
+        # A dry-run reaches delta validation rather than the mutation guard.
+        code, out, err = self.run_cli('run', 'preview', '--', PY, script, 'merge', 'spec.md', '--dry-run')
+        self.assertEqual(code, 1, out + err)  # This fixture is a whole-feature spec.
+        self.assertNotIn('invoke lifecycle mutations directly', out + err)
+        self.assertIn('delta', (out + err).lower())
+        other = self.repo / 'independent'
+        other.mkdir()
+        subprocess.run(['git', 'init', '-q', str(other)], check=True, capture_output=True)
+        driver = f'import os, subprocess; os.chdir({str(other)!r}); subprocess.run({[PY, script, "tier", "L1", "--reason", "independent"]!r}, check=True)'
+        self.ok('run', 'independent', '--', PY, '-c', driver)
+        self.assertEqual(lifecycle.load(other)['tier'], 'L1')
+        self.assertEqual(lifecycle.load(self.repo)['tier'], 'L2')
+        # An independent run must retain protection for its ancestor repository.
+        ancestor = f'import os, subprocess; os.chdir({str(self.repo)!r}); raise SystemExit(subprocess.run({[PY, script, "learn", "forbidden"]!r}).returncode)'
+        child = [PY, script, 'run', 'child', '--', PY, '-c', ancestor]
+        driver = f'import os, subprocess; os.chdir({str(other)!r}); raise SystemExit(subprocess.run({child!r}).returncode)'
+        code, out, err = self.run_cli('run', 'ancestor', '--', PY, '-c', driver)
+        self.assertEqual(code, 1, out + err)
+        self.assertIn('invoke lifecycle mutations directly', out + err)
+        self.assertFalse(lifecycle.load(self.repo).get('lessons'))
+
+    def test_malformed_run_owner_metadata_refuses_without_launch(self):
+        self.ok('tier', 'L1', '--reason', 'metadata fixture')
+        before = lifecycle.load(self.repo)
+        for value in ('not-json', '{}', '[1]'):
+            with self.subTest(value=value), mock.patch.dict(os.environ, {'_AGENTIC_LIFECYCLE_RUN_ROOTS': value}):
+                self.fails('run', 'bad-owner', '--', PY, '-c', 'open("forbidden", "w").write("ran")', message='invalid lifecycle run ownership')
+        self.assertEqual(lifecycle.load(self.repo), before)
+        self.assertFalse((self.repo / 'forbidden').exists())
+
     def test_runs_argv_without_shell_in_scratch_and_refuses_without_tier(self) -> None:
         marker = self.repo / "marker.txt"
         probe = "import os, sys; open('marker.txt', 'w').write('x')"

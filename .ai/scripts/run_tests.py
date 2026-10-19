@@ -73,6 +73,9 @@ def run_group(start: Path, name: str, expected: int) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # sys.dont_write_bytecode covers this process only. Fixture commands inherit
+    # the environment and must not add cache files to acceptance repositories.
+    os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("-s", "--start", type=Path, default=DEFAULT_START, help="test directory (default: .ai/scripts/tests)")
     parser.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 1, help="worker processes (default: CPU count)")

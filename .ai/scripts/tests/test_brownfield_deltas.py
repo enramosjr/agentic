@@ -515,7 +515,7 @@ class DocumentationTests(unittest.TestCase):  # R12
         root = SCRIPTS.parents[1]
         for path in ('.ai/lifecycle.md', '.ai/agents/analyst.md', '.claude/skills/spec/SKILL.md'):
             self.assertIn('Target baseline', (root / path).read_text())
-        roadmap = root / 'knowledge/project/aidlc-roadmap.md'
+        roadmap = root / '.ai/README.md'
         self.assertIn('baseline remains on hold', roadmap.read_text())
 
 
