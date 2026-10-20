@@ -239,7 +239,10 @@ class ReuseTests(LedgerCase):
         self.run_cli("run", "failed", "--inputs", "app.py", "--", PY, "-c", "raise SystemExit(1)")
         self.assertIn("exited 1", verdict("failed"))
         self.ok("run", "bare", "--", PY, "-c", "pass")
+        self.assertEqual(self.run_cli("reuse", "bare")[0], 0)  # Without --inputs, an identical working tree still proves it.
+        (self.repo / "app.py").write_text("print('bare edit')\n")
         self.assertIn("no --inputs", verdict("bare"))
+        self.git("checkout", "--", "app.py")
         self.ok("run", "dirty", "--inputs", "app.py", "--", PY, "-c", "pass")
         (self.repo / "app.py").write_text("print('edited')\n")
         self.assertIn("edited since", verdict("dirty"))

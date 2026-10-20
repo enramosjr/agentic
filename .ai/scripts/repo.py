@@ -6,7 +6,7 @@ work tree. Standard library only; Python 3.9+.
 
     python3 .ai/scripts/repo.py files 'app/**/*.kt' '*.dart' [--under DIR] [--depth N]
     python3 .ai/scripts/repo.py grep PATTERN [--regex] [-i] [--glob '*.rs'] [--under DIR] [--count]
-    python3 .ai/scripts/repo.py read PATH [--lines A-B] [--limit N]
+    python3 .ai/scripts/repo.py read PATH [PATH...] [--lines A-B] [--limit N]
 """
 
 from __future__ import annotations
@@ -112,6 +112,9 @@ def cmd_grep(root: Path, args: argparse.Namespace) -> int:
             lines.extend([f"{rel}: {len(hits)}"] if hits else [])
         else:
             lines.extend(f"{rel}:{n}: {line.strip()[:200]}" for n, line in hits)
+    if not lines and not args.regex and re.search(r"\||\\[bdsw]|\.\*", args.pattern):
+        print("no matches (the pattern is literal; add --regex for alternation or escapes)", file=sys.stderr)
+        return 0
     _print_limited(lines, args.limit)
     return 0
 
@@ -130,27 +133,44 @@ def line_range(spec: str) -> tuple[int, int | None]:
     return start, end
 
 
-def cmd_read(root: Path, args: argparse.Namespace) -> int:
-    path = Path(args.path) if Path(args.path).is_absolute() else root / args.path
+def read_one(root: Path, name: str, spec: str | None, limit: int) -> None:
+    path = Path(name) if Path(name).is_absolute() else root / name
     if not path.is_file():
-        raise ValueError(f"no file at {args.path}")
+        raise ValueError(f"no file at {name}")
     data = path.read_bytes()
     if b"\0" in data[:8192]:
-        raise ValueError(f"{args.path} is binary")
+        raise ValueError(f"{name} is binary")
     lines = data.decode("utf-8", errors="replace").split("\n")
     if lines and lines[-1] == "":
         lines.pop()
-    start, end = line_range(args.lines) if args.lines else (1, None)
-    if args.limit < 1:
-        raise ValueError("--limit must be at least 1")
+    start, end = line_range(spec) if spec else (1, None)
     if start > len(lines):
-        raise ValueError(f"{args.path} has {len(lines)} line(s); --lines starts at {start}")
-    last = min(len(lines), end or len(lines), start + args.limit - 1)
+        raise ValueError(f"{name} has {len(lines)} line(s); --lines starts at {start}")
+    last = min(len(lines), end or len(lines), start + limit - 1)
     print("\n".join(f"{n:>6}\t{lines[n - 1]}" for n in range(start, last + 1)))
     wanted = min(len(lines), end or len(lines))
     if last < wanted:
         print(f"... lines {last + 1}-{wanted} not shown (of {len(lines)}); continue with --lines {last + 1}-{wanted}")
-    return 0
+
+
+def cmd_read(root: Path, args: argparse.Namespace) -> int:
+    if args.limit < 1:
+        raise ValueError("--limit must be at least 1")
+    spec = args.lines
+    if spec is None and (args.start or args.end):  # Common guesses; same meaning as --lines START-END.
+        spec = f"{args.start or 1}-{args.end or ''}"
+    if len(args.paths) == 1:
+        read_one(root, args.paths[0], spec, args.limit)
+        return 0
+    failed = 0
+    for name in args.paths:  # One call for several files saves a model turn per file.
+        print(f"==> {name} <==")
+        try:
+            read_one(root, name, spec, args.limit)
+        except ValueError as error:
+            print(f"repo: error: {error}")
+            failed = 1
+    return failed
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -174,10 +194,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=100)
     p.set_defaults(handler=cmd_grep)
 
-    p = sub.add_parser("read", help="print numbered lines of one file, bounded; use instead of cat/head/sed -n")
-    p.add_argument("path", help="repo-relative or absolute file path")
+    p = sub.add_parser("read", help="print numbered lines of files, bounded; use instead of cat/head/sed -n")
+    p.add_argument("paths", nargs="+", metavar="PATH", help="repo-relative or absolute file paths; several print with ==> PATH <== headers")
     p.add_argument("--lines", metavar="A-B", help="1-based inclusive range: 'A-B', 'A-' or 'A' (default: from line 1)")
-    p.add_argument("--limit", type=int, default=250, help="maximum lines printed (default: 250)")
+    p.add_argument("--start", type=int, help=argparse.SUPPRESS)
+    p.add_argument("--end", type=int, help=argparse.SUPPRESS)
+    p.add_argument("--limit", type=int, default=250, help="maximum lines printed per file (default: 250)")
     p.set_defaults(handler=cmd_read)
     return parser
 

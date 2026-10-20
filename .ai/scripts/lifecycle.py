@@ -139,8 +139,9 @@ def slug(text: str) -> str:
     return re.sub(r"[^A-Za-z0-9_.-]", "_", text)
 
 
-def state_path(root: Path) -> Path:
-    return scratch.directory(root) / f"lifecycle-{slug(branch_name(root))}.json"
+def state_path(root: Path, write: bool = True) -> Path:
+    base = scratch.directory(root) if write else scratch.location(root)  # Reads must work in a read-only sandbox.
+    return base / f"lifecycle-{slug(branch_name(root))}.json"
 
 
 def new_task_id(root: Path) -> str:
@@ -169,7 +170,7 @@ def public(state: dict, root: Path) -> dict:
 
 
 def load(root: Path) -> dict | None:
-    path = state_path(root)
+    path = state_path(root, write=False)
     if not path.is_file():
         return None
     try:
@@ -444,6 +445,17 @@ def redgreen_ok(state: dict) -> bool:
     return any(entry.get("green") for entry in state.get("redgreen", []))
 
 
+def stage_example(tier: str) -> str:
+    """The complete commands for intent and plan at this tier, so one error message is enough."""
+    cli = "python3 .ai/scripts/lifecycle.py stage"
+    if tier == "L3":
+        return (f"example: {cli} intent --note queue:TASK_ID[,TASK_ID] --approved-by decision:ADR_OR_QUEUE_ENTRY "
+                f"&& {cli} plan --note queue:TASK_ID[,TASK_ID]")
+    if tier == "L2":
+        return f"example: {cli} intent --ref SPEC.md --approved-by human:USER && {cli} plan --ref PLAN.md"
+    return f"example: {cli} intent --note 'goal; success check; assumptions' && {cli} plan --note 'steps'"
+
+
 def gate_problem(state: dict, target: str) -> str | None:
     """Why `target` (implement, review, verify, ship, commit) cannot start, or None."""
     tier = state["tier"]
@@ -460,7 +472,8 @@ def gate_problem(state: dict, target: str) -> str | None:
         need = REQUIRED[tier]
     missing = [stage for stage in need if not complete(state, stage)]
     if missing:
-        return f"tier {tier} requires completed stage(s) before {target}: {', '.join(missing)} (python3 .ai/scripts/lifecycle.py stage NAME ...)"
+        hint = stage_example(tier) if {"intent", "plan"} & set(missing) else "(python3 .ai/scripts/lifecycle.py stage NAME ...)"
+        return f"tier {tier} requires completed stage(s) before {target}: {', '.join(missing)}\n{hint}"
     if target in ("verify", "ship", "commit") and state.get("kind") in TEST_FIRST_KINDS and not redgreen_ok(state):
         return f"kind {state['kind']} requires red/green evidence (AGENTS.md §8.6): lifecycle.py redgreen red -- CMD, fix, redgreen green -- CMD"
     return None
@@ -584,7 +597,7 @@ def cmd_stage(args: argparse.Namespace) -> int:
         if problem:
             raise LifecycleError(problem)
     if stage == "plan" and not complete(state, "intent"):
-        raise LifecycleError("record the intent stage before the plan, so the plan can be traced to the spec")
+        raise LifecycleError("record the intent stage before the plan, so the plan can be traced to the spec\n" + stage_example(tier))
     record: dict = {"at": now(), "level": tier}
     ref = (root / args.ref) if args.ref else None
     if ref is not None and not ref.is_file():
@@ -599,23 +612,28 @@ def cmd_stage(args: argparse.Namespace) -> int:
         if tier == "L1" and not args.note:
             raise LifecycleError("L1 intent needs --note (goal, success check, assumptions)")
         if high:
+            # Report every missing piece at once: one round trip per flag cost agents several turns each.
+            missing: list[str] = []
+            findings = []
             if tier == "L3" and args.note and args.note.startswith("queue:") and not args.ref:
                 if not (root / "knowledge/project/work-queue.md").is_file():
-                    raise LifecycleError("L3 intent note 'queue:' needs knowledge/project/work-queue.md")
+                    missing.append("L3 intent note 'queue:' needs knowledge/project/work-queue.md")
+            elif ref is None:
+                missing.append(f"{tier} intent needs --ref SPEC" + (" or --note 'queue:IDS' (the frozen queue Acceptance)" if tier == "L3" else ""))
             else:
-                if ref is None:
-                    raise LifecycleError(f"{tier} intent needs --ref SPEC (or, at L3, --note 'queue:IDS')")
                 findings = lint_spec(ref, root=root)
                 problems = blocking(findings)
                 plan_ref = state["stages"].get("plan", {}).get("ref")
                 if not problems and plan_ref:
                     problems = blocking(trace(root, ref, root / plan_ref, []))  # A re-recorded spec must still be covered by the plan.
                 if problems:
-                    raise LifecycleError("spec is not ready:\n  - " + "\n  - ".join(problems))
-                for finding in warnings(findings):
-                    print(format_finding(finding, args.ref), file=sys.stderr)
+                    missing.append("spec is not ready:\n    - " + "\n    - ".join(problems))
             if not args.approved_by or not re.match(r"^(human|decision):\S+", args.approved_by):
-                raise LifecycleError("--approved-by human:<id> (the user approved the spec) or decision:<ADR> (autonomous, §9.7) is required")
+                missing.append("--approved-by human:<id> (the user approved the spec) or decision:<ADR> (autonomous, §9.7) is required")
+            if missing:
+                raise LifecycleError("intent not recorded:\n  - " + "\n  - ".join(missing) + "\n" + stage_example(tier))
+            for finding in warnings(findings):
+                print(format_finding(finding, args.ref), file=sys.stderr)
             record["approved_by"] = args.approved_by
     elif stage == "plan":
         if tier == "L1" and not (args.note or args.ref):
@@ -895,7 +913,7 @@ def cmd_reuse(args: argparse.Namespace) -> int:
     """Print REUSE or RERUN for a ledger entry; it runs nothing and writes nothing."""
     root = repo_root()
     state = require_state(root)
-    reusable, text = ledger.verdict(root, state.get("ledger") or [], args.target)
+    reusable, text = ledger.verdict(root, state.get("ledger") or [], args.target, tree_hash(root))
     print(text)
     return 0 if reusable else 1
 
@@ -1359,6 +1377,30 @@ def emit(data: dict, event: str, message: str | None, context: str | None = None
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": text}}))
 
 
+DRIVER_REQUESTS = ("OKF_HANDOFF_REQUEST", "OKF_PROGRESS_REQUEST")
+
+
+def driver_request() -> str | None:
+    """A pending autonomy_driver.py request, delivered once so the agent never polls for it.
+
+    The `.delivered` marker makes the next tool call proceed; if it cannot be written the
+    request is not delivered here (blocking every call would be worse than the file fallback)."""
+    for variable in DRIVER_REQUESTS:
+        value = os.environ.get(variable)
+        if not value or not Path(value).is_file():
+            continue
+        marker = Path(value + ".delivered")
+        if marker.exists():
+            continue
+        try:
+            text = Path(value).read_text().strip()
+            marker.write_text("")
+        except OSError:
+            continue
+        return f"autonomy driver {variable}: {text} (delivered once; your next command runs normally)"
+    return None
+
+
 def cmd_hook(args: argparse.Namespace) -> int:
     try:
         data = json.load(sys.stdin)
@@ -1367,6 +1409,11 @@ def cmd_hook(args: argparse.Namespace) -> int:
     if not isinstance(data, dict):
         return 0
     event = data.get("hook_event_name") or ""
+    if event.lower() != "sessionstart":
+        request = driver_request()
+        if request:
+            emit(data, "PreToolUse", request)
+            return 0
     bypass = os.environ.get("LIFECYCLE_GUARD") == "off" or os.environ.get("OKF_AUTONOMOUS") == "1"
     if bypass and event.lower() != 'sessionstart':
         return 0

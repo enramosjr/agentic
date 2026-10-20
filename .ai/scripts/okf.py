@@ -14,6 +14,7 @@ import difflib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -1330,8 +1331,11 @@ def checkpoint(bundle: Path, *, audit: bool = True) -> list[Check]:
         checks.append(Check("status", True, "active task and next step recorded"))
         size = len(load_doc(bundle, bundle / STATUS_DOC).body)
         if size > STATUS_BUDGET_CHARS:
+            largest = sorted(sections.items(), key=lambda item: -len(item[1]))[:2]
             checks.append(Check("status size", False,
-                                f"status body is {size} chars (budget {STATUS_BUDGET_CHARS}); compact it to current facts and link evidence (§9.6)"))
+                                f"status body is {size} chars (budget {STATUS_BUDGET_CHARS}); cut {size - STATUS_BUDGET_CHARS}+ chars, "
+                                "largest sections: " + ", ".join(f"{name} ({len(body)})" for name, body in largest)
+                                + "; keep current facts and link evidence (§9.6)"))
 
     tasks: list[Task] = []
     queue_path = bundle / QUEUE_DOC
@@ -1444,8 +1448,12 @@ def handoff(bundle: Path, mode: str = "state", task_id: str | None = None, role:
 
     if mode == "task":
         task = next((t for t in tasks if t.id == task_id), None)
+        if task is None:  # `ORCH.013` names `REQ.ORCH.013` when exactly one ID ends with it.
+            suffixed = [t for t in tasks if task_id and t.id.endswith("." + task_id)]
+            task = suffixed[0] if len(suffixed) == 1 else None
         if task is None:
-            raise OkfError(f"no task {task_id!r} in {display(bundle, QUEUE_DOC)}")
+            close = ", ".join(t.id for t in tasks if task_id and task_id.lower() in t.id.lower())[:200]
+            raise OkfError(f"no task {task_id!r} in {display(bundle, QUEUE_DOC)}" + (f" (did you mean: {close})" if close else ""))
         return "\n".join(
             [
                 f"You are a worker agent assigned exactly one task: {task.id} — {task.title} (state {states[task.id]}).",
@@ -1469,6 +1477,9 @@ def handoff(bundle: Path, mode: str = "state", task_id: str | None = None, role:
                 "rerun affected validation only after relevant code, fixes or base changes invalidate that evidence.",
                 "Commit on your task branch. Finish with the implementer completion report: changed files, OKF docs",
                 "updated, and every validation command with its outcome.",
+                f"Lifecycle, unless the driver gates you (OKF_AUTONOMOUS=1): python3 .ai/scripts/lifecycle.py tier L3 --reason 'queue task {task.id}'",
+                f"&& python3 .ai/scripts/lifecycle.py stage intent --note queue:{task.id} --approved-by human:ID|decision:ADR",
+                f"&& python3 .ai/scripts/lifecycle.py stage plan --note queue:{task.id} (ID/ADR: who authorized this queue work).",
                 "",
                 "Batch context from the checkpoint (read-only):",
                 f"In flight: {sections.get('In flight', 'none recorded')}",
@@ -2432,7 +2443,7 @@ def cmd_stamp(bundle: Path, args: argparse.Namespace) -> int:
         if args.field != "verified":
             raise OkfError("--run is only for `stamp verified`")
         if args.by:
-            raise OkfError("--run cannot be combined with --by")
+            print(f"okf: warning: --by {args.by!r} ignored: with --run the command is the verifier", file=sys.stderr)
         by = "process:" + " ".join(args.run)
         _run_for_stamp(bundle.parent, args.run)  # Raises, writing nothing, unless the command exits 0.
     elif not by:
@@ -2457,6 +2468,15 @@ def _run_for_stamp(repo: Path, command: list[str]) -> None:
         raise OkfError(f"scratch must be outside system temporary storage: {scratch}")
     scratch.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, "TMPDIR": str(scratch), "TMP": str(scratch), "TEMP": str(scratch)}
+    if len(command) == 1 and " " in command[0]:  # One quoted string: split it as the shell would, but never run a shell.
+        command = shlex.split(command[0])
+    if command[:1] == ["env"]:
+        command = command[1:]
+    while command and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", command[0]):  # Leading NAME=VALUE assignments.
+        name, value = command.pop(0).split("=", 1)
+        env[name] = value
+    if not command:
+        raise OkfError("--run needs a command after its NAME=VALUE assignments; nothing stamped")
     try:
         result = subprocess.run(command, cwd=repo, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace")
     except OSError as error:
@@ -2680,7 +2700,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("paths", nargs="+")
     p.add_argument("--by", help="actor, e.g. 'human:id' (deprecated for 'process:...' and 'agent...' on verified; OKF_STRICT_STAMP=1 rejects process:)")
     p.add_argument("--at", help="timestamp (default: now, UTC)")
-    p.add_argument("--run", nargs=argparse.REMAINDER, metavar="CMD", help="verified only, last option: run CMD as argv and stamp 'process:CMD' only if it exits 0")
+    p.add_argument("--run", nargs=argparse.REMAINDER, metavar="CMD",
+                   help="verified only, last option: everything after it is CMD, run as argv (leading NAME=VALUE set its "
+                        "environment; no shell); stamps 'process:CMD' only if it exits 0. To stamp from a recorded "
+                        "check without rerunning it: --run python3 .ai/scripts/lifecycle.py reuse LABEL")
     p.set_defaults(handler=cmd_stamp)
 
     p = sub.add_parser("log", help="append an entry under today's date in log.md")
@@ -2747,7 +2770,21 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    run_command: list[str] | None = None
+    first = 2 if argv[:1] == ["--bundle"] else 1 if argv[:1] and argv[0].startswith("--bundle=") else 0
+    if argv[first:first + 1] == ["stamp"] and "--run" in argv:
+        # Everything after `--run` is the command, verbatim: argparse would eat a nested `--`.
+        split = argv.index("--run")
+        argv, run_command = argv[:split], argv[split + 1 :]
+        if run_command[:1] == ["--"]:
+            run_command = run_command[1:]
     args = build_parser().parse_args(argv)
+    if run_command is not None:
+        args.run = run_command
+        if not run_command:
+            print("okf: error: --run needs a command", file=sys.stderr)
+            return 1
     try:
         return args.handler(find_bundle(args.bundle), args)
     except OkfError as error:

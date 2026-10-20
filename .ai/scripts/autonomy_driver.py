@@ -69,6 +69,20 @@ def conflict_brief(conflicts: list[pr_sync.Result]) -> str:
     return "\n".join(lines)
 
 
+CODEX_WRITABLE_GIT = ("okf-scratch", "okf-autonomy", "objects", "refs", "logs", "worktrees")
+
+
+def sandbox_arguments(command: list[str], repo: Path) -> list[str]:
+    """Codex's workspace-write sandbox makes Git metadata read-only, so every scratch write, ledger
+    update and linked-worktree commit needed an approval round. Grant the workflow's own directories
+    and the parts of Git a commit writes; hooks and config stay protected."""
+    if Path(command[0]).name != "codex" or "exec" not in command or any("writable_roots" in arg for arg in command):
+        return []
+    common = scratch.git_common_dir(repo).resolve()
+    roots = [str(common / name) for name in CODEX_WRITABLE_GIT if (common / name).is_dir()]
+    return ["-c", "sandbox_workspace_write.writable_roots=" + json.dumps(roots)]
+
+
 def pending_work(bundle: Path, conflicts: list[pr_sync.Result] | None = None) -> str | None:
     """Why another session is needed, or None when nothing is actionable."""
     if conflicts:
@@ -187,6 +201,7 @@ def drive(bundle: Path, command: list[str], role: str, max_sessions: int, max_id
     runtime = Path(autonomy_validation.git(bundle.parent, "rev-parse", "--path-format=absolute", "--git-path", "okf-autonomy")) / str(uuid.uuid4())
     runtime.mkdir(parents=True)
     scratch_environment = scratch.environment(bundle.parent)
+    command = [*command, *sandbox_arguments(command, bundle.parent)]
     deadline = time.monotonic() + max_run_seconds
 
     def report(kind: str, message: str) -> None:
@@ -297,53 +312,23 @@ def drive(bundle: Path, command: list[str], role: str, max_sessions: int, max_id
         target = min(max_session_seconds, max_closure_seconds) if closure_only else max_session_seconds
         session_limit = min(handoff_seconds if recovering else target + handoff_seconds, remaining)
         soft_limit = min(target, max(0, remaining - handoff_seconds))
-        prompt += (f"\nThis launch has at most {session_limit:.1f} seconds including handoff; the run budget never resets. "
-                   "Commits/status edits do not count as delivery. The two-case qualification ceiling applies only "
-                   "to failed fresh model-backed qualification cases, not ordinary deterministic CI failures, "
-                   "dependency advisories, code-generation drift or infrastructure checks that execute no fresh model-backed case. "
-                   "Once a genuine case starts, retain its original failure-class/custody/retry counting even if infrastructure fails. Retain evidence "
-                   "and repair deterministic checks within the unchanged run/session/delivery budgets. Genuine "
-                   "model-backed cases retain their limits across freezes and sessions; never relabel them to evade a limit. "
-                   "When a task has no executable action because of an actual limit or prerequisite, record Hold "
-                   "and its concrete Unblock condition (or BLOCKED for external dependencies) before exiting. "
-                   "Do not leave prohibited work apparently runnable as IN_PROGRESS or recheck an unchanged blocker in another session.")
-        prompt += (f"\nDiscovery progress check after {max_discovery_seconds:g}s without source edits; investigation "
-                   "may be useful without edits. Report concrete inspected code, findings and next executable step; "
-                   "this check does not retire the worker or justify deferral. Use one compact plan; "
-                   "do not wait for another planner to restate a sufficiently specified queue task. Register each "
-                   "owned worker worktree BEFORE dispatch using python3 .ai/scripts/autonomy_validation.py "
-                   "track-worker --worktree PATH. The driver observes source changes; prose/status edits do not qualify. "
-                   "Run focused checks in workers. A session handoff does not require full validation: "
-                   "preserve the active IN_PROGRESS batch, focused evidence, deferred full commands and next "
-                   "source action, then continue implementation next session. Submit the full integrated gate "
-                   "only when planned batch acceptance is implemented and reviewed, or an explicit required "
-                   "readiness/qualification boundary is reached. For that gate, commit a SAFE checkpoint with "
-                   "validation pending, prepare a JSON plan with requirements and commands (label, argv array, "
-                   "positive timeout_seconds, coverage IDs, optional env), then run python3 .ai/scripts/autonomy_validation.py "
-                   "submit --plan PATH and EXIT. The driver owns validation outside your session clock, with "
-                   "durable per-command results and live supervision. Do not launch full validation as a child "
-                   "of this model session. Keep the plan outside tracked files; submit after the final checkpoint commit.")
-        prompt += ("\nPrepare the acceptance-to-command mapping and independent source review before validation submission, "
-                   "while implementation's focused checks run where ownership allows. Retain that review context "
-                   "for the result review; do not reconstruct it in a new planning/documentation round. Submit "
-                   "and exit rather than keeping a model waiting for deterministic validation.")
-        prompt += ("\nStart from the existing claim/brief. Before dispatch, record only task, owner, worktree and next check; "
-                   "do not require a separate authorization log, full batch-plan rewrite, claim commit/push or SAFE "
-                   "certification before source work. The launcher progress already records this run. Update persistent "
-                   "records only when facts change, and commit them with the next source/integration/handoff boundary.")
-        prompt += ("\nStartup handoff checks only actionable queue/Git prerequisites. A read-only document diagnostic "
-                   "runs in parallel; do not wait for it or repair unrelated documentation before source work. "
-                   "Parallel record preparation/read-only preflights need disjoint file/resource ownership; keep "
-                   "Git merges and final tested-candidate mutation serialized. Full OKF checks still gate actual handoff. "
-                   "For an unchanged candidate's validation retry, reuse its existing committed checkpoint and "
-                   "submit the corrected command environment directly; do not rewrite/commit records or audit "
-                   "the whole corpus just to submit. The manifest/result retains exact environment and attempt evidence.")
-        prompt += ("\nDo useful work within this session: do not retire merely because investigation has not produced "
-                   "an edit, a phase ended, the full batch may not fit, or a timeout ceiling looks large. Validation "
-                   "runs incrementally within the actual remaining budget. Resume retained validation with "
-                   "autonomy_validation.py submit --resume RESULT_JSON; unchanged PASS receipts are verified and reused. "
-                   "A time-budget deferral is not an external blocker or delivery. Do not create a records-only "
-                   "commit merely to say work is deferred; unchanged execution facts need no commit.")
+        prompt += (f"\nBudget: this launch has at most {session_limit:.1f}s including handoff; the run budget never resets. "
+                   "Commits and status edits are not delivery. The two-case qualification ceiling counts only failed fresh "
+                   "model-backed cases, not ordinary deterministic CI failures or infrastructure checks; never relabel a case. "
+                   "Work with no executable action gets Hold plus a concrete Unblock (BLOCKED if external) before you exit; "
+                   "do not recheck an unchanged blocker.")
+        prompt += (f"\nWork: after {max_discovery_seconds:g}s without source edits you will be asked for a progress report "
+                   "(not a stop). Register each worker worktree before dispatch: python3 .ai/scripts/autonomy_validation.py "
+                   "track-worker --worktree PATH. Workers run focused checks. A session handoff needs no full validation: "
+                   "keep the batch IN_PROGRESS with focused evidence and the next source action.")
+        prompt += ("\nGate: when the batch acceptance is implemented and independently reviewed, commit a SAFE checkpoint, write "
+                   "an untracked JSON plan {requirements, commands: [{label, argv, timeout_seconds, coverage, env?}]}, run "
+                   "python3 .ai/scripts/autonomy_validation.py submit --plan PATH and EXIT; the driver runs it outside your clock. "
+                   "Keep the review context for the result review. Resume a retained result with submit --resume RESULT_JSON "
+                   "(unchanged PASS receipts are reused); a retry of an unchanged candidate reuses its checkpoint.")
+        prompt += ("\nRecords: start from the existing claim; no claim commit, push or SAFE certification before source work. "
+                   "Update records only when facts change, with the next source/integration/handoff commit. A background "
+                   "document audit runs in parallel; do not wait for it. Serialize Git merges and final candidate mutation.")
         interrupted = False
         requested = False
         try:
@@ -353,19 +338,14 @@ def drive(bundle: Path, command: list[str], role: str, max_sessions: int, max_id
                 progress_request = Path(control) / "progress.txt"
                 environment["OKF_PROGRESS_REQUEST"] = str(progress_request)
                 environment["OKF_AUTONOMOUS_RECOVERY"] = "1" if recovering else "0"
-                prompt += (f"\nUse disk-backed scratch {scratch_root} for all temporary files, logs, worktrees and builds. "
-                           "TMPDIR, TMP and TEMP are already set for you and descendants. Do not use /tmp, /var/tmp "
-                           "or /dev/shm, hard-code temporary paths there, or override these variables. "
-                           "Keep retained evidence in the supplied Git-metadata paths. Never restart to reset budgets.")
-                prompt += (f"\nCheck OKF_HANDOFF_REQUEST ({request}) at tool/wait boundaries. "
-                           f"A checkpoint request arrives after {soft_limit:.1f}s; at most {handoff_seconds:.1f}s "
-                           "of handoff remains within the run budget. On request, stop new dispatch, query active "
-                           "workers for head, current command, completed checks and remaining work. Let healthy "
-                           "checks finish within that window; preserve their exact results. Report publicly what "
-                           "remains (say unknown rather than invent an ETA), settle ownership, write a SAFE "
-                           "checkpoint and exit for a fresh session. A worker ending is a handoff, not a run stop.")
-                prompt += (f"\nCheck OKF_PROGRESS_REQUEST ({progress_request}) at tool boundaries. It asks for a "
-                           "concrete work report while continuing implementation; it is not a checkpoint/stop request.")
+                prompt += (f"\nScratch: {scratch_root} (TMPDIR/TMP/TEMP are set). Do not use /tmp, /var/tmp or /dev/shm "
+                           "or override these variables. Never restart to reset budgets.")
+                prompt += (f"\nRequests: a checkpoint request arrives after {soft_limit:.1f}s, leaving at most {handoff_seconds:.1f}s. "
+                           "The shell hook delivers it (and any progress request) by refusing one command with the request text, "
+                           f"so do not poll for it. Without that hook, check {request} and {progress_request} only after a "
+                           "long check finishes or before new dispatch. On a checkpoint request: stop dispatch, collect each "
+                           "worker's head, running command, completed checks and remaining work, let healthy checks finish, "
+                           "report what remains, settle ownership, write a SAFE checkpoint and exit.")
                 started = last_heartbeat = time.monotonic()
                 source_started = False
                 progress_requested = False

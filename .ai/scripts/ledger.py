@@ -92,13 +92,16 @@ def audit(entries: object) -> list[str]:
     return problems
 
 
-def _entry_verdict(root: Path, entry: dict) -> tuple[bool, str]:
+def _entry_verdict(root: Path, entry: dict, tree: str | None = None) -> tuple[bool, str]:
     name = entry.get("label", "?")
     if entry.get("exit") != 0:
         return False, f"{name} last exited {entry.get('exit')}"
     globs = entry.get("inputs") or []
     if not globs:
-        return False, f"{name} declared no --inputs, so nothing proves it is still valid"
+        # Without declared inputs only an identical working tree proves the result still holds.
+        if tree and entry.get("tree") == tree:
+            return True, f"REUSE {name} tree={tree[:7]} (unchanged working tree)"
+        return False, f"{name} declared no --inputs and the working tree changed since it ran (declare --inputs to reuse across edits)"
     head = entry.get("head") or ""
     if not head or _git(root, "cat-file", "-e", f"{head}^{{commit}}").returncode != 0:
         return False, f"the commit {head[:7] or '?'} it ran on is not resolvable"
@@ -111,7 +114,7 @@ def _entry_verdict(root: Path, entry: dict) -> tuple[bool, str]:
     return True, f"REUSE {name} head={head[:7]}"
 
 
-def verdict(root: Path, entries: list[dict], argument: str) -> tuple[bool, str]:
+def verdict(root: Path, entries: list[dict], argument: str, tree: str | None = None) -> tuple[bool, str]:
     """(True, 'REUSE label head=abc1234') or (False, 'RERUN reason') for a label or an exact command."""
     try:
         argv = shlex.split(argument)
@@ -119,7 +122,7 @@ def verdict(root: Path, entries: list[dict], argument: str) -> tuple[bool, str]:
         argv = None
     for entry in reversed(entries):
         if entry.get("label") == argument or (argv and entry.get("argv") == argv):
-            ok, text = _entry_verdict(root, entry)
+            ok, text = _entry_verdict(root, entry, tree)
             return ok, text if ok else f"RERUN {text}"
     return False, f"RERUN no ledger entry for {argument!r}"
 
