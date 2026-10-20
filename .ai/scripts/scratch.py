@@ -26,11 +26,19 @@ def require_disk(path: Path) -> Path:
     return root
 
 
-def directory(repo: Path) -> Path:
-    common = subprocess.check_output(
+def git_common_dir(repo: Path) -> Path:
+    return Path(subprocess.check_output(
         ["git", "-C", str(repo), "rev-parse", "--path-format=absolute", "--git-common-dir"], text=True,
-        stderr=subprocess.PIPE).strip()
-    root = require_disk(Path(common) / "okf-scratch")
+        stderr=subprocess.PIPE).strip())
+
+
+def location(repo: Path) -> Path:
+    """The scratch path without creating or probing it, for readers in a read-only sandbox."""
+    return git_common_dir(repo).resolve() / "okf-scratch"
+
+
+def directory(repo: Path) -> Path:
+    root = require_disk(git_common_dir(repo) / "okf-scratch")
     root.mkdir(parents=True, exist_ok=True)
     # Fail before launching a model/check, rather than falling back to /tmp.
     with tempfile.TemporaryFile(dir=root) as probe:
