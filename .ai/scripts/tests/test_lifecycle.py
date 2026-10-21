@@ -294,6 +294,19 @@ class HookTests(LifecycleCase):
         self.assertTrue(self.denied(output))
         self.assertIn("lifecycle.py tier", output)
 
+    def test_resolving_conflicted_files_needs_no_tier_but_other_edits_still_do(self) -> None:
+        self.git("checkout", "-qb", "side")
+        (self.repo / "app.py").write_text("print('side')\n")
+        self.git("commit", "-qam", "side")
+        self.git("checkout", "-q", "-")
+        (self.repo / "app.py").write_text("print('main')\n")
+        self.git("commit", "-qam", "main")
+        merge = ["git", "-C", str(self.repo), "-c", "user.email=t@t", "-c", "user.name=t", "merge", "side"]
+        self.assertEqual(subprocess.run(merge, capture_output=True).returncode, 1)  # Conflicts on app.py.
+        (self.repo / "other.py").write_text("x = 1\n")
+        self.assertEqual(self.hook(self.edit("app.py")), "")
+        self.assertTrue(self.denied(self.hook(self.edit("other.py"))))
+
     def test_markdown_and_knowledge_edits_are_exempt(self) -> None:
         self.assertEqual(self.hook(self.edit("README.md")), "")
         self.assertEqual(self.hook(self.edit("knowledge/project/x.yaml")), "")

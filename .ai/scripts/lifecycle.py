@@ -1283,6 +1283,14 @@ def exempt(path: str) -> bool:
     return path.startswith("knowledge/") or path.endswith(".md")
 
 
+def unmerged_paths(root: Path) -> set[str]:
+    """Files git lists as conflicted; resolving a merge is mechanical and needs no tier."""
+    try:
+        return set(git(root, "diff", "--name-only", "--diff-filter=U").splitlines())
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        return set()
+
+
 def hook_problem(data: dict, root: Path) -> str | None:
     state = load(root)
     active = is_active(state, root)
@@ -1292,6 +1300,8 @@ def hook_problem(data: dict, root: Path) -> str | None:
         if not targets:
             return None
         if not active:
+            if set(targets) <= unmerged_paths(root):
+                return None
             return NO_TIER
         return gate_problem(state, "implement")
     command = (data.get("tool_input") or {}).get("command")

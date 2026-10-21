@@ -1,4 +1,19 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(python3 .ai/scripts/*)",
+      "Bash(python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(gh pr view*)",
+      "Bash(gh pr checks*)",
+      "Bash(gh run view*)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
