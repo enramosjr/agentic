@@ -83,6 +83,26 @@ class GrepTests(RepoTestCase):
         self.assertEqual(self.lines("grep", "fn", "--under", "xtask", "--count"), ["xtask/src/android.rs: 2"])
         self.assertEqual(self.run_cli("grep", "PNG")[2], "no matches\n")
 
+    def test_accepts_grep_style_flags_and_trailing_paths(self) -> None:
+        # Claude reaches for grep syntax; these used to die with argparse usage errors.
+        self.assertEqual(self.lines("grep", "-E", "-n", "parser|Renderer", "xtask"), ["xtask/src/android.rs:2: fn parser() {}"])
+        self.assertEqual(self.lines("grep", "-rn", "fn", "xtask/src/android.rs", "--count"), ["xtask/src/android.rs: 2"])
+        self.assertEqual(self.lines("grep", "-c", "fn", "xtask"), ["xtask/src/android.rs: 2"])
+        self.assertEqual(
+            self.lines("grep", "-E", "class", "app/lib/src", "app/android"),
+            ["app/android/app/src/main/kotlin/MainActivity.kt:1: class MainActivity", "app/lib/src/session/surfaces.dart:2: class Surfaces {}"],
+        )
+
+    def test_context_flags_print_neighbouring_lines(self) -> None:
+        self.assertEqual(
+            self.lines("grep", "-A", "1", "fn android", "xtask"),
+            ["xtask/src/android.rs:1: fn android() {}", "xtask/src/android.rs-2- fn parser() {}"],
+        )
+        self.assertEqual(
+            self.lines("grep", "-B1", "fn parser", "xtask"),
+            ["xtask/src/android.rs-1- fn android() {}", "xtask/src/android.rs:2: fn parser() {}"],
+        )
+
     def test_bad_regex_is_one_line_error(self) -> None:
         code, _, err = self.run_cli("grep", "(", "--regex")
         self.assertEqual(code, 1)

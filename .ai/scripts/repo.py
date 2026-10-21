@@ -95,11 +95,20 @@ def cmd_files(root: Path, args: argparse.Namespace) -> int:
     return 0
 
 
+def within(paths: list[str], targets: list[str]) -> list[str]:
+    """Files equal to or below any target path (a file or a directory); all files when none, or '.', is given."""
+    wanted = [Path(t).as_posix().strip("/") for t in targets]
+    if not wanted or any(t in ("", ".") for t in wanted):
+        return paths
+    return [p for p in paths if any(p == t or p.startswith(t + "/") for t in wanted)]
+
+
 def cmd_grep(root: Path, args: argparse.Namespace) -> int:
     flags = re.IGNORECASE if args.ignore_case else 0
-    pattern = re.compile(args.pattern if args.regex else re.escape(args.pattern), flags)
+    use_regex = args.regex or args.extended
+    pattern = re.compile(args.pattern if use_regex else re.escape(args.pattern), flags)
     lines: list[str] = []
-    for rel in select(candidate_files(root), args.glob or [], args.under, None):
+    for rel in within(select(candidate_files(root), args.glob or [], args.under, None), args.paths):
         path = root / rel
         if path.stat().st_size > MAX_BYTES:
             continue
@@ -108,11 +117,16 @@ def cmd_grep(root: Path, args: argparse.Namespace) -> int:
             continue
         text = data.decode("utf-8", errors="replace").split("\n")
         hits = [(n, line) for n, line in enumerate(text, start=1) if pattern.search(line)]
-        if args.count:
+        if args.count or args.count_flag:
             lines.extend([f"{rel}: {len(hits)}"] if hits else [])
-        else:
-            lines.extend(f"{rel}:{n}: {line.strip()[:200]}" for n, line in hits)
-    if not lines and not args.regex and re.search(r"\||\\[bdsw]|\.\*", args.pattern):
+            continue
+        shown: dict[int, str] = {}
+        for n, line in hits:
+            for near in range(max(1, n - args.before), min(len(text), n + args.after) + 1):
+                shown.setdefault(near, "-")
+            shown[n] = ":"
+        lines.extend(f"{rel}{mark}{n}{mark} {text[n - 1].strip()[:200]}" for n, mark in sorted(shown.items()))
+    if not lines and not use_regex and re.search(r"\||\\[bdsw]|\.\*", args.pattern):
         print("no matches (the pattern is literal; add --regex for alternation or escapes)", file=sys.stderr)
         return 0
     _print_limited(lines, args.limit)
@@ -186,8 +200,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("grep", help="search repo file contents; prints path:line: text")
     p.add_argument("pattern")
+    p.add_argument("paths", nargs="*", metavar="PATH", help="files or directories to search (like --under, several allowed)")
     p.add_argument("--regex", action="store_true", help="treat pattern as a regular expression, e.g. 'parser|renderer'")
     p.add_argument("-i", "--ignore-case", action="store_true")
+    # grep spellings that agents reach for by habit; they map onto the options above.
+    p.add_argument("-E", "-P", dest="extended", action="store_true", help="same as --regex")
+    p.add_argument("-c", dest="count_flag", action="store_true", help="same as --count")
+    p.add_argument("-n", "-r", "-R", "-H", action="store_true", help="accepted and ignored: line numbers and recursion are always on")
+    p.add_argument("-A", dest="after", type=int, default=0, metavar="N", help="also print N lines after each match")
+    p.add_argument("-B", dest="before", type=int, default=0, metavar="N", help="also print N lines before each match")
+    p.add_argument("-C", dest="context", type=int, metavar="N", help="N lines before and after each match")
     p.add_argument("--glob", action="append", metavar="GLOB", help="only files matching this glob (repeatable)")
     p.add_argument("--under", metavar="DIR", help="only files below this directory")
     p.add_argument("--count", action="store_true", help="print match counts per file instead of lines")
@@ -206,6 +228,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if getattr(args, "context", None) is not None:
+        args.before = args.after = args.context
     try:
         return args.handler(Path(os.environ.get("REPO_ROOT") or repo_root()), args)
     except re.error as error:
