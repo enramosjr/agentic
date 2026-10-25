@@ -183,6 +183,7 @@ class ScanStageTests(ScanCase):
     def test_review_and_verify_fail_on_unwaived_critical_at_l1_and_l2(self) -> None:
         self.l1_to_review()
         self.put("bad.py", self.STUB)
+        self.ok("retrospect", "--no-new-lessons", "This fixture adds no new project lessons.")
         self.fails("stage", "review", "--note", "self-review", message="C1-stub bad.py:1")
         self.fails("stage", "verify", "--note", "ran", message="C1-stub bad.py:1")
         self.put("bad.py", f"{self.STUB[:-1]}  # {ALLOW} C1-stub -- fixture\n")
@@ -199,6 +200,7 @@ class ScanStageTests(ScanCase):
         self.ok("stage", "review", "--ref", "review.md")
         self.put("worse.py", self.STUB)
         self.converge_green()
+        self.ok("retrospect", "--no-new-lessons", "The L2 scan fixture adds no new project lessons.")
         self.fails("stage", "verify", message="C1-stub worse.py:1")
         (self.repo / "worse.py").unlink()
         self.converge_green()
@@ -207,6 +209,7 @@ class ScanStageTests(ScanCase):
     def test_scan_writes_nothing_to_record(self) -> None:
         self.l1_to_review()
         self.put("bad.py", self.STUB)
+        self.ok("retrospect", "--no-new-lessons", "This fixture adds no new project lessons.")
         files = [lifecycle.state_path(self.repo), lifecycle.record_path(self.repo, lifecycle.load(self.repo))]
         before = [path.read_bytes() for path in files]
         self.fails("stage", "review", "--note", "self-review", message="C1-stub")

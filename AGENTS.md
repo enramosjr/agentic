@@ -161,6 +161,8 @@ As you modify source, configuration, scripts, or specification files:
 2. Apply the loaded persona's engineering philosophy, type guidelines, and code quality standards to all changes.
 
 ### Gate 3: OKF Synchronization Gate (Pre-Completion Check)
+Agents MUST close and report L1–L3 retrospectives before Verify (.ai/lifecycle.md).
+
 Before presenting a task as completed or ready for review, ask:
 1. *Did my changes alter product capabilities, specs, architecture, or project history?*
 2. *Is the OKF corpus (`knowledge/`) up-to-date with this change?*

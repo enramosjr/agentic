@@ -1,0 +1,582 @@
+{
+  "branch": "codex/required-retrospectives-impl",
+  "converge": {
+    "at": "2026-10-25T18:17:18Z",
+    "results": [
+      {
+        "cmd": "python3 .ai/scripts/tests/test_retrospectives.py RetrospectiveTests.test_required_gate",
+        "exit": 0,
+        "id": "R1",
+        "status": "PASS"
+      },
+      {
+        "cmd": "python3 .ai/scripts/tests/test_retrospectives.py RetrospectiveTests.test_evidence",
+        "exit": 0,
+        "id": "R2",
+        "status": "PASS"
+      },
+      {
+        "cmd": "python3 .ai/scripts/tests/test_retrospectives.py RetrospectiveTests.test_durability",
+        "exit": 0,
+        "id": "R3",
+        "status": "PASS"
+      },
+      {
+        "cmd": "python3 .ai/scripts/tests/test_retrospectives.py RetrospectiveTests.test_retrieval",
+        "exit": 0,
+        "id": "R4",
+        "status": "PASS"
+      },
+      {
+        "cmd": "python3 .ai/scripts/tests/test_retrospectives.py RetrospectiveTests.test_authority",
+        "exit": 0,
+        "id": "R5",
+        "status": "PASS"
+      },
+      {
+        "cmd": "python3 .ai/scripts/tests/test_retrospectives.py RetrospectiveTests.test_compatibility",
+        "exit": 0,
+        "id": "R6",
+        "status": "PASS"
+      },
+      {
+        "cmd": "python3 .ai/scripts/tests/test_retrospectives.py RetrospectiveTests.test_installed_flow",
+        "exit": 0,
+        "id": "R7",
+        "status": "PASS"
+      }
+    ],
+    "spec": "knowledge/specifications/required-retrospectives.md",
+    "spec_sha256": "04067cec907eeb9629df049870886f2d71d89e6ff0af78f7cf19c945bb969940",
+    "tree": "a8f1cb1f466bfb5a236ef9912cb1a0456abd2f211b857b67718e6ce4fec367cb"
+  },
+  "head": "886392ce512c8ff6f1eb24a94833ab1fc57e25dc",
+  "history": [],
+  "kind": "feature",
+  "ledger": [
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/tests/test_retrospectives.py",
+        "RetrospectiveTests.test_required_gate"
+      ],
+      "at": "2026-10-25T18:03:53Z",
+      "duration": 1.776,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R1",
+      "tree": "e39c0fbc24aff37129fe472f8757225597037e5ec6d52195f06ddc53303f299e"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/tests/test_retrospectives.py",
+        "RetrospectiveTests.test_evidence"
+      ],
+      "at": "2026-10-25T18:03:53Z",
+      "duration": 0.614,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R2",
+      "tree": "e39c0fbc24aff37129fe472f8757225597037e5ec6d52195f06ddc53303f299e"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/tests/test_retrospectives.py",
+        "RetrospectiveTests.test_durability"
+      ],
+      "at": "2026-10-25T18:03:53Z",
+      "duration": 1.25,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R3",
+      "tree": "e39c0fbc24aff37129fe472f8757225597037e5ec6d52195f06ddc53303f299e"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/tests/test_retrospectives.py",
+        "RetrospectiveTests.test_retrieval"
+      ],
+      "at": "2026-10-25T18:03:53Z",
+      "duration": 0.918,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R4",
+      "tree": "e39c0fbc24aff37129fe472f8757225597037e5ec6d52195f06ddc53303f299e"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/tests/test_retrospectives.py",
+        "RetrospectiveTests.test_authority"
+      ],
+      "at": "2026-10-25T18:03:53Z",
+      "duration": 0.753,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R5",
+      "tree": "e39c0fbc24aff37129fe472f8757225597037e5ec6d52195f06ddc53303f299e"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/tests/test_retrospectives.py",
+        "RetrospectiveTests.test_compatibility"
+      ],
+      "at": "2026-10-25T18:03:53Z",
+      "duration": 1.037,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R6",
+      "tree": "e39c0fbc24aff37129fe472f8757225597037e5ec6d52195f06ddc53303f299e"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/tests/test_retrospectives.py",
+        "RetrospectiveTests.test_installed_flow"
+      ],
+      "at": "2026-10-25T18:03:53Z",
+      "duration": 4.119,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R7",
+      "tree": "e39c0fbc24aff37129fe472f8757225597037e5ec6d52195f06ddc53303f299e"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/lifecycle_eval.py",
+        "run",
+        "--scenario",
+        "retrospective-reuse",
+        "--timeout",
+        "600",
+        "--max-wall-seconds",
+        "720",
+        "--evidence-class",
+        "real-agent",
+        "--agent-id",
+        "codex",
+        "--permission-configuration",
+        "approve-for-me",
+        "--json",
+        "knowledge/history/retrospective-real-agent-corrected.json",
+        "--",
+        "codex",
+        "exec",
+        "--ephemeral",
+        "--approve-for-me",
+        "-"
+      ],
+      "at": "2026-10-25T18:05:55Z",
+      "duration": 85.27,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "retrospective-real-agent-corrected",
+      "tree": "e39c0fbc24aff37129fe472f8757225597037e5ec6d52195f06ddc53303f299e"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/lifecycle_eval.py",
+        "results-check",
+        "knowledge/history/retrospective-real-agent-corrected.json"
+      ],
+      "at": "2026-10-25T18:07:12Z",
+      "duration": 0.072,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "real-agent-result-integrity",
+      "tree": "5eee7bf0ba78ba9f5bffb42b8d6d857dc36ef9d443e7b7670bd188ebee0c9804"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/run_tests.py",
+        "-j",
+        "4"
+      ],
+      "at": "2026-10-25T18:09:38Z",
+      "duration": 61.442,
+      "exit": 1,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [
+        "CLAUDE.md"
+      ],
+      "inputs_sha256": "fbdb8621e421476c5eb53317ed9c1faaee00bae37ce34edd5e6443b0635ba23a",
+      "label": "retrospective-full-suite",
+      "tree": "5eee7bf0ba78ba9f5bffb42b8d6d857dc36ef9d443e7b7670bd188ebee0c9804"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".ai/scripts/tests",
+        "-p",
+        "test_lifecycle_conformance.py"
+      ],
+      "at": "2026-10-25T18:10:36Z",
+      "duration": 1.16,
+      "exit": 1,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "retrospective-failed-lanes",
+      "tree": "5eee7bf0ba78ba9f5bffb42b8d6d857dc36ef9d443e7b7670bd188ebee0c9804"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".ai/scripts/tests",
+        "-p",
+        "test_lifecycle_conformance.py"
+      ],
+      "at": "2026-10-25T18:11:48Z",
+      "duration": 1.07,
+      "exit": 1,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "retrospective-conformance-repair",
+      "tree": "3d42fa0c8277f37eaec22dfa27c945efe5c45d478898544a83180e8d47ab11d5"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".ai/scripts/tests",
+        "-p",
+        "test_lifecycle_conformance.py"
+      ],
+      "at": "2026-10-25T18:12:23Z",
+      "duration": 1.058,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "retrospective-conformance-fixed",
+      "tree": "5f671ed70aead4d13c98b02fa29fc7d9fbef36bb0bd3d7ace0cd54867d27ae49"
+    },
+    {
+      "argv": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        ".ai/scripts/tests",
+        "-p",
+        "test_scan_diff.py"
+      ],
+      "at": "2026-10-25T18:12:44Z",
+      "duration": 0.527,
+      "exit": 1,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "retrospective-scan-fixture-fixed",
+      "tree": "5f671ed70aead4d13c98b02fa29fc7d9fbef36bb0bd3d7ace0cd54867d27ae49"
+    },
+    {
+      "argv": [
+        "env",
+        "PYTHONPATH=.ai/scripts/tests",
+        "python3",
+        "-m",
+        "unittest",
+        "test_scan_diff.ScanStageTests",
+        "test_lifecycle_eval.PressureScenarioTests.test_exact_matrix_and_trusted_pressure_boundaries"
+      ],
+      "at": "2026-10-25T18:12:57Z",
+      "duration": 0.4,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "retrospective-fixture-repairs",
+      "tree": "a8f1cb1f466bfb5a236ef9912cb1a0456abd2f211b857b67718e6ce4fec367cb"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/run_tests.py",
+        "-j",
+        "4"
+      ],
+      "at": "2026-10-25T18:14:28Z",
+      "duration": 60.164,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [
+        "CLAUDE.md"
+      ],
+      "inputs_sha256": "fbdb8621e421476c5eb53317ed9c1faaee00bae37ce34edd5e6443b0635ba23a",
+      "label": "retrospective-full-suite-final",
+      "tree": "a8f1cb1f466bfb5a236ef9912cb1a0456abd2f211b857b67718e6ce4fec367cb"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/lifecycle_eval.py",
+        "run",
+        "--scenario",
+        "retrospective-reuse",
+        "--timeout",
+        "600",
+        "--max-wall-seconds",
+        "720",
+        "--evidence-class",
+        "real-agent",
+        "--agent-id",
+        "codex",
+        "--permission-configuration",
+        "approve-for-me",
+        "--json",
+        "knowledge/history/retrospective-real-agent-final.json",
+        "--",
+        "codex",
+        "exec",
+        "--ephemeral",
+        "--approve-for-me",
+        "-"
+      ],
+      "at": "2026-10-25T18:16:22Z",
+      "duration": 89.581,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [
+        "CLAUDE.md"
+      ],
+      "inputs_sha256": "fbdb8621e421476c5eb53317ed9c1faaee00bae37ce34edd5e6443b0635ba23a",
+      "label": "retrospective-real-agent-final",
+      "tree": "a8f1cb1f466bfb5a236ef9912cb1a0456abd2f211b857b67718e6ce4fec367cb"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/tests/test_retrospectives.py",
+        "RetrospectiveTests.test_required_gate"
+      ],
+      "at": "2026-10-25T18:17:18Z",
+      "duration": 0.327,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R1",
+      "tree": "a8f1cb1f466bfb5a236ef9912cb1a0456abd2f211b857b67718e6ce4fec367cb"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/tests/test_retrospectives.py",
+        "RetrospectiveTests.test_evidence"
+      ],
+      "at": "2026-10-25T18:17:18Z",
+      "duration": 0.211,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R2",
+      "tree": "a8f1cb1f466bfb5a236ef9912cb1a0456abd2f211b857b67718e6ce4fec367cb"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/tests/test_retrospectives.py",
+        "RetrospectiveTests.test_durability"
+      ],
+      "at": "2026-10-25T18:17:18Z",
+      "duration": 0.205,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R3",
+      "tree": "a8f1cb1f466bfb5a236ef9912cb1a0456abd2f211b857b67718e6ce4fec367cb"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/tests/test_retrospectives.py",
+        "RetrospectiveTests.test_retrieval"
+      ],
+      "at": "2026-10-25T18:17:18Z",
+      "duration": 0.249,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R4",
+      "tree": "a8f1cb1f466bfb5a236ef9912cb1a0456abd2f211b857b67718e6ce4fec367cb"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/tests/test_retrospectives.py",
+        "RetrospectiveTests.test_authority"
+      ],
+      "at": "2026-10-25T18:17:18Z",
+      "duration": 0.195,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R5",
+      "tree": "a8f1cb1f466bfb5a236ef9912cb1a0456abd2f211b857b67718e6ce4fec367cb"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/tests/test_retrospectives.py",
+        "RetrospectiveTests.test_compatibility"
+      ],
+      "at": "2026-10-25T18:17:18Z",
+      "duration": 0.381,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R6",
+      "tree": "a8f1cb1f466bfb5a236ef9912cb1a0456abd2f211b857b67718e6ce4fec367cb"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/tests/test_retrospectives.py",
+        "RetrospectiveTests.test_installed_flow"
+      ],
+      "at": "2026-10-25T18:17:18Z",
+      "duration": 1.036,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "converge:R7",
+      "tree": "a8f1cb1f466bfb5a236ef9912cb1a0456abd2f211b857b67718e6ce4fec367cb"
+    },
+    {
+      "argv": [
+        "python3",
+        ".ai/scripts/okf.py",
+        "records"
+      ],
+      "at": "2026-10-25T18:18:27Z",
+      "duration": 0.066,
+      "exit": 0,
+      "head": "91b6dd0f5447e5beb48d2c36e937345e4614744e",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "retrospective-records",
+      "tree": "a8f1cb1f466bfb5a236ef9912cb1a0456abd2f211b857b67718e6ce4fec367cb"
+    }
+  ],
+  "lessons": [
+    {
+      "at": "2026-10-25T18:17:53Z",
+      "evidence": "RetrospectiveTests.test_required_gate and test_compatibility -> PASS in final convergence; real Codex retrospective-reuse frozen-check scenario -> 1/1 PASS; framework suite -> PASS.",
+      "number": 1,
+      "sha256": "64a5d4591f8a8178b9c9cf4cb466c05993dfc9c216ded6937d75506244606292",
+      "stage": "verify",
+      "text": "Optional lesson guidance can be skipped indefinitely. Require explicit retrospective closure at completion boundaries, and make malformed persisted learning data deny delivery rather than fail open."
+    }
+  ],
+  "reason": "require closing retrospectives and carry observations into future tasks",
+  "redgreen": [
+    {
+      "cmd": "python3 .ai/scripts/tests/test_retrospectives.py RetrospectiveTests",
+      "green": {
+        "at": "2026-10-25T17:58:07Z",
+        "exit": 0,
+        "work": "5054c98de87bff22fbbea04aa9db169d876b3803"
+      },
+      "red": {
+        "at": "2026-10-25T17:55:38Z",
+        "exit": 1,
+        "work": "2050735b59094e9623fc17389ab73ae448d364d7"
+      }
+    },
+    {
+      "cmd": "python3 .ai/scripts/tests/test_retrospectives.py RetrospectiveTests.test_compatibility",
+      "green": {
+        "at": "2026-10-25T18:06:58Z",
+        "exit": 0,
+        "work": "6d7fe5c71afe8df62aeba86bccc1291ef849cc95"
+      },
+      "red": {
+        "at": "2026-10-25T18:06:41Z",
+        "exit": 1,
+        "work": "6300904da49caed72871dc14b54860f0215900cb"
+      }
+    }
+  ],
+  "retrospective": {
+    "at": "2026-10-25T18:17:55Z",
+    "lessons": [
+      1
+    ],
+    "outcome": "observations"
+  },
+  "stages": {
+    "intent": {
+      "approved_by": "human:enramosjr",
+      "at": "2026-10-25T17:51:34Z",
+      "level": "L2",
+      "ref": "knowledge/specifications/required-retrospectives.md",
+      "sha256": "04067cec907eeb9629df049870886f2d71d89e6ff0af78f7cf19c945bb969940"
+    },
+    "plan": {
+      "at": "2026-10-25T17:53:52Z",
+      "level": "L2",
+      "ref": "knowledge/history/required-retrospectives-plan.md",
+      "sha256": "22eccd8615361141e5e807ee94de4a2041cd6935ac9928b9b301ce8e6c60c63d"
+    },
+    "review": {
+      "at": "2026-10-25T18:18:25Z",
+      "level": "L2",
+      "ref": "knowledge/history/required-retrospectives-review.md",
+      "sha256": "149c5ec74e1a266d3c21ce4ed7ace971d4da03b0168899bea3a137abfcc6dc0a"
+    },
+    "verify": {
+      "at": "2026-10-25T18:18:40Z",
+      "level": "L2",
+      "note": "retrospective-fixture-repairs exit=0 tree=a8f1cb1; retrospective-full-suite-final exit=0 tree=a8f1cb1; retrospective-real-agent-final exit=0 tree=a8f1cb1; converge:R1 exit=0 tree=a8f1cb1; converge:R2 exit=0 tree=a8f1cb1; converge:R3 exit=0 tree=a8f1cb1; converge:R4 exit=0 tree=a8f1cb1; converge:R5 exit=0 tree=a8f1cb1; converge:R6 exit=0 tree=a8f1cb1; converge:R7 exit=0 tree=a8f1cb1; retrospective-records exit=0 tree=a8f1cb1"
+    }
+  },
+  "task": "20261025T175012Z-codex_required-retrospectives-impl",
+  "tier": "L2",
+  "user_set": false,
+  "version": 1
+}

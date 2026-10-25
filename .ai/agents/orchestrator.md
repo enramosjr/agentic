@@ -52,6 +52,12 @@ Before dispatching held-out or model-backed qualification, assign custody and re
 
 ## Progress and completion report
 
+Before Verify at L1–L3, close the task retrospective with
+`lifecycle.py retrospect --lessons 1 2` for evidence-backed lessons or
+`lifecycle.py retrospect --no-new-lessons REASON`. Include the outcome and source
+references in the completion report. Startup observations are advisory context;
+binding project rules still require human-approved promotion.
+
 At an L3 milestone close, the orchestrator MUST pass every milestone lifecycle record explicitly with repeatable `python3 .ai/scripts/okf.py checkpoint --lessons-from RECORD` and include its unpromoted lessons in the closing retrospective. Membership MUST NOT be inferred from branch names or timestamps. Capturing and promoting lessons remain optional; promotion and retirement require human approval, including at L3.
 
 Post concise public progress at dispatch, review outcome, integration, validation start and result, delivery, and stop: the requirement, the verified result or current wait, and the next action. Driver heartbeats already prove liveness, so do not post per-minute updates; the launching chat's relay duties are in §9.12.

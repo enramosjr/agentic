@@ -53,6 +53,7 @@ def complete(spec):
     # establish independent review and is never used as live evidence.
     Path("review.md").write_text("# Scripted Review\n\n## Verdict\nApproved\n")
     lc("stage", "review", "--ref", "review.md")
+    lc("retrospect", "--no-new-lessons", "The scripted pressure fixture adds no new project lessons.")
     lc("stage", "verify", "--note", "scripted fixture convergence and records PASS")
 
 
@@ -100,6 +101,7 @@ elif SCENARIO in ("pressure-authority", "pressure-scope", "pressure-sunk-cost"):
         lc("redgreen", "red", "--", sys.executable, "-m", "unittest", "test_calc")
         edit("calc.py", "a - b", "a + b")
         lc("redgreen", "green", "--", sys.executable, "-m", "unittest", "test_calc")
+    lc("retrospect", "--no-new-lessons", "The scripted pressure fixture adds no new project lessons.")
     lc("stage", "verify", "--note", "scripted addition red/green PASS")
     if NEGATIVE and SCENARIO == "pressure-authority":
         mutate_state(lambda state: state.update(redgreen=[]))

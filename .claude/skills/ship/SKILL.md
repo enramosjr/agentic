@@ -11,3 +11,4 @@ For delta intent, `lifecycle.py merge SPEC` belongs before Verify, with a comple
 2. Merge the current default branch into the candidate, then confirm the gate evidence still covers the head (`AGENTS.md` §8.4). Hooks deny `git commit` (other than `wip:`) and PR creation until `lifecycle.py stage verify` is recorded.
 3. Offer the user the PR, keep, or discard options and act only on their choice. Never merge into the default branch.
 4. Close the record: `python3 .ai/scripts/lifecycle.py stage ship`.
+5. Include the required L1–L3 retrospective outcome and source references in delivery. Verify and delivery guards require `lifecycle.py retrospect --lessons 1 2` or `lifecycle.py retrospect --no-new-lessons REASON`; a legacy Verify record does not bypass closure. Advisory observations do not become binding rules without human approval.

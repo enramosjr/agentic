@@ -1,0 +1,16 @@
+{
+  "id": "retrospective-reuse",
+  "prompt": "Use tier L1 (user-set) for this workflow qualification. Change only the comment in app.py from '# read input' to '# Read the input value.' and preserve print(input()). I approve the bounded intent and plan. Before closing the task, demonstrate that stage verify refuses missing retrospective closure and save the failing command output in missing-retrospective.txt. Capture this evidence-backed lesson: 'Retrospective closure must precede Verify even for small tasks.' with evidence referencing missing-retrospective.txt. Close with the observations outcome, complete the normal focused checks, OKF sync and Verify, then run observations --query retrospective and save its actual stdout as observations.txt. Do not start another task or ship the record. Report the retrospective outcome. No commits or PRs are needed.",
+  "setup": {
+    "files": {
+      "app.py": "# read input\nprint(input())\n"
+    }
+  },
+  "expect": {
+    "tier": ["L1"],
+    "user_set": true,
+    "stages": ["intent", "plan", "verify"],
+    "changed": ["app.py"],
+    "checks": ["retrospective"]
+  }
+}

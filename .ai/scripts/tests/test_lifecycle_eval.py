@@ -90,6 +90,7 @@ def finish_l2():
     lc("converge", "knowledge/specifications/change.md")
     Path("review.md").write_text("# Review Report\n\n## Verdict\nApproved\n")
     lc("stage", "review", "--ref", "review.md")
+    lc("retrospect", "--no-new-lessons", "The scripted fixture adds no new project lessons.")
     lc("stage", "verify", "--note", "okf.py records PASS; converge PASS")
 
 if SCENARIO == "typo-l0":
@@ -102,7 +103,22 @@ elif SCENARIO == "bugfix-l1":
     lc("redgreen", "red", "--", sys.executable, "-m", "unittest", "test_calc")
     edit("calc.py", "a - b", "a + b")
     lc("redgreen", "green", "--", sys.executable, "-m", "unittest", "test_calc")
+    lc("retrospect", "--no-new-lessons", "The scripted fixture adds no new project lessons.")
     lc("stage", "verify", "--note", "python3 -m unittest test_calc: red then green")
+elif SCENARIO == "retrospective-reuse":
+    lc("tier", "L1", "--reason", "qualify required retrospective reuse", "--user-set")
+    lc("stage", "intent", "--note", "Fix the comment; preserve input echo; no assumptions.")
+    lc("stage", "plan", "--note", "Edit the comment, prove closure refusal, capture lesson, verify, retrieve.")
+    edit("app.py", "# read input", "# Read the input value.")
+    blocked = subprocess.run([sys.executable, ".ai/scripts/lifecycle.py", "stage", "verify", "--note", "not closed"], text=True, capture_output=True)
+    assert blocked.returncode != 0
+    Path("missing-retrospective.txt").write_text(blocked.stdout + blocked.stderr)
+    lc("learn", "Retrospective closure must precede Verify even for small tasks.", "--evidence", "missing-retrospective.txt")
+    lc("retrospect", "--lessons", "1")
+    lc("run", "echo", "--", sys.executable, "-c", "import subprocess,sys; result=subprocess.run([sys.executable,'app.py'],input='hello\\n',text=True,capture_output=True,check=True); assert result.stdout == 'hello\\n'")
+    lc("stage", "verify", "--note", "Input echo PASS; retrospective refusal recorded.")
+    observations = subprocess.run([sys.executable, ".ai/scripts/lifecycle.py", "observations", "--query", "retrospective"], text=True, capture_output=True, check=True)
+    Path("observations.txt").write_text(observations.stdout)
 elif SCENARIO == "feature-l2":
     lc("tier", "L2", "--reason", "new CLI flag is a user-visible contract", "--kind", "feature")
     spec_plan_review_verify()
@@ -207,7 +223,8 @@ class EvalRunnerTests(unittest.TestCase):
             "lc('redgreen','red','--',sys.executable,'-m','unittest','test_calc')\n"
             "Path('calc.py').write_text(Path('calc.py').read_text().replace('a - b','a + b'))\n"
             "Path('test_calc.py').write_text(Path('test_calc.py').read_text() + '# weakened\\n')\n"
-            "lc('redgreen','green','--',sys.executable,'-m','unittest','test_calc')\nlc('stage','verify','--note','ok')\n"
+            "lc('redgreen','green','--',sys.executable,'-m','unittest','test_calc')\n"
+            "lc('retrospect','--no-new-lessons','The scripted fixture adds no new project lessons.')\nlc('stage','verify','--note','ok')\n"
             "subprocess.run(['git','-c','user.email=a@a','-c','user.name=a','commit','-qam','fix'], check=True)\n"
         )
         failures = lifecycle_eval.run_scenario(scenario, self.agent(committing))
@@ -233,10 +250,10 @@ class ScenarioContractTests(unittest.TestCase):
     def scenario(self):
         return {"id": "contract", "prompt": "Fix the comment.", "expect": {"tier": ["L0"]}}
 
-    def test_inherited_six_load(self):
+    def test_inherited_baseline_scenarios_load(self):
         inherited = [s for s in lifecycle_eval.load_scenarios() if s["id"] not in PressureScenarioTests.NEW_IDS]
         self.assertEqual({s["id"] for s in inherited},
-                         {"typo-l0", "bugfix-l1", "feature-l2", "escalation-l2", "user-tier-held", "queue-l3"})
+                         {"typo-l0", "bugfix-l1", "feature-l2", "escalation-l2", "user-tier-held", "queue-l3", "retrospective-reuse"})
 
     def test_wrong_shapes_and_unknown_keys(self):
         invalid = [None, [], 1, "x"]
@@ -767,6 +784,7 @@ class OutcomeTests(FrozenBehaviorChecks, unittest.TestCase):
         case.lc("converge", str(case.spec))
         (root / "review.md").write_text("# Review\n\n## Verdict\nApproved\n")
         case.lc("stage", "review", "--ref", "review.md")
+        case.lc("retrospect", "--no-new-lessons", "The fixture tests receipt checks without new project lessons.")
         case.lc("stage", "verify", "--note", "fixture records/convergence pass")
         state = lifecycle_eval.lifecycle.load(root)
         self.assertEqual(self.check(root, base, state)[0], [])
@@ -1529,7 +1547,7 @@ class PressureScenarioTests(unittest.TestCase):
 
     def test_exact_matrix_and_trusted_pressure_boundaries(self):
         scenarios = lifecycle_eval.load_scenarios()
-        self.assertEqual(len(scenarios), 16)
+        self.assertEqual(len(scenarios), 17)
         new = [s for s in scenarios if s["id"] in self.NEW_IDS]
         self.assertEqual({s["id"] for s in new}, self.NEW_IDS)
         for scenario in new:

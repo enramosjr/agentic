@@ -80,7 +80,7 @@ HOOK_WIP = re.compile(r"""(?:-[a-zA-Z]*m|--message)[ =]*["']?wip:""")  # Only a 
 HOOK_ADD = re.compile(r"\bgit\s+add\b([^;&|]*)")
 RECORD_DIR = "knowledge/history/lifecycle"
 RUN_ROOTS_ENV = "_AGENTIC_LIFECYCLE_RUN_ROOTS"
-MUTATING_COMMANDS = frozenset({'tier', 'stage', 'redgreen', 'run', 'converge', 'merge', 'learn', 'promote', 'retire'})
+MUTATING_COMMANDS = frozenset({'tier', 'stage', 'redgreen', 'run', 'converge', 'merge', 'learn', 'promote', 'retire', 'retrospect'})
 RECORD_KEYS = ("version", "task", "branch", "head", "tier", "reason", "user_set", "history", "stages", "redgreen")
 DEFAULT_VAGUE_TERMS = (
     "fast", "quickly", "robust", "intuitive", "user-friendly", "appropriate", "as needed", "easy",
@@ -204,6 +204,7 @@ def save(root: Path, state: dict, publish: bool = True) -> None:
             state["task"] = new_task_id(root)  # A record started before the audit trail existed.
         state.setdefault("branch", branch_name(root))
         learning.lessons(state)
+        learning.closure(state)
         if record_path(root, state).is_file():
             learning.reconcile(state, json.loads(record_path(root, state).read_text()))
         first = not (root / RECORD_DIR).is_dir()
@@ -476,6 +477,10 @@ def gate_problem(state: dict, target: str) -> str | None:
         return f"tier {tier} requires completed stage(s) before {target}: {', '.join(missing)}\n{hint}"
     if target in ("verify", "ship", "commit") and state.get("kind") in TEST_FIRST_KINDS and not redgreen_ok(state):
         return f"kind {state['kind']} requires red/green evidence (AGENTS.md §8.6): lifecycle.py redgreen red -- CMD, fix, redgreen green -- CMD"
+    if tier != 'L0' and target in ('verify', 'ship', 'commit') and learning.closure(state) is None:
+        return ('closing retrospective required: run `python3 .ai/scripts/lifecycle.py retrospect --lessons 1 2` '
+                '(existing lessons with evidence), or `python3 .ai/scripts/lifecycle.py retrospect '
+                '--no-new-lessons "REASON"`')
     return None
 
 
@@ -493,6 +498,7 @@ def audit_problems(root: Path, record: object) -> list[str]:
     problems = [f"missing field '{key}'" for key in RECORD_KEYS if key not in record]
     try:
         learning.lessons(record)
+        learning.closure(record)
     except learning.LearningError as error:
         problems.append(str(error))
     if record.get("merge") is not None:
@@ -565,6 +571,7 @@ def cmd_tier(args: argparse.Namespace) -> int:
         state["kind"] = args.kind
     save(root, state)
     print(f"tier {state['tier']} ({state.get('kind', 'kind unset')}): {args.reason}")
+    print(learning.observations(root, args.reason))
     return 0
 
 
@@ -695,8 +702,32 @@ def cmd_stage(args: argparse.Namespace) -> int:
     state["stages"][stage] = record
     save(root, state, publish=stage != "ship")  # Ship follows the commit, so it stays out of the committed record.
     print(f"stage {stage} recorded for tier {tier}")
-    if stage == 'verify' and high and not learning.lessons(state):
-        print('Optional: record a lesson with `python3 .ai/scripts/lifecycle.py learn TEXT`.')
+    return 0
+
+
+def cmd_retrospect(args: argparse.Namespace) -> int:
+    root = repo_root()
+    state = require_state(root)
+    if state['tier'] == 'L0':
+        raise LifecycleError('L0 is exempt from closing retrospectives')
+    proposed = {'outcome': 'observations', 'lessons': sorted(set(args.lessons)), 'at': now()} if args.lessons else {
+        'outcome': 'no-new-lessons', 'reason': args.no_new_lessons, 'at': now()}
+    previous = learning.closure(state)
+    if previous is not None:
+        if {k: v for k, v in previous.items() if k != 'at'} != {k: v for k, v in proposed.items() if k != 'at'}:
+            raise LifecycleError('retrospective retry conflicts with recorded closure')
+    else:
+        state['retrospective'] = proposed
+    learning.closure(state)
+    save(root, state)
+    result = state['retrospective']
+    detail = ', '.join(map(str, result['lessons'])) if result['outcome'] == 'observations' else result['reason']
+    print(f"retrospective recorded: {result['outcome']}: {detail}")
+    return 0
+
+
+def cmd_observations(args: argparse.Namespace) -> int:
+    print(learning.observations(repo_root(), args.query), end='')
     return 0
 
 
@@ -1242,7 +1273,11 @@ def router_text(root: Path) -> str:
             if capture:
                 lines.append(line)
     text = "Lifecycle router (AGENTS.md §2.5):\n" + "\n".join(lines).strip()
-    state = load(root)
+    try:
+        state = load(root)
+    except (learning.LearningError, OSError, UnicodeError) as error:
+        state = None
+        text += f'\nActive lifecycle unavailable: {error}'
     if is_active(state, root):
         text += f"\nActive: tier {state['tier']}; complete stages: {', '.join(s for s in STAGES if complete(state, s)) or 'none'}."
     else:
@@ -1250,6 +1285,7 @@ def router_text(root: Path) -> str:
     block = project_rules_context(root)
     if block:
         text += '\n\n' + block
+    text += '\n\n' + learning.observations(root, state.get('reason', '') if state else '')
     return text
 
 
@@ -1260,7 +1296,75 @@ def project_rules_context(root: Path) -> str:
         return f'Project rules unavailable: {error}'
 
 
-def edit_paths(data: dict, root: Path) -> list[str]:
+def session_directory(data: dict) -> Path:
+    roots = data.get("workspace_roots") or []
+    return Path(os.environ.get("CLAUDE_PROJECT_DIR") or (roots[0] if roots else "") or data.get("cwd") or os.getcwd())
+
+
+def git_commit_directory(command: str) -> tuple[list[str], str] | None:
+    """Recognize a single Git -C commit, without interpreting shell programs."""
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        return None
+    if not tokens or tokens[0] != "git":
+        return None
+    has_directory = any(token.startswith("-C") for token in tokens[1:])
+    # Remove quoted/escaped text before looking for shell operators; a message
+    # such as ';' is a literal argument, while an unquoted ';' starts a command.
+    unquoted = re.sub(r"'[^']*'|\"(?:\\.|[^\"\\])*\"|\\.", "", command)
+    if re.search(r"[;&|()<>\n]", unquoted):
+        if has_directory and "commit" in tokens:
+            raise LifecycleError("git -C commit routing requires a single command; run the commit separately")
+        return None
+    directories: list[str] = []
+    index = 1
+    while index < len(tokens) and tokens[index].startswith("-"):
+        option = tokens[index]
+        if option in ("-C", "-c") and index + 1 < len(tokens):
+            if option == "-C":
+                directories.append(tokens[index + 1])
+            index += 2
+        elif option.startswith("-C") and len(option) > 2:
+            directories.append(option[2:])
+            index += 1
+        else:
+            if has_directory and "commit" in tokens:
+                raise LifecycleError("unsupported git -C commit options; use `git -C DIRECTORY commit ...`")
+            return None
+    if directories and index < len(tokens) and tokens[index] == "commit":
+        return directories, shlex.join(["git", *tokens[index:]])
+    return None
+
+
+def operation_directory(data: dict, git_directories: list[str]) -> tuple[Path, Path]:
+    """Select the operation directory; invalid explicit targets fail closed."""
+    roots = data.get("workspace_roots") or []
+    directory = Path(data.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or (roots[0] if roots else "") or os.getcwd())
+    tool_input = data.get("tool_input") or {}
+
+    def explicit(value: object, label: str, base: Path, check_git: bool = True) -> Path:
+        if not isinstance(value, str) or not value.strip():
+            raise LifecycleError(f"invalid {label}: provide a non-empty directory path inside a Git worktree")
+        try:
+            candidate = Path(value).expanduser()
+            candidate = (candidate if candidate.is_absolute() else base / candidate).resolve()
+            if not candidate.is_dir():
+                raise LifecycleError("directory does not exist or is not a directory")
+            if check_git:
+                repo_root(candidate)
+        except (LifecycleError, OSError, ValueError) as error:
+            raise LifecycleError(f"invalid {label} {value!r}: {error}; select an existing Git worktree directory") from error
+        return candidate
+
+    if "workdir" in tool_input:
+        directory = explicit(tool_input["workdir"], "tool_input.workdir", directory)
+    for index, value in enumerate(git_directories):
+        directory = explicit(value, "git -C directory", directory, check_git=index == len(git_directories) - 1)
+    return directory, repo_root(directory)
+
+
+def edit_paths(data: dict, root: Path, directory: Path | None = None) -> list[str]:
     tool_input = data.get("tool_input") or {}
     raw: list[str] = []
     for key in ("file_path", "path", "target_file", "notebook_path"):
@@ -1270,7 +1374,7 @@ def edit_paths(data: dict, root: Path) -> list[str]:
     if data.get("tool_name") == "apply_patch" and isinstance(patch, str):
         pairs = re.findall(r"^\*\*\* (?:Add|Update|Delete) File: (.+)$|^\*\*\* Move to: (.+)$", patch, re.M)
         raw += [part for pair in pairs for part in pair if part]
-    return [p for p in (rel(root, item) for item in raw) if p is not None]
+    return [p for p in (rel(root, str((directory or root) / Path(item).expanduser())) for item in raw) if p is not None]
 
 
 NO_TIER = (
@@ -1291,12 +1395,12 @@ def unmerged_paths(root: Path) -> set[str]:
         return set()
 
 
-def hook_problem(data: dict, root: Path) -> str | None:
+def hook_problem(data: dict, root: Path, directory: Path | None = None) -> str | None:
     state = load(root)
     active = is_active(state, root)
     tool = data.get("tool_name")
     if tool in EDIT_TOOLS:
-        targets = [p for p in edit_paths(data, root) if not exempt(p)]
+        targets = [p for p in edit_paths(data, root, directory) if not exempt(p)]
         if not targets:
             return None
         if not active:
@@ -1428,23 +1532,38 @@ def cmd_hook(args: argparse.Namespace) -> int:
     if bypass and event.lower() != 'sessionstart':
         return 0
     if event == "beforeShellExecution":  # Cursor's shell event carries the command at the top level.
-        data = {**data, "tool_name": "Shell", "tool_input": {"command": data.get("command")}}
+        data = {**data, "tool_name": "Shell", "tool_input": {**(data.get("tool_input") or {}), "command": data.get("command")}}
     try:
-        roots = data.get("workspace_roots") or []
-        start = os.environ.get("CLAUDE_PROJECT_DIR") or (roots[0] if roots else "") or data.get("cwd") or os.getcwd()
+        start = session_directory(data)
         # Cursor also runs .claude/settings.json hooks; its own .cursor/hooks.json entry makes the same decision.
         if args.skip_in_cursor and "cursor_version" in data and (Path(start) / ".cursor/hooks.json").is_file():
             return 0
         command = (data.get("tool_input") or {}).get("command")
+        git_commit = git_commit_directory(command) if data.get("tool_name") in ("Bash", "Shell") and isinstance(command, str) else None
+        if git_commit:
+            data = {**data, "tool_input": {**data["tool_input"], "command": git_commit[1]}}
+            command = git_commit[1]
         if (data.get("tool_name") in ("Bash", "Shell") and isinstance(command, str)
                 and not HOOK_COMMIT.search(command) and not HOOK_PR.search(command)):
             emit(data, "PreToolUse", None)
             return 0
-        root = repo_root(Path(start))
         if event.lower() == "sessionstart":
-            emit(data, "SessionStart", None, project_rules_context(root) if bypass else router_text(root))
+            root = repo_root(start)
+            context = project_rules_context(root) + '\n\n' + learning.observations(root) if bypass else router_text(root)
+            emit(data, "SessionStart", None, context)
         else:
-            emit(data, "PreToolUse", hook_problem(data, root))
+            if data.get("tool_name") not in EDIT_TOOLS | {"Bash", "Shell"}:
+                emit(data, "PreToolUse", None)
+                return 0
+            directory, root = operation_directory(data, git_commit[0] if git_commit else [])
+            problem = hook_problem(data, root, directory)
+            emit(data, "PreToolUse", f"worktree {root}: {problem}" if problem else None)
+    except LifecycleError as error:
+        if event.lower() != 'sessionstart':
+            emit(data, 'PreToolUse', str(error))
+    except learning.LearningError as error:
+        # Invalid persisted learning data is a gate failure, not an internal guard bug.
+        emit(data, 'PreToolUse', f'invalid lifecycle learning data: {error}; repair the conflicting record before continuing')
     except Exception:  # noqa: BLE001 - a guard bug must never block work
         return 0
     return 0
@@ -1453,6 +1572,14 @@ def cmd_hook(args: argparse.Namespace) -> int:
 def parser() -> argparse.ArgumentParser:
     main = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = main.add_subparsers(dest="command", required=True)
+    p = sub.add_parser('retrospect', help='close the active task with evidenced observations or an explicit reason')
+    choice = p.add_mutually_exclusive_group(required=True)
+    choice.add_argument('--lessons', type=int, nargs='+')
+    choice.add_argument('--no-new-lessons', metavar='REASON')
+    p.set_defaults(func=cmd_retrospect)
+    p = sub.add_parser('observations', help='retrieve bounded advisory observations without changing records')
+    p.add_argument('--query', default='')
+    p.set_defaults(func=cmd_observations)
     p = sub.add_parser('learn', help='capture an optional, inert task lesson at any stage')
     p.add_argument('text')
     p.add_argument('--stage', choices=STAGES)

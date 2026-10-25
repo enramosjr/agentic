@@ -1,4 +1,4 @@
-"""Gap 6 contract tests: optional observations and human-approved project rules."""
+"""Learning contract tests: observations, required closure, and human-approved rules."""
 from __future__ import annotations
 
 import copy
@@ -113,18 +113,21 @@ class LearningLoopTests(LifecycleCase):
         self.assertEqual(code, 1)
         self.assertEqual(path.read_bytes(), before)
 
-    def test_verify_reminder(self):
-        # R4: successful Verify reminds; failed gates still fail; no lesson prerequisite.
-        for tier in ('L2', 'L3'):
+    def test_verify_requires_retrospective(self):
+        # Every durable tier requires explicit closure, even when there are no lessons.
+        for tier in ('L1', 'L2', 'L3'):
             self.start(tier)
             self.fails('stage', 'verify', '--note', 'not ready', message='intent')
-            self.ok('stage', 'intent', '--ref', 'spec.md', '--approved-by', 'human:fixture')
+            self.ok('stage', 'intent', '--ref', 'spec.md', '--approved-by', 'human:fixture',
+                    '--note', 'Exercise closure; verify rejects absence; no assumptions.')
             self.ok('stage', 'plan', '--ref', 'plan.md')
-            self.ok('stage', 'review', '--ref', 'review.md')
-            self.converge_green()
+            self.ok('stage', 'review', '--ref', 'review.md', '--note', 'Fixture review approved.')
+            if tier != 'L1':
+                self.converge_green()
+            self.fails('stage', 'verify', '--note', 'fixture acceptance passed', message='retrospect')
+            self.ok('retrospect', '--no-new-lessons', 'The fixture checks gate behavior without new project lessons.')
             output = self.ok('stage', 'verify', '--note', 'fixture acceptance passed')
-            self.assertIn('Optional', output)
-            self.assertIn('learn', output)
+            self.assertNotIn('Optional', output)
             self.assertIn('verify', self.durable()[1]['stages'])
             self.capture()
             self.assertNotIn('Optional', self.ok('stage', 'verify', '--note', 'same fixture'))
@@ -280,16 +283,20 @@ class LearningLoopTests(LifecycleCase):
             if cursor:
                 result = self.command('lifecycle.py', 'hook', input=json.dumps(dict(payload, hook_event_name='sessionStart', cursor_version='test')))
                 context = json.loads(result.stdout)['additional_context']
-            self.assertEqual(context.count(rule['text']), 1)
+            self.assertEqual(context.split('Project observations', 1)[0].count(rule['text']), 1)
+            self.assertIn('Observation: ' + rule['text'], context)
         data = learning.read_rules(self.repo)
         for damaged in ({'version': 99, 'rules': []}, dict(data, rules=[dict(rule, text='x'*9000, sha256=learning.text_hash('x'*9000))])):
             self.rewrite_rules(damaged)
             output = self.command('lifecycle.py', 'hook', input=json.dumps(payload)).stdout
             context = json.loads(output)['hookSpecificOutput']['additionalContext']
             self.assertIn('rules unavailable', context)
-            self.assertNotIn(rule['text'], context)
+            self.assertNotIn(rule['text'], context.split('Project observations', 1)[0])
         (self.repo / 'knowledge/project/rules.md').unlink()
-        self.assertEqual(self.command('lifecycle.py', 'hook', input=json.dumps(payload)).stdout, baseline)
+        output = self.command('lifecycle.py', 'hook', input=json.dumps(payload)).stdout
+        context = json.loads(output)['hookSpecificOutput']['additionalContext']
+        self.assertEqual(context.split('\n\nProject observations', 1)[0],
+                         json.loads(baseline)['hookSpecificOutput']['additionalContext'].split('\n\nProject observations', 1)[0])
         self.test_bypassed_and_malformed_rule_context()
         self.test_malformed_rule_frontmatter()
 
@@ -375,7 +382,8 @@ class LearningLoopTests(LifecycleCase):
             path.write_text(text)
             output = self.command('lifecycle.py', 'hook', input=payload).stdout
             self.assertIn('rules unavailable', output)
-            self.assertNotIn(rule['text'], output)
+            context = json.loads(output)['hookSpecificOutput']['additionalContext']
+            self.assertNotIn(rule['text'], context.split('Project observations', 1)[0])
 
     def test_documented_contract(self):
         # R14: precedence, workflow, valid operation records, exact-once logging.
@@ -412,10 +420,11 @@ class LearningLoopTests(LifecycleCase):
             output = self.command('lifecycle.py', 'hook', input=payload)
             self.assertEqual(output.returncode, 0, output.stderr)
             return json.loads(output.stdout)['hookSpecificOutput']['additionalContext']
-        self.assertEqual(context().count(text), 1)
+        self.assertEqual(context().split('Project observations', 1)[0].count(text), 1)
         retired = self.command('lifecycle.py', 'retire', rule['id'], '--reason', 'superseded', '--approved-by', 'human:fixture')
         self.assertEqual(retired.returncode, 0, retired.stderr)
-        self.assertNotIn(text, context())
+        self.assertNotIn(text, context().split('Project observations', 1)[0])
+        self.assertIn('Observation: ' + text, context())
         self.assertEqual(learning.read_rules(self.repo)['rules'][0]['status'], 'retired')
         result = self.command('lifecycle.py', 'learn', 'unpromoted observation')
         self.assertEqual(result.returncode, 0, result.stderr)

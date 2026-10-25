@@ -288,11 +288,13 @@ class LedgerVerifyTests(LedgerCase):
         self.ok("stage", "intent", "--note", "queue:T1", "--approved-by", "decision:ADR-1")
         self.ok("stage", "plan", "--note", "queue:T1")
         self.ok("stage", "review", "--ref", "review.md")
+        self.ok("retrospect", "--no-new-lessons", "The ledger fixture adds no new project lessons.")
 
     def test_verify_needs_passing_current_entry_at_l2_and_not_at_l1(self) -> None:
         self.ok("tier", "L1", "--reason", "small")
         self.ok("stage", "intent", "--note", "goal; check; none")
         self.ok("stage", "plan", "--note", "edit app.py")
+        self.ok("retrospect", "--no-new-lessons", "The ledger fixture adds no new project lessons.")
         self.fails("stage", "verify", message="--note")  # L1 keeps its required note.
         self.ok("stage", "verify", "--note", "ran tests by hand")  # And needs no ledger entry.
         self.l3_to_verify(new=True)

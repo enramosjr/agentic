@@ -178,6 +178,7 @@ class StageTests(LifecycleCase):
         (self.repo / "review.md").write_text(REVIEW_OK)
         self.ok("stage", "review", "--ref", "review.md")
         self.converge_green()
+        self.ok("retrospect", "--no-new-lessons", "The fixture checks lifecycle behavior without new project lessons.")
         self.ok("stage", "verify", "--note", "unit tests PASS")  # At L2 the note is optional: the converge ledger entries are the evidence.
         self.assertTrue(lifecycle.load(self.repo)["stages"]["verify"]["note"].endswith("| agent note: unit tests PASS"))
         self.ok("stage", "ship")
@@ -215,6 +216,7 @@ class StageTests(LifecycleCase):
         self.ok("stage", "intent", "--ref", "any.md", "--note", "n")
         self.ok("stage", "plan", "--ref", "any.md")
         self.ok("stage", "review", "--ref", "any.md", "--note", "self-review")
+        self.ok("retrospect", "--no-new-lessons", "The fixture checks tier escalation without new project lessons.")
         self.ok("stage", "verify", "--note", "ran tests")
         self.ok("tier", "L2", "--reason", "contract effect found")
         self.assertIn("still required: intent, plan, review, verify", self.ok("status"))
@@ -245,6 +247,7 @@ class StageTests(LifecycleCase):
         self.ok("tier", "L1", "--reason", "x")
         self.ok("stage", "intent", "--note", "n")
         self.ok("stage", "plan", "--note", "p")
+        self.ok("retrospect", "--no-new-lessons", "The fixture checks records validation without new project lessons.")
         self.fails("stage", "verify", "--note", "ran", message="okf.py records failed")
 
 
@@ -255,6 +258,7 @@ class RedGreenTests(LifecycleCase):
         self.ok("tier", "L1", "--reason", "bug", "--kind", "bugfix")
         self.ok("stage", "intent", "--note", "n")
         self.ok("stage", "plan", "--note", "p")
+        self.ok("retrospect", "--no-new-lessons", "The fixture checks red/green enforcement without new project lessons.")
         self.fails("stage", "verify", "--note", "ran", message="red/green")
         self.fails("redgreen", "green", "--", sys.executable, "check.py", message="no open red run")
         self.ok("redgreen", "red", "--", sys.executable, "check.py")
@@ -432,6 +436,7 @@ class AuditTrailTests(LifecycleCase):
         self.ok("tier", "L1", "--reason", "x")
         self.ok("stage", "intent", "--note", "n")
         self.ok("stage", "plan", "--note", "p")
+        self.ok("retrospect", "--no-new-lessons", "The fixture checks bundle records without new project lessons.")
         self.ok("stage", "verify", "--note", "ran")
         self.assertEqual(len(self.records()), 1)
 
@@ -485,6 +490,7 @@ class AuditTrailTests(LifecycleCase):
 
     def test_verify_refuses_failed_audit(self) -> None:  # R5
         self.l2_through_review()
+        self.ok("retrospect", "--no-new-lessons", "The fixture checks audit failures without new project lessons.")
         (self.repo / "spec.md").write_text(SPEC.replace("reject an empty name", "accept any name"))
         self.fails("stage", "verify", "--note", "ran", message="audit")
         (self.repo / "spec.md").write_text(SPEC)
@@ -495,6 +501,7 @@ class AuditTrailTests(LifecycleCase):
         self.ok("tier", "L1", "--reason", "small")
         self.ok("stage", "intent", "--note", "n")
         self.ok("stage", "plan", "--note", "p")
+        self.ok("retrospect", "--no-new-lessons", "The fixture checks commit records without new project lessons.")
         self.ok("stage", "verify", "--note", "ran")
         (path,) = self.records()
         relative = path.relative_to(self.repo).as_posix()
@@ -517,6 +524,7 @@ class AuditTrailTests(LifecycleCase):
         self.ok("tier", "L1", "--reason", "small")
         self.ok("stage", "intent", "--note", "n")
         self.ok("stage", "plan", "--note", "p")
+        self.ok("retrospect", "--no-new-lessons", "The fixture checks staged records without new project lessons.")
         self.ok("stage", "verify", "--note", "ran")
         return self.records()[0].relative_to(self.repo).as_posix()
 
@@ -553,6 +561,7 @@ class AuditTrailTests(LifecycleCase):
         lifecycle.state_path(self.repo).write_text(json.dumps(state))
         for path in self.records():
             path.unlink()
+        self.ok("retrospect", "--no-new-lessons", "The legacy fixture adds no new project lessons.")
         self.ok("stage", "verify", "--note", "ran")
         self.assertEqual(len(self.records()), 1)
 
@@ -785,6 +794,7 @@ class ConvergeTests(LifecycleCase):
         self.ok("tier", "L1", "--reason", "small")
         self.ok("stage", "intent", "--note", "n")
         self.ok("stage", "plan", "--note", "p")
+        self.ok("retrospect", "--no-new-lessons", "The fixture checks converge freshness without new project lessons.")
         self.ok("stage", "verify", "--note", "ran")
         (self.repo / "check.py").write_text("import sys; sys.exit(0 if open('flag').read().strip() == 'fixed' else 1)\n")
         (self.repo / "flag").write_text("broken\n")
@@ -795,6 +805,7 @@ class ConvergeTests(LifecycleCase):
         self.ok("stage", "intent", "--ref", "spec.md", "--approved-by", "human:me")
         self.ok("stage", "plan", "--ref", "plan.md")
         self.ok("stage", "review", "--ref", "review.md")
+        self.ok("retrospect", "--no-new-lessons", "The fixture checks converge failures without new project lessons.")
         self.fails("stage", "verify", "--note", "ran", message="no converge run for spec.md")
         self.assertEqual(self.run_cli("converge", "spec.md")[0], 1)
         self.fails("stage", "verify", "--note", "ran", message="converge failed for R1")
@@ -813,6 +824,7 @@ class ConvergeTests(LifecycleCase):
         self.ok("stage", "plan", "--ref", "plan.md")
         self.ok("stage", "review", "--ref", "review.md")
         self.assertIn("R2 MANUAL", self.ok("converge", "spec.md").splitlines())
+        self.ok("retrospect", "--no-new-lessons", "The fixture checks manual review without new project lessons.")
         self.fails("stage", "verify", "--note", "ran", message="manual check(s) R2 not cited in '## Validation Reviewed' of review.md")
         (self.repo / "review.md").write_text(REVIEW_OK + "\n## Validation Reviewed\nR1 PASS per converge.\n\n## Notes\nR2\n")
         self.ok("stage", "review", "--ref", "review.md")
@@ -852,6 +864,7 @@ class ConvergeTests(LifecycleCase):
         self.ok("stage", "intent", "--ref", "spec.md", "--approved-by", "human:me")
         self.ok("stage", "plan", "--ref", "plan.md")
         self.ok("stage", "review", "--ref", "review.md")
+        self.ok("retrospect", "--no-new-lessons", "The fixture checks L3 convergence without new project lessons.")
         self.fails("stage", "verify", "--note", "ran", message="no converge run for spec.md")
         self.ok("converge", "spec.md")
         self.ok("stage", "verify", "--note", "ran")
@@ -862,6 +875,7 @@ class ConvergeTests(LifecycleCase):
         self.ok("stage", "plan", "--note", "queue:T1")
         self.ok("stage", "review", "--ref", "review.md")
         self.ok("run", "unit", "--", PY, "-c", "pass")  # The queue intent has no converge run, so the ledger must supply the evidence.
+        self.ok("retrospect", "--no-new-lessons", "The queue fixture adds no new project lessons.")
         self.ok("stage", "verify", "--note", "ran")
 
     def test_reapproved_spec_or_new_head_stales_the_run(self) -> None:  # R6
@@ -871,6 +885,7 @@ class ConvergeTests(LifecycleCase):
         self.ok("stage", "review", "--ref", "review.md")
         self.ok("converge", "spec.md")
         (self.repo / "spec.md").write_text(text.replace("check 1", "check one"))
+        self.ok("retrospect", "--no-new-lessons", "The fixture checks stale convergence without new project lessons.")
         self.ok("stage", "intent", "--ref", "spec.md", "--approved-by", "human:me")
         self.fails("stage", "verify", "--note", "ran", message="spec.md changed since the run")
         self.ok("converge", "spec.md")

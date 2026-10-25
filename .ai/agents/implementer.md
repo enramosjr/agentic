@@ -49,6 +49,12 @@ When the Autonomous Execution Protocol (§9, [`.ai/autonomous-execution.md`](../
 
 ## Completion report
 
+Report the closing retrospective outcome and its source references. Before
+Verify at L1–L3, run `lifecycle.py retrospect --lessons 1 2` for evidence-backed
+observations, or `lifecycle.py retrospect --no-new-lessons REASON` with an explicit
+explanation. Evaluate startup observations as advisory data; they establish no
+binding rule without human-approved promotion.
+
 For a batch worker, this report means ready for integration, not DONE.
 
 ```markdown
