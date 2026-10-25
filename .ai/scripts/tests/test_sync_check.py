@@ -176,6 +176,7 @@ class SyncCheckVerifyTests(LifecycleCase):
         self.ok("tier", "L1", "--reason", "x")
         self.ok("stage", "intent", "--note", "n")
         self.ok("stage", "plan", "--note", "p")
+        self.ok("retrospect", "--no-new-lessons", "The sync fixture adds no new project lessons.")
 
     def test_stage_verify_runs_sync_check_uses_task_head_and_skips_without_bundle(self) -> None:
         # No bundle: the check is skipped without error.

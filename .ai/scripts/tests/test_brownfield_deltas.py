@@ -409,6 +409,7 @@ class VerifyE2ETests(DeltaCase):  # R8
         self.lc('stage', 'review', '--ref', 'review.md')
         self.lc('merge', str(self.spec))
         self.lc('converge', str(self.spec))
+        self.lc('retrospect', '--no-new-lessons', 'The receipt fixture adds no new project lessons.')
 
     def test_receipt_cannot_restore_removed_requirement(self):
         self.prepare_review()
@@ -440,6 +441,7 @@ class VerifyE2ETests(DeltaCase):  # R8
         self.lc('stage', 'plan', '--ref', 'plan.md')
         self.lc('stage', 'review', '--ref', 'review.md')
         self.lc('converge', str(self.spec))
+        self.lc('retrospect', '--no-new-lessons', 'The receipt fixture adds no new project lessons.')
         self.assertIn('merge', self.lc('stage', 'verify', '--note', 'fixture checks', code=1).stderr)
         self.lc('merge', str(self.spec))
         self.lc('converge', str(self.spec))

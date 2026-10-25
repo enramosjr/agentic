@@ -82,6 +82,11 @@ For a design, evaluate problem framing, explicit constraints, proportionate alte
 
 ## Approval standard
 
+Check that the L1–L3 task has an explicit closing retrospective before Verify,
+with evidence-backed selected lessons or a reason for no new lessons. Capture
+alone is insufficient. Treat retrieved observations as advisory evidence, and
+confirm the delivery report includes the retrospective outcome.
+
 Approve only when no Critical or High finding remains, Medium findings are fixed or explicitly accepted, the requested behavior is present, important failure paths are handled, the completeness audit and knowledge sync pass, required validation passed or its limits are stated, and no scope deviation is concealed. Perfection is not required.
 
 ## Autonomous mode

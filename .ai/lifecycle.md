@@ -7,6 +7,7 @@ One lifecycle for every task, from a one-line prompt to a fully autonomous miles
 1. Pick the tier (§2.5), state it with the persona, and declare it before editing source: `python3 .ai/scripts/lifecycle.py tier L2 --reason "new public behavior" --kind feature`. Hooks deny source edits until you do.
 2. Run the stages the tier requires, in order, and record each with `python3 .ai/scripts/lifecycle.py stage NAME ...` (see Recording and enforcement). Each stage has an exit check; do not start the next stage until it holds.
 3. Escalate the moment investigation shows a contract, schema, persistence, security, or dependency effect, or an unresolved behavior question. Never downgrade a tier the user set.
+4. At L1–L3 close a retrospective before Verify: `python3 .ai/scripts/lifecycle.py learn TEXT --evidence REF`, then `python3 .ai/scripts/lifecycle.py retrospect --lessons 1`, or `python3 .ai/scripts/lifecycle.py retrospect --no-new-lessons REASON`. Report the outcome at delivery. Startup observations are advisory evidence; use `python3 .ai/scripts/lifecycle.py observations --query TEXT` for task-specific retrieval.
 
 | Stage | Role | Artifact | Exit check |
 |-------|------|----------|------------|
@@ -51,6 +52,12 @@ Run the `implementer` role on an isolated branch or worktree at L2 and above. Fo
 At L2 and above the order is OKF sync, then `python3 .ai/scripts/lifecycle.py converge SPEC` (each requirement's acceptance command, run from the approved spec; fix any FAIL), then review, then verify, with no commit in between: the run is bound to HEAD, so a commit, even of records only, makes it stale. Run the `reviewer` role. Pass 1 asks whether the change meets the spec and plan, with nothing missing and nothing extra; at L2 and above it cites the converge result, notes each MANUAL requirement in the report's `## Validation Reviewed` section, and applies the absence-finding lens. Run Pass 2 (correctness, safety, maintainability, tests, completeness audit, knowledge sync) when Pass 1 is clean. Fix Critical and High findings and re-review only the fix.
 
 ## Stage 4: Verify and sync
+
+Close the L1–L3 retrospective before recording Verify: select existing lessons
+with evidence using `lifecycle.py retrospect --lessons 1 2`, or explain the absence
+of new lessons with `lifecycle.py retrospect --no-new-lessons REASON`. Commit/PR
+and ship gates also require closure, independently of any legacy Verify record.
+Include the outcome in the delivery summary.
 
 Do not wrap lifecycle mutations (including converge, run, stage and merge apply)
 in `lifecycle.py run`. Invoke them directly. An inherited repository-owner stack
@@ -97,7 +104,9 @@ Use for any bug, failing check, or unexpected behavior, at any tier above L0.
 
 ## Recording and enforcement
 
-Optional learning: `lifecycle.py learn TEXT [--stage S] [--evidence REF]` records inert observations in active L1–L3 tasks. Capture never gates progression. `promote RECORD#N --approved-by human:ID` and `retire RULE_ID --reason TEXT --approved-by human:ID` require human authorization; attribution records claims rather than authenticating consent, and `decision:` is refused. Active approved rules have repository-instruction precedence and are injected at SessionStart within an 8,192-byte UTF-8 block. Missing rules preserve prior behavior; invalid rules emit a diagnostic without partial injection. Identical promotion/retirement retries repair interrupted log/index publication. At milestone close use repeatable `okf.py checkpoint --lessons-from RECORD` for every milestone record and include unpromoted observations in the retrospective. See the learning-loop capability and playbook in `knowledge/` when present; an installed adopter starts without template knowledge.
+`lifecycle.py learn TEXT [--stage S] [--evidence REF]` records inert observations in active L1–L3 tasks. Capture alone does not close a retrospective. Before Verify, explicitly run `lifecycle.py retrospect --lessons 1 2` for existing lessons with nonblank evidence, or `lifecycle.py retrospect --no-new-lessons REASON` with a nonblank explanation. Verify and commit/PR/ship guards require closure; historical records without closure remain audit-valid. Outcome, timestamp and lesson numbers or reason persist in the audit record. Task declarations and SessionStart surface a separate advisory observation block (up to five whole entries within 8,192 UTF-8 bytes), ranked by query/task-reason token overlap, recency and source reference; absent matches use a labeled recent fallback. `lifecycle.py observations --query TEXT` retrieves read-only context with evidence, provenance and omission/corruption diagnostics. Observations have no instruction precedence. Report the closing outcome at delivery.
+
+`promote RECORD#N --approved-by human:ID` and `retire RULE_ID --reason TEXT --approved-by human:ID` require human authorization; attribution records claims rather than authenticating consent, and `decision:` is refused. Active approved rules have repository-instruction precedence and are injected at SessionStart within an 8,192-byte UTF-8 block. Missing rules preserve prior behavior; invalid rules emit a diagnostic without partial injection. Identical promotion/retirement retries repair interrupted log/index publication. At milestone close use repeatable `okf.py checkpoint --lessons-from RECORD` for every milestone record and include unpromoted observations in the retrospective. See the learning-loop capability and playbook in `knowledge/` when present; an installed adopter starts without template knowledge.
 
 `python3 .ai/scripts/lifecycle.py` keeps its working state per branch (untracked, in the git scratch directory) and validates each stage's artifact before recording it. Above L0 it also writes the committed audit record `knowledge/history/lifecycle/<task>.json` (one per task). The record holds no command output, and it stores a sha256 of each `--ref`. Commit the record with the change.
 

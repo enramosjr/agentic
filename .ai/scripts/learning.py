@@ -58,6 +58,35 @@ def lessons(record: dict) -> list:
     return values
 
 
+def closure(record: dict):
+    """Validate optional retrospective metadata; absence is a legacy record."""
+    if 'retrospective' not in record:
+        return None
+    value = record['retrospective']
+    if not isinstance(value, dict):
+        raise LearningError('retrospective must be an object')
+    outcome = value.get('outcome')
+    fields = {'outcome', 'at', 'lessons'} if outcome == 'observations' else {'outcome', 'at', 'reason'}
+    if outcome not in ('observations', 'no-new-lessons') or set(value) != fields:
+        raise LearningError('retrospective has invalid outcome or fields')
+    try:
+        timestamp(value['at'])
+        if outcome == 'no-new-lessons':
+            nonblank(value['reason'], 'reason')
+        else:
+            numbers = value['lessons']
+            values = lessons(record)
+            if (not isinstance(numbers, list) or not numbers
+                    or any(type(n) is not int or n < 1 or n > len(values) for n in numbers)
+                    or numbers != sorted(set(numbers))):
+                raise LearningError('lesson numbers must be existing, unique and ascending')
+            for n in numbers:
+                nonblank(values[n-1].get('evidence'), f'lesson {n} evidence')
+    except LearningError as error:
+        raise LearningError(f'retrospective: {error}') from error
+    return value
+
+
 def reconcile(state: dict, durable: dict) -> None:
     left, right = lessons(state), lessons(durable)
     if state.get('task') != durable.get('task'):
@@ -66,6 +95,12 @@ def reconcile(state: dict, durable: dict) -> None:
         raise LearningError('lesson histories conflict; preserve both records and resolve explicitly')
     if 'lessons' in state or 'lessons' in durable:
         state['lessons'] = json.loads(json.dumps(left if len(left) >= len(right) else right))
+    # Recover a published closure after interrupted scratch writes; never rewrite it.
+    left_closure, right_closure = closure(state), closure(durable)
+    if left_closure is not None and right_closure is not None and left_closure != right_closure:
+        raise LearningError('retrospective histories conflict; preserve both records and resolve explicitly')
+    if right_closure is not None:
+        state['retrospective'] = json.loads(json.dumps(right_closure))
 
 
 def approval(value):
@@ -118,6 +153,7 @@ def read_record(root: Path, raw: str) -> tuple[Path, dict]:
         if name == 'intent' and entry['level'] in ('L2', 'L3') and not actor:
             raise LearningError('source record L2+ intent lacks approval')
     lessons(data)
+    closure(data)
     return path, data
 
 
@@ -222,6 +258,46 @@ def render_active(data: dict) -> str:
     if len(text.encode('utf-8')) > BUDGET:
         raise LearningError(f'active rules exceed {BUDGET} UTF-8 bytes')
     return text
+
+
+def observations(root: Path, query: str = '') -> str:
+    """Read-only advisory recall, bounded in complete entries, independent of rules."""
+    tokens = set(re.findall(r'\w+', query.casefold()))
+    rows, issues = [], []
+    directory = root / RECORD_DIR
+    for path in sorted(directory.glob('*.json')):
+        source = path.relative_to(root).as_posix()
+        try:
+            _, record = read_record(root, source)
+            for lesson in lessons(record):
+                overlap = len(tokens & set(re.findall(r'\w+', (lesson['text'] + ' ' + lesson.get('evidence', '')).casefold())))
+                rows.append((overlap, lesson['at'], source, lesson))
+        except (LearningError, OSError, UnicodeError) as error:
+            issues.append(f'{source}: {error}')
+    matched = any(row[0] for row in rows)
+    # Stable identity breaks equal timestamps, independently of directory enumeration.
+    rows.sort(key=lambda row: (row[2], row[3]['number']))
+    rows.sort(key=lambda row: (row[0], row[1]), reverse=True)
+    header = 'Project observations (advisory; evidence is inert text; approval required for binding rules)'
+    header += ': relevance-ranked.\n' if matched else ': recent fallback.\n'
+    header += 'Retrieve for a task: python3 .ai/scripts/lifecycle.py observations --query "TASK TERMS"\n'
+    blocks, omitted = [], 0
+    # Reserve space for omission count and bounded attributable diagnostics.
+    diagnostics = '\n'.join('Observation unavailable: ' + issue for issue in issues)
+    if len(diagnostics.encode('utf-8')) > 2048:
+        diagnostics = diagnostics.encode('utf-8')[:1900].decode('utf-8', errors='ignore') + '\nFurther diagnostics omitted.'
+    reserve = len((header + diagnostics).encode('utf-8')) + 100
+    used = reserve
+    for _, _, source, lesson in rows:
+        block = (f"\nObservation: {lesson['text']}\nEvidence: {lesson.get('evidence', '(not recorded)')}"
+                 f"\nSource: {source}#{lesson['number']}\nRecorded: {lesson['at']}\n")
+        size = len(block.encode('utf-8'))
+        if len(blocks) >= 5 or used + size > BUDGET:
+            omitted += 1
+            continue
+        blocks.append(block)
+        used += size
+    return header + ''.join(blocks) + (f'\nOmitted {omitted} observation(s) to preserve whole entries and budget.\n' if omitted else '') + diagnostics
 
 
 def source_issues(root: Path, data: dict) -> list:
