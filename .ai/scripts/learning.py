@@ -109,9 +109,27 @@ def approval(value):
     return value
 
 
+def record_directory(root: Path) -> Path:
+    if (root / '.agentic.json').is_file():
+        import project_context
+        if project_context.kind(root) == 'framework':
+            import scratch
+            return scratch.location(root) / 'history/lifecycle'
+    return root / RECORD_DIR
+
+
 def record_path(root: Path, raw: str) -> Path:
     if not isinstance(raw, str) or not raw or '..' in Path(raw).parts or '#' in raw:
         raise LearningError('invalid source record path')
+    directory = record_directory(root)
+    if raw.startswith('scratch:') and directory != root / RECORD_DIR:
+        name = raw.removeprefix('scratch:')
+        if Path(name).name != name or Path(name).suffix != '.json':
+            raise LearningError('invalid scratch source record path')
+        path = (directory / name).resolve()
+        if path.parent != directory.resolve():
+            raise LearningError('source record path escapes scratch')
+        return path
     path = (root / raw).resolve()
     try:
         relative = path.relative_to(root.resolve())
@@ -236,6 +254,8 @@ def validate_rules(root: Path, data: dict) -> None:
 
 
 def read_rules(root: Path) -> dict:
+    if record_directory(root) != root / RECORD_DIR:
+        return {'version': 1, 'rules': []}  # Source instructions remain in reviewed framework files.
     path = rules_path(root)
     if not path.exists():
         return {'version': 1, 'rules': []}
@@ -264,9 +284,9 @@ def observations(root: Path, query: str = '') -> str:
     """Read-only advisory recall, bounded in complete entries, independent of rules."""
     tokens = set(re.findall(r'\w+', query.casefold()))
     rows, issues = [], []
-    directory = root / RECORD_DIR
+    directory = record_directory(root)
     for path in sorted(directory.glob('*.json')):
-        source = path.relative_to(root).as_posix()
+        source = ('scratch:' + path.name) if directory != root / RECORD_DIR else path.relative_to(root).as_posix()
         try:
             _, record = read_record(root, source)
             for lesson in lessons(record):

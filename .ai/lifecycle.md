@@ -1,5 +1,10 @@
 # Agent Lifecycle (AIDLC)
 
+The adopter knowledge mandate remains binding below; framework-source identity in
+`AGENTS.md` substitutes source documentation and Git-scratch receipts for a bundle:
+
+All AI agents working on this project MUST ensure that the Open Knowledge Format corpus (`knowledge/`) remains synchronized with any code, specification, architecture, or workflow changes introduced during execution.
+
 One lifecycle for every task, from a one-line prompt to a fully autonomous milestone. The stages and artifacts never change; the tier (`AGENTS.md` §2.5) sets how much ceremony each stage gets. Load by section: `python3 .ai/scripts/okf.py show .ai/lifecycle.md --section HEADING`.
 
 ## Router

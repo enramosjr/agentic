@@ -15,6 +15,77 @@ Use `lifecycle.py run LABEL -- COMMAND` for the evidence ledger and `reuse LABEL
 before repeating checks. `okf.py sync-check`, `okf.py records` and scan-diff cover
 knowledge synchronization, record integrity and added-line completeness.
 
+Independent `run` and `converge` invocations may execute checks concurrently.
+Result publication reloads the latest state under a per-branch process lock,
+preserving other results and lifecycle updates in both scratch and audit records.
+The lock is released while these checks execute. Results from a replaced task or
+changed intent are refused rather than written into the new state. Atomic writes
+use separate temporary files; existing receipt fields stay compatible.
+
+## Startup and discovery
+
+`python3 .ai/scripts/repo.py context --json` reports explicit repository identity,
+local branch/upstream divergence and author/committer prerequisites without changing
+configuration or contacting a remote. Local equality is not proof of remote freshness;
+fetch explicitly when required. A source checkout declares
+`{"repository_kind":"framework"}` in root `.agentic.json`, which is not exported
+by the installer. Installed manifests or an existing knowledge bundle identify
+adopters; an unconfigured checkout remains unknown. Source audit receipts stay in
+Git scratch, and source verification does not initialize or require knowledge.
+
+Use `repo.py commands TOOL [SUBCOMMAND]` for actual CLI help and `repo.py headings PATH`
+for actual Markdown headings. Neither operation requires an adopter bundle.
+
+## Qualified artifacts
+
+`python3 .ai/scripts/artifacts.py freeze --root BUILD_ROOT --file RELATIVE_FILE`
+accepts repeated `--file` arguments and returns a bundle path and manifest SHA-256.
+It copies declared regular files into a separate read-only bundle. Keep that receipt.
+`artifacts.py run --bundle BUNDLE --sha256 HASH -- COMMAND '{artifact:RELATIVE_FILE}'`
+verifies the pinned manifest and every declared file before and after execution.
+Commands must reference a declared artifact; no fallback to a rebuilt source path
+is supplied. Each invocation gets a separate Cargo/`AGENTIC_BUILD_DIR` build root.
+
+`artifacts.py variant --bundle BUNDLE --sha256 HASH` returns a separate writable
+mutation copy explicitly marked unqualified. Negative controls belong there, not
+in the sealed bundle. This is operational integrity checking, not a sandbox against
+a process owner deliberately altering and restoring files. Only declared files are
+hashed; host libraries and other undeclared runtime inputs are not qualified.
+Adopter-specific OCR fixtures and assertions remain the adopter's responsibility.
+
+## Scoped evidence reuse
+
+`lifecycle.py run` supplies conservative defaults for Python unittest/framework
+checks and standard Cargo checks. Cargo package checks use offline locked metadata
+to include selected packages, transitive workspace dependencies, all manifests and
+shared root inputs. Unrelated package implementation files can then retain PASS.
+Formatting tracks Rust/configuration inputs. Dynamic Python test dependencies use
+the repository-wide scope rather than guessed imports. `--inputs` remains the
+explicit override; unknown commands or unsupported external inputs retain the
+exact-tree fallback. Generated lifecycle receipts are excluded from inferred inputs.
+
+Inferred receipts include file fingerprints and a hash of runtime/environment
+identity; environment values are not written to the ledger. Committing identical
+tested bytes does not invalidate input-scoped evidence. Changed files are named
+where a snapshot exists; legacy receipts keep their digest format and conservative
+diagnostics. Runtime dependencies outside the captured inputs still require the
+project's qualification policy. No inference authorizes skipping a required lane.
+
+## One completion operation
+
+`python3 .ai/scripts/lifecycle.py finish --json --tests TEST_PATH...` reports stage,
+review, retrospective, traceability, convergence, evidence, source-scan and adopter
+knowledge blockers together. It runs integrity checks, not application tests or
+reviewer sessions, and does not change state by default.
+
+`finish --apply` can record Verify only through the existing gates and current PASS
+evidence. For adopter metadata, repeated `--bind knowledge/PATH=EVIDENCE_LABEL`
+bindings explicitly associate updated documents with existing input-scoped evidence.
+All bindings are validated before writes. Sources must be covered, and runtime
+claims require their original check binding. The operation stamps metadata and logs
+the reused evidence; it never writes body prose, approval, requirement citations or
+new runtime claims. Missing independent review and qualification remain blockers.
+
 Before Verify, L1–L3 tasks must close a retrospective: capture evidence-backed
 observations with `lifecycle.py learn TEXT --evidence REF`, then run
 `lifecycle.py retrospect --lessons 1 2`, or explicitly record

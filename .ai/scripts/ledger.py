@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+import json
+import os
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +22,8 @@ from pathlib import Path
 sys.dont_write_bytecode = True  # Bytecode beside the scripts would dirty the work tree.
 
 KEYS = ("label", "argv", "exit", "tree", "head", "duration", "at", "inputs", "inputs_sha256")
+OPTIONAL_KEYS = ('input_files', 'context_sha256', 'profile')
+SESSION_KEYS = {'CODEX_THREAD_ID', 'SHLVL', '_'}
 OUTPUT_KEYS = ("tail", "output", "stdout", "stderr")
 MAX_ENTRIES = 100
 RUN_HINT = "python3 .ai/scripts/lifecycle.py run LABEL -- CMD"
@@ -47,20 +52,116 @@ def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
 
 
+def default_inputs(argv):
+    """Infer only known checks; workspace tests use all files rather than guess imports/assets."""
+    if not argv:
+        return None
+    if any(arg.startswith(('/', '--manifest-path', '--target-dir', '--config')) or '..' in Path(arg).parts for arg in argv[1:]):
+        return None  # External inputs/build roots need an explicit mapping.
+    executable = Path(argv[0]).name
+    if executable in ('cargo', 'cargo.exe'):
+        if argv[1:2] == ['fmt']:
+            return 'cargo-format', ['*.rs', '*Cargo.toml', 'Cargo.lock', '*rustfmt.toml', '.cargo/**', 'rust-toolchain*']
+        if argv[1:2] in (['test'], ['build'], ['clippy']):
+            return 'cargo-workspace', ['**']
+    if executable.startswith('python'):
+        if argv[1:3] == ['-m', 'unittest'] or (len(argv) > 1 and argv[1] == '.ai/scripts/run_tests.py'):
+            return 'python-tests', ['**']
+    return None
+
+
+def input_paths(root, globs):
+    listing = _git(root, "ls-files", "-co", "--exclude-standard").stdout.splitlines()
+    selected = set()
+    for glob in globs:
+        negative = glob.startswith('!')
+        hits = {n for n in listing if matches(glob[1:] if negative else glob, n)}
+        selected = selected - hits if negative else selected | hits
+    return sorted(selected)
+
+
+def package_inputs(root, argv, metadata):
+    wanted = []
+    for index, arg in enumerate(argv):
+        if arg in ('-p', '--package') and index + 1 < len(argv):
+            wanted.append(argv[index + 1])
+        elif arg.startswith('--package='):
+            wanted.append(arg.split('=', 1)[1])
+    if not wanted or '--workspace' in argv or '--all' in argv:
+        return ['**']
+    members = {p['name']: p for p in metadata['packages'] if p['id'] in metadata['workspace_members']}
+    if not set(wanted) <= members.keys():
+        return ['**']
+    selected = set(wanted)
+    pending = list(wanted)
+    while pending:
+        for dependency in members[pending.pop()].get('dependencies', []):
+            path = dependency.get('path')
+            if path and not Path(path).resolve().is_relative_to(root):
+                return None
+            name = dependency['name']
+            if name in members and name not in selected:
+                selected.add(name)
+                pending.append(name)
+    globs = ['**']
+    for name, package in members.items():
+        directory = Path(package['manifest_path']).parent.resolve()
+        if not directory.is_relative_to(root):
+            return None
+        relative = directory.relative_to(root).as_posix()
+        if name not in selected:
+            if relative == '.':
+                return ['**']
+            globs.extend(['!' + relative + '/**', relative + '/Cargo.toml'])
+    return globs
+
+
+def infer_inputs(root, argv):
+    profile = default_inputs(argv)
+    if profile and profile[0] == 'cargo-workspace':
+        try:
+            result = subprocess.run(['cargo', 'metadata', '--format-version', '1', '--no-deps', '--offline', '--locked'],
+                                    cwd=root, capture_output=True, text=True, timeout=15, check=True)
+            globs = package_inputs(root, argv, json.loads(result.stdout))
+            return ('cargo-packages', globs) if globs else None
+        except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+            return None
+    return profile
+
+
+def inputs_snapshot(root: Path, globs: list[str]) -> dict:
+    files = {}
+    for name in input_paths(root, globs):
+        path = root / name
+        try:
+            data = path.read_bytes()
+        except OSError:
+            data = b'<missing>'
+        files[name] = hashlib.sha256(data).hexdigest()
+    return files
+
+
 def inputs_digest(root: Path, globs: list[str]) -> str | None:
-    """sha256 over the sorted matching files' paths and bytes, or None when no inputs are declared."""
     if not globs:
         return None
-    listing = _git(root, "ls-files", "-co", "--exclude-standard").stdout.splitlines()
+    # Preserve the digest algorithm used by existing receipts.
     digest = hashlib.sha256()
-    for name in sorted({n for n in listing if any(matches(g, n) for g in globs)}):
-        digest.update(name.encode() + b"\0")
+    for name in input_paths(root, globs):
+        digest.update(name.encode() + b'\0')
         try:
             digest.update((root / name).read_bytes())
         except OSError:
-            digest.update(b"<missing>")
-        digest.update(b"\0")
+            digest.update(b'<missing>')
+        digest.update(b'\0')
     return digest.hexdigest()
+
+
+def context_digest(argv):
+    env = {k: v for k, v in os.environ.items()
+           if k not in SESSION_KEYS | {'TMP', 'TEMP', 'TMPDIR', '_AGENTIC_LIFECYCLE_RUN_ROOTS'}}
+    executable = shutil.which(argv[0])
+    runtime = hashlib.sha256(Path(executable).read_bytes()).hexdigest() if executable else None
+    return hashlib.sha256(json.dumps({'env': env, 'executable': executable, 'runtime': runtime}, sort_keys=True).encode()).hexdigest()
 
 
 def make_entry(label: str, argv: list[str], code: int | None, tree: str, head: str, duration: float,
@@ -87,7 +188,7 @@ def audit(entries: object) -> list[str]:
         for key in sorted(entry):
             if key in OUTPUT_KEYS:
                 problems.append(f"ledger entry {index} carries command output key '{key}'")
-            elif key not in KEYS:
+            elif key not in KEYS + OPTIONAL_KEYS:
                 problems.append(f"ledger entry {index} has key '{key}' outside the schema")
     return problems
 
@@ -105,11 +206,17 @@ def _entry_verdict(root: Path, entry: dict, tree: str | None = None) -> tuple[bo
     head = entry.get("head") or ""
     if not head or _git(root, "cat-file", "-e", f"{head}^{{commit}}").returncode != 0:
         return False, f"the commit {head[:7] or '?'} it ran on is not resolvable"
-    changed = _git(root, "diff", "--name-only", head, "HEAD").stdout.splitlines()
-    hit = next((n for n in changed if any(matches(g, n) for g in globs)), None)
-    if hit:
-        return False, f"{hit} changed in a commit since the run"
+    if entry.get('context_sha256') and context_digest(entry['argv']) != entry['context_sha256']:
+        return False, f'{name} execution environment or runtime changed'
     if inputs_digest(root, globs) != entry.get("inputs_sha256"):
+        if 'input_files' in entry:
+            current, previous = inputs_snapshot(root, globs), entry['input_files']
+            changed = sorted(p for p in current.keys() | previous.keys() if current.get(p) != previous.get(p))
+            return False, f"{name} inputs changed: {', '.join(changed[:8])}" + (' ...' if len(changed) > 8 else '')
+        changed = _git(root, "diff", "--name-only", head, "HEAD").stdout.splitlines()
+        hit = next((n for n in changed if any(matches(g, n) for g in globs)), None)
+        if hit:
+            return False, f"{hit} changed in a commit since the run"
         return False, f"an input of {name} was edited since the run"
     return True, f"REUSE {name} head={head[:7]}"
 
@@ -136,7 +243,7 @@ def current_entries(root: Path, entries: list[dict], tree: str) -> list[dict]:
         if label in seen:
             continue
         seen.add(label)
-        if entry.get("exit") == 0 and (entry.get("tree") == tree or _entry_verdict(root, entry)[0]):
+        if entry.get("exit") == 0 and _entry_verdict(root, entry, tree)[0]:
             current.append(entry)
     return list(reversed(current))
 

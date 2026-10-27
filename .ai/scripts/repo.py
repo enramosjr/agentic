@@ -12,11 +12,14 @@ work tree. Standard library only; Python 3.9+.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import subprocess
 import sys
 from pathlib import Path
+
+sys.dont_write_bytecode = True
 
 SKIP_DIRS = frozenset({".git", "node_modules", "target", "build", ".dart_tool", "__pycache__", ".venv", "dist"})
 MAX_BYTES = 1_000_000
@@ -191,6 +194,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="repo.py", description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
 
+    p = sub.add_parser('context', help='read-only project identity, Git prerequisites and discovery')
+    p.add_argument('--json', action='store_true')
+    p.set_defaults(handler=cmd_context)
+    p = sub.add_parser('headings', help='list actual Markdown headings without requiring knowledge')
+    p.add_argument('path')
+    p.set_defaults(handler=cmd_headings)
+    p = sub.add_parser('commands', help='show actual --help from a kit CLI; never execute a check')
+    p.add_argument('tool', choices=['repo', 'lifecycle', 'okf', 'install', 'artifacts', 'autonomy_validation', 'validation_select'])
+    p.add_argument('subcommand', nargs='?')
+    p.set_defaults(handler=cmd_commands)
+
     p = sub.add_parser("files", help="list repo files matching globs (gitignored files excluded)")
     p.add_argument("globs", nargs="*", metavar="GLOB", help="e.g. 'app/**/*.kt' or '*.dart'; none lists all")
     p.add_argument("--under", metavar="DIR", help="only files below this directory")
@@ -226,6 +240,35 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def cmd_context(root, args):
+    import project_context
+    print(json.dumps(project_context.report(root), indent=2))
+    return 0
+
+
+def cmd_headings(root, args):
+    path = Path(args.path)
+    if not path.is_absolute():
+        path = root / path
+    for number, line in enumerate(path.read_text().splitlines(), 1):
+        if re.match(r'^#{1,6} ', line):
+            print(f'{number}: {line}')
+    return 0
+
+
+def cmd_commands(root, args):
+    argv = [sys.executable, str(root / '.ai/scripts' / (args.tool + '.py'))]
+    if args.subcommand:
+        if args.subcommand.startswith('-') or not re.fullmatch(r'[a-z][a-z0-9-]*', args.subcommand):
+            raise ValueError('subcommand must be a command name, not an option')
+        argv.append(args.subcommand)
+    result = subprocess.run([*argv, '--help'], capture_output=True, text=True, timeout=15)
+    print(result.stdout, end='')
+    if result.returncode:
+        print(result.stderr, end='', file=sys.stderr)
+    return result.returncode
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if getattr(args, "context", None) is not None:
@@ -235,7 +278,7 @@ def main(argv: list[str] | None = None) -> int:
     except re.error as error:
         print(f"repo: error: bad --regex pattern: {error}", file=sys.stderr)
         return 1
-    except ValueError as error:
+    except (ValueError, OSError, subprocess.TimeoutExpired) as error:
         print(f"repo: error: {error}", file=sys.stderr)
         return 1
 

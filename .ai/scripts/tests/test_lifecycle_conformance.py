@@ -193,7 +193,7 @@ class MechanicalDocs(unittest.TestCase):
 
     LIFECYCLE_COMMANDS = ("run", "reuse", "scan-diff")
     OKF_COMMANDS = ("sync-check",)
-    STDLIB = {"__future__", "fnmatch", "hashlib", "json", "re", "shlex", "subprocess", "sys", "time", "pathlib", "typing"}
+    STDLIB = {"__future__", "fnmatch", "hashlib", "json", "os", "re", "shlex", "shutil", "subprocess", "sys", "time", "pathlib", "typing"}
 
     def test_new_commands_documented_in_agents_and_lifecycle(self) -> None:  # mechanical-governance R32
         for command in self.LIFECYCLE_COMMANDS:

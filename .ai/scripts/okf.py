@@ -2056,6 +2056,10 @@ def cmd_onboard(bundle: Path, args: argparse.Namespace) -> int:
 
 
 def cmd_init(bundle: Path, args: argparse.Namespace) -> int:
+    if (bundle.parent / '.agentic.json').is_file():
+        import project_context
+        if project_context.kind(bundle.parent) == 'framework':
+            raise OkfError('framework source does not own a knowledge bundle; use repo.py context --json')
     bundle.mkdir(parents=True, exist_ok=True)
     for name in STANDARD_SECTIONS:
         (bundle / name).mkdir(exist_ok=True)

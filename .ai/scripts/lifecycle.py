@@ -31,7 +31,9 @@ import re
 import shlex
 import subprocess
 import sys
+import tempfile
 import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -58,6 +60,7 @@ okf = lazy("okf")
 learning = lazy("learning")
 ledger = lazy("ledger")
 scan = lazy("scan")
+project_context = lazy('project_context')
 import difflib  # noqa: E402
 from datetime import date
 
@@ -80,7 +83,7 @@ HOOK_WIP = re.compile(r"""(?:-[a-zA-Z]*m|--message)[ =]*["']?wip:""")  # Only a 
 HOOK_ADD = re.compile(r"\bgit\s+add\b([^;&|]*)")
 RECORD_DIR = "knowledge/history/lifecycle"
 RUN_ROOTS_ENV = "_AGENTIC_LIFECYCLE_RUN_ROOTS"
-MUTATING_COMMANDS = frozenset({'tier', 'stage', 'redgreen', 'run', 'converge', 'merge', 'learn', 'promote', 'retire', 'retrospect'})
+MUTATING_COMMANDS = frozenset({'tier', 'stage', 'redgreen', 'run', 'converge', 'merge', 'learn', 'promote', 'retire', 'retrospect', 'finish'})
 RECORD_KEYS = ("version", "task", "branch", "head", "tier", "reason", "user_set", "history", "stages", "redgreen")
 DEFAULT_VAGUE_TERMS = (
     "fast", "quickly", "robust", "intuitive", "user-friendly", "appropriate", "as needed", "easy",
@@ -148,13 +151,15 @@ def new_task_id(root: Path) -> str:
     """UTC start stamp plus branch slug; a numeric suffix keeps two tasks started in the same second apart."""
     base = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{slug(branch_name(root))}"
     task, n = base, 1
-    while (root / RECORD_DIR / f"{task}.json").exists():
+    while record_path(root, {'task': task}).exists():
         n += 1
         task = base.replace("Z-", f"Z-{n}-", 1)
     return task
 
 
 def record_path(root: Path, state: dict) -> Path:
+    if project_context.kind(root) == 'framework':
+        return scratch.location(root) / 'history/lifecycle' / f"{state['task']}.json"
     return root / RECORD_DIR / f"{state['task']}.json"
 
 
@@ -190,11 +195,53 @@ def load(root: Path) -> dict | None:
         return None
 
 
+@contextmanager
+def state_lock(root: Path):
+    """Serialize state transactions, never the checks whose results they record."""
+    path = state_path(root).with_suffix('.lock')
+    with path.open('a+b') as handle:
+        if os.name == 'nt':
+            import msvcrt
+            if not handle.tell():
+                handle.write(b'\0')
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if os.name == 'nt':
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+def evidence_state(root: Path, expected: dict) -> dict:
+    """Reload under state_lock so a completed check cannot overwrite newer state."""
+    current = load(root)
+    if (current is None or current.get('task') != expected.get('task')
+            or current.get('head') != expected.get('head')
+            or current.get('stages', {}).get('intent') != expected.get('stages', {}).get('intent')):
+        raise LifecycleError('lifecycle task changed while check was running; result was not recorded')
+    return current
+
+
 def write_atomic(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(path.name + ".tmp")
-    temp.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
-    os.replace(temp, path)
+    temp = None
+    try:
+        with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=path.parent,
+                                         prefix=path.name + '.', suffix='.tmp', delete=False) as handle:
+            temp = Path(handle.name)
+            handle.write(json.dumps(data, indent=2, sort_keys=True) + '\n')
+        os.replace(temp, path)
+    finally:
+        if temp is not None:
+            temp.unlink(missing_ok=True)
 
 
 def save(root: Path, state: dict, publish: bool = True) -> None:
@@ -207,7 +254,7 @@ def save(root: Path, state: dict, publish: bool = True) -> None:
         learning.closure(state)
         if record_path(root, state).is_file():
             learning.reconcile(state, json.loads(record_path(root, state).read_text()))
-        first = not (root / RECORD_DIR).is_dir()
+        first = project_context.kind(root) != 'framework' and not (root / RECORD_DIR).is_dir()
         write_atomic(record_path(root, state), public(state, root))
         if first and (root / "knowledge/index.md").is_file():  # The new directory needs its index once, or `okf.py records` fails.
             try:
@@ -689,7 +736,7 @@ def cmd_stage(args: argparse.Namespace) -> int:
         problem = scan_problem(root, state)
         if problem:
             raise LifecycleError(problem)
-        if (root / "knowledge/index.md").is_file():  # A bundle, not just the audit record directory.
+        if project_context.kind(root) != 'framework' and (root / "knowledge/index.md").is_file():
             okf_cli = [sys.executable, str(root / ".ai/scripts/okf.py")]
             result = subprocess.run([*okf_cli, "sync-check", "--base", state.get("head") or "HEAD"], cwd=root, capture_output=True, text=True)
             if result.returncode != 0:
@@ -745,7 +792,8 @@ def cmd_learn(args: argparse.Namespace) -> int:
         entry['evidence'] = learning.nonblank(args.evidence, 'lesson evidence')
     state['lessons'] = values + [entry]
     save(root, state)
-    print(f"recorded lesson {record_path(root, state).relative_to(root).as_posix()}#{entry['number']}")
+    target = record_path(root, state)
+    print(f"recorded lesson {rel(root, str(target)) or str(target)}#{entry['number']}")
     return 0
 
 
@@ -765,6 +813,8 @@ def finish_rule_operation(root: Path, data: dict, rule: dict, operation: str) ->
 
 def cmd_promote(args: argparse.Namespace) -> int:
     root = repo_root()
+    if project_context.kind(root) == 'framework':
+        raise LifecycleError('promotion writes adopter rules; framework instructions need a reviewed source edit')
     actor = learning.approval(args.approved_by)
     source, record, lesson = learning.lesson_reference(root, args.reference)
     problems = audit_problems(root, record)
@@ -788,6 +838,8 @@ def cmd_promote(args: argparse.Namespace) -> int:
 
 def cmd_retire(args: argparse.Namespace) -> int:
     root = repo_root()
+    if project_context.kind(root) == 'framework':
+        raise LifecycleError('retirement writes adopter rules; framework instructions need a reviewed source edit')
     actor = learning.approval(args.approved_by)
     reason = learning.nonblank(args.reason, 'retirement reason')
     data = okf.read_project_rules(root / 'knowledge')
@@ -912,14 +964,25 @@ def run_roots() -> list[str]:
 
 def cmd_run(args: argparse.Namespace) -> int:
     root = repo_root()
-    state = require_state(root)
+    with state_lock(root):
+        state = require_state(root)
     command = args.run_command
     if not command:
         raise LifecycleError("give the command after `--`: lifecycle.py run LABEL -- CMD")
     try:
-        globs = ledger.check_globs(args.inputs or [])
+        profile = ledger.infer_inputs(root, command) if not args.inputs else None
+        globs = ledger.check_globs(args.inputs or (profile[1] if profile else []))
+        if profile:
+            globs = [*globs, '!knowledge/history/lifecycle/**']  # Output receipts cannot fingerprint themselves.
         env = scratch.environment(root)  # Checks build fixtures with tempfile; scratch refuses /tmp and tmpfs.
+        if profile:
+            for key in ledger.SESSION_KEYS:
+                env.pop(key, None)
         env[RUN_ROOTS_ENV] = json.dumps([*run_roots(), str(root.resolve())])
+        before_digest = ledger.inputs_digest(root, globs)
+        before_files = ledger.inputs_snapshot(root, globs) if profile else None
+        before_context = ledger.context_digest(command) if profile else None
+        before_tree, before_head = tree_hash(root), head_sha(root)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         raise LifecycleError(f"run refused, nothing was run: {error}") from error
     started, code, output = time.monotonic(), None, ""
@@ -930,9 +993,15 @@ def cmd_run(args: argparse.Namespace) -> int:
         output = decoded(error.stdout) + decoded(error.stderr) + "\ntimeout"
     except (ValueError, OSError) as error:
         output = f"cannot run: {error}"
-    entry = ledger.make_entry(args.label, command, code, tree_hash(root), head_sha(root), time.monotonic() - started, now(), globs, ledger.inputs_digest(root, globs))
-    ledger.append(state, entry)
-    save(root, state)
+    entry = ledger.make_entry(args.label, command, code, before_tree if globs else tree_hash(root),
+                              before_head if globs else head_sha(root), time.monotonic() - started,
+                              now(), globs, before_digest)
+    if profile:
+        entry.update(profile=profile[0], input_files=before_files, context_sha256=before_context)
+    with state_lock(root):
+        state = evidence_state(root, state)
+        ledger.append(state, entry)
+        save(root, state)
     print(f"run {args.label}: exit={code if code is not None else 'none'} tree={entry['tree'][:7]}")
     if code != 0:
         for line in output.strip().splitlines()[-12:]:
@@ -1027,9 +1096,10 @@ def decoded(output: object) -> str:
 
 def cmd_converge(args: argparse.Namespace) -> int:
     root = repo_root()
-    state = load(root)
-    spec = rel(root, args.spec)
-    reason = converge_refusal(root, state, spec)
+    with state_lock(root):
+        state = load(root)
+        spec = rel(root, args.spec)
+        reason = converge_refusal(root, state, spec)
     if reason:
         raise LifecycleError(f"converge refused, nothing was run: {reason}; check with python3 .ai/scripts/lifecycle.py audit")
     if brownfield.is_delta(root / spec):
@@ -1073,11 +1143,13 @@ def cmd_converge(args: argparse.Namespace) -> int:
         results.append(entry)
         durations[rid] = time.monotonic() - started
     tree = tree_hash(root)
-    for entry in results:  # Each acceptance command is also ledger evidence (output-free); MANUAL checks ran nothing.
-        if entry["cmd"] is not None:
-            ledger.append(state, ledger.make_entry(f"converge:{entry['id']}", words(entry["cmd"]), entry["exit"], tree, head_sha(root), durations[entry["id"]], now(), [], None))
-    state["converge"] = {"spec": spec, "spec_sha256": ref_hash(root / spec), "tree": tree, "at": now(), "results": results}
-    save(root, state)
+    with state_lock(root):
+        state = evidence_state(root, state)
+        for entry in results:  # MANUAL checks ran nothing.
+            if entry["cmd"] is not None:
+                ledger.append(state, ledger.make_entry(f"converge:{entry['id']}", words(entry["cmd"]), entry["exit"], tree, head_sha(root), durations[entry["id"]], now(), [], None))
+        state["converge"] = {"spec": spec, "spec_sha256": ref_hash(root / spec), "tree": tree, "at": now(), "results": results}
+        save(root, state)
     counts = {status: sum(r["status"] == status for r in results) for status in ("PASS", "FAIL", "MANUAL")}
     print(f"converge: {counts['PASS']} PASS, {counts['FAIL']} FAIL, {counts['MANUAL']} MANUAL")
     return 1 if counts["FAIL"] else 0
@@ -1456,6 +1528,8 @@ def commits_all(command: str) -> bool:
 
 def record_problem(root: Path, state: dict, command: str) -> str | None:
     """Why a commit would leave the task's audit record out, or None."""
+    if project_context.kind(root) == 'framework':
+        return None  # Source receipts live in Git scratch; adopter commit gates are unchanged.
     if not state.get("task"):
         return None  # A state from before the audit trail; verify assigns its id.
     relative = record_path(root, state).relative_to(root).as_posix()
@@ -1622,6 +1696,12 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--inputs", nargs="+", metavar="GLOB", help="repo-relative globs whose content `reuse` re-checks")
     p.add_argument("--timeout", type=float, default=600)
     p.set_defaults(func=cmd_run, run_command=[])
+    p = sub.add_parser('finish', help='consolidate completion blockers; --apply uses existing evidence only')
+    p.add_argument('--json', action='store_true')
+    p.add_argument('--apply', action='store_true')
+    p.add_argument('--tests', nargs='+', default=[])
+    p.add_argument('--bind', action='append', default=[], metavar='knowledge/PATH=LABEL')
+    p.set_defaults(func=cmd_finish)
     p = sub.add_parser("reuse", help="print REUSE or RERUN for a recorded check (label or exact command); exit 1 on RERUN")
     p.add_argument("target", metavar="LABEL_OR_CMD")
     p.set_defaults(func=cmd_reuse)
@@ -1660,6 +1740,11 @@ def parser() -> argparse.ArgumentParser:
     return main
 
 
+def cmd_finish(args):
+    import completion
+    return completion.finish(args)
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     command: list[str] = []
@@ -1671,10 +1756,13 @@ def main(argv: list[str] | None = None) -> int:
         args.run_command = command
     try:
         verb = args.func.__name__.removeprefix('cmd_')
-        if verb in MUTATING_COMMANDS and not (verb == 'merge' and args.dry_run):
+        if verb in MUTATING_COMMANDS and not ((verb == 'merge' and args.dry_run) or (verb == 'finish' and not args.apply)):
             roots = run_roots()
             if roots and str(repo_root().resolve()) in roots:
                 raise LifecycleError('invoke lifecycle mutations directly, outside lifecycle.py run; ancestor run owns this repository evidence')
+            if verb not in {'run', 'converge'}:
+                with state_lock(repo_root()):
+                    return args.func(args)
         return args.func(args)
     except LifecycleError as error:
         print(f"lifecycle: {error}", file=sys.stderr)
