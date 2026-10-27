@@ -1,5 +1,10 @@
 # OKF Change Log
 
+## 2026-10-26
+
+- Portable governance prerequisite for Olmec/Athenaeum sync: shortened one nonnormative rationale paragraph so managed-block markers fit the unchanged 30000-byte limit. python3 -B -m unittest discover -s .ai/scripts/tests -p test_lifecycle_conformance.py -> PASS via portable-governance-conformance. All headings and normative sentences retained. L0 prose-only test-first/retrospective exemption; full frozen source suite follows before PR readiness.
+- Portable governance budget: python3 -B .ai/scripts/run_tests.py -j 2 → PASS through portable-governance-full-suite; focused lifecycle conformance → PASS. Shortened only nonnormative rationale; existing budget and normative instructions unchanged.
+
 ## 2026-10-25
 
 - Initialized OKF bundle (`okf.py init`).

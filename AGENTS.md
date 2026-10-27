@@ -15,7 +15,7 @@ The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", and "MAY" in this docu
 All AI agents working on this project MUST ensure that the Open Knowledge Format corpus (`knowledge/`) remains synchronized with any code, specification, architecture, or workflow changes introduced during execution.
 
 ### Rationale & Purpose
-The OKF corpus (`knowledge/`) is the machine-readable, persistent knowledge graph of the repository. It serves as the primary context for future AI agents and human contributors. When codebase changes occur without corresponding OKF updates, agent drift and knowledge decay occur.
+The OKF corpus (`knowledge/`) is the repository's persistent knowledge graph. Keeping it synchronized gives future agents and contributors reliable context and prevents knowledge decay.
 
 - **Requirement**: Any agent change that alters functionality, contracts, specifications, dependencies, or architectural patterns MUST update the corresponding OKF document(s) and append a log entry to `knowledge/log.md`.
 - **Scope**: Code changes are not considered complete until OKF synchronization is verified and updated where relevant.

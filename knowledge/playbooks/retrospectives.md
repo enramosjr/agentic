@@ -29,7 +29,7 @@ sources:
     resource: ../../.claude/skills/review/SKILL.md
   - id: claude-skills-ship-skill-md
     resource: ../../.claude/skills/ship/SKILL.md
-verified: { by: "process:python3 .ai/scripts/lifecycle.py reuse worktree-hook-full-suite", at: 2026-10-25T18:52:40Z }
+verified: { by: "process:python3 .ai/scripts/lifecycle.py reuse portable-governance-full-suite", at: 2026-10-26T18:17:05Z }
 ---
 
 # Closing and reusing retrospectives
@@ -37,6 +37,10 @@ verified: { by: "process:python3 .ai/scripts/lifecycle.py reuse worktree-hook-fu
 Agent workflow for explicit closure and advisory recall
 
 ## Workflow
+
+The source governance rationale is compact so the installer's managed-block
+markers also fit the unchanged 30,000-byte cold-start budget. Shared instructions
+and tests remain intact; downstream kits require no governance-size overlay.
 
 1. Evaluate the advisory observations supplied at startup against the current
    task. Refine retrieval with `python3 .ai/scripts/lifecycle.py observations
