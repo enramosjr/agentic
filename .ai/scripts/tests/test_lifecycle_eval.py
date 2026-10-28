@@ -723,6 +723,32 @@ class OutcomeTests(FrozenBehaviorChecks, unittest.TestCase):
             self.assertTrue(self.check(work, base, state, observations)[0])
             shutil.rmtree(work)
 
+    def test_reviewer_report_body_binding(self):
+        import eval_outcome
+        work, base, state = self.fixture()
+        report = work / state['stages']['review']['ref']
+        canonical = ('# Review Report\n\n## Verdict\nApproved\n\n## Scope\nFixture.\n'
+                     '\n## Persona Applied\nNone.\n\n## Findings\nNone.\n'
+                     '\n## Validation Reviewed\nR1 PASS.\n\n## Residual Risks\nNone.\n')
+        report.write_text(canonical)
+        state['stages']['review']['sha256'] = lifecycle_eval.lifecycle.ref_hash(report)
+        observed = self.observations(work, state)
+        expected = 'Approved review artifact is not bound to the observed reviewer result'
+        variants = (
+            ('intact', canonical, []),
+            ('metadata', '---\ntype: Review\nstatus: stable\n---\n' + canonical, []),
+            ('prefix', '# Saved review\n\nPreserved verbatim.\n\n' + canonical, [expected]),
+            ('rewrite', '# Review Report\n\n## Verdict\nApproved\n\nParent summary.\n', [expected]),
+            ('manufactured-verdict', '## Verdict\nApproved\n', [expected]),
+        )
+        for name, body, failures in variants:
+            with self.subTest(name=name):
+                report.write_text(body)
+                state['stages']['review']['sha256'] = lifecycle_eval.lifecycle.ref_hash(report)
+                lifecycle_eval.lifecycle.save(work, state)
+                self.assertEqual(eval_outcome.audit_view(work, state), [])
+                self.assertEqual(self.check(work, base, state, observed)[0], failures)
+
     def test_unobservable_review_is_measurement_error(self):
         import eval_outcome
         work, base, state = self.fixture()

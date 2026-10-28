@@ -66,6 +66,30 @@ class Distribution(unittest.TestCase):
 
 
 class RolesAndSkills(unittest.TestCase):
+    def test_reviewer_completion_report_contract(self) -> None:
+        for path in ('.claude/agents/reviewer.md', '.codex/agents/reviewer.toml'):
+            with self.subTest(path=path):
+                commands = SHOW.findall(text(path))
+                self.assertTrue(commands, path)
+                argv = shlex.split(commands[0])
+                mandatory = [argv[i + 1] for i, value in enumerate(argv[:-1]) if value == '--section']
+                self.assertIn('Completion report', mandatory, path)
+        completion = text('.ai/agents/reviewer.md').split('## Completion report\n', 1)[1]
+        directions, template = completion.split('```markdown', 1)
+        self.assertIn('complete Markdown report', directions)
+        self.assertIn('Do not add a preface or enclosing code fence', directions)
+        self.assertEqual(re.findall(r'^#{1,2} .*$', template.split('```', 1)[0], re.M),
+                         ['# Review Report', '## Verdict', '## Scope', '## Persona Applied',
+                          '## Findings', '## Validation Reviewed', '## Residual Risks'])
+        stage = text('.ai/lifecycle.md').split('## Stage 3: Review\n', 1)[1].split('\n## ', 1)[0]
+        for path, body in (('.ai/lifecycle.md#Stage3', stage),
+                           ('.claude/skills/review/SKILL.md', text('.claude/skills/review/SKILL.md'))):
+            with self.subTest(path=path):
+                for phrase in ('# Review Report', '## Verdict', 'complete returned Markdown body unchanged',
+                               'YAML frontmatter', 'Do not add a heading, introduction, summary or verdict',
+                               'request a corrected complete report from the reviewer'):
+                    self.assertIn(phrase, body, path)
+
     def test_every_role_in_the_selection_table_is_registered_for_claude_and_codex(self) -> None:
         roles = set(re.findall(r"\(\.ai/agents/(\w+)\.md\)", text("AGENTS.md").split("### 2.3")[0]))
         self.assertEqual(roles, {"analyst", "planner", "implementer", "reviewer", "orchestrator"})
@@ -235,7 +259,7 @@ class Assurance(unittest.TestCase):
         for term in ("- Verify:", "- Inputs:", "VERIFIED", "STALE", "FAILED", "UNVERIFIED", "INVALID", "MANUAL", "UNDECLARED",
                      "lifecycle.py assure", "--run", "--changed", "--strict",
                      "covers only that command on those inputs", "whole tree", "squash", "runtime executable changed", "does not combine with",
-                     "python3 .ai/scripts/assurance_demo.py"):
+                     "python3 .ai/scripts/assurance_demo.py", "python3 .ai/scripts/assurance_measure.py"):
             self.assertIn(term, body, term)
         for term in ("judgment (attested, not verified):", "## Validation Reviewed", "Accept-risk:", "risk_acceptance",
                      "not bound to", "`note:`", "unauthenticated"):  # assurance-increment-4

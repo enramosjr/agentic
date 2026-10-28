@@ -34,9 +34,12 @@ class ScratchTests(AutonomyTestCase):
         self.assertEqual(autonomy_validation.git(self.repo, "status", "--porcelain"), "")
 
     def test_system_temp_symlink_is_rejected_without_fallback(self):
-        (self.repo / ".git" / "okf-scratch").symlink_to("/tmp", target_is_directory=True)
+        # A Git-only repository has no prior protected OKF setup or scratch receipts.
+        repo = self.repo / 'git-only-symlink'
+        subprocess.run(['git', 'init', '-q', str(repo)], check=True)
+        (repo / ".git" / "okf-scratch").symlink_to("/tmp", target_is_directory=True)
         with self.assertRaisesRegex(ValueError, "outside system temporary"):
-            scratch.directory(self.repo)
+            scratch.directory(repo)
 
     def test_system_temp_logs_and_aliases_are_rejected(self):
         for path in ("/tmp/run.jsonl", "/var/tmp/run.jsonl", "/dev/shm/run.jsonl"):

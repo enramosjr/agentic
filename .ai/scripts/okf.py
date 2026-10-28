@@ -28,6 +28,7 @@ import stat
 
 sys.dont_write_bytecode = True  # Importing the shared helper must not dirty adopter worktrees.
 import learning
+import review_guard
 
 OKF_VERSION = "0.2"
 STANDARD_SECTIONS = (
@@ -452,6 +453,7 @@ def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8").replace("\r\n", "\n")
 
 
+@review_guard.protected(lambda path, text: path)
 def write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
@@ -661,6 +663,8 @@ def _render_index(existing: str | None, block: str, directory: Path, is_root: bo
     return existing.rstrip("\n") + "\n\n" + block + "\n"
 
 
+@review_guard.protected(lambda bundle, **kwargs: bundle.parent,
+                        when=lambda bundle, **kwargs: not kwargs.get('check', False))
 def reindex(bundle: Path, *, check: bool = False) -> list[Path]:
     """Regenerate the marked listing block in every index.md; return changed files."""
     directories = [bundle] + sorted(
@@ -917,7 +921,8 @@ def validate(bundle: Path) -> list[Issue]:
 
 def _run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     try:
-        return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=False)
+        runner = review_guard.run_owned if args[:1] == ('config',) and '--get' not in args else subprocess.run
+        return runner(["git", "-C", str(repo), *args], capture_output=True, text=True, check=False)
     except FileNotFoundError as error:
         raise OkfError("git is not installed; pass changed paths explicitly: okf.py affected PATH...") from error
 
@@ -1289,6 +1294,7 @@ def session_gate(bundle: Path) -> str | None:
             "separately gated tasks that start at zero, or close it. Raising --max-* flags does not reset this count (§9.2)")
 
 
+@review_guard.protected(lambda bundle: bundle.parent)
 def record_session(bundle: Path) -> tuple[str, int] | None:
     """Count one implementation session on the active task. The count lives in the queue, so it survives relaunches."""
     task = _anchor_task(bundle)
@@ -1681,6 +1687,7 @@ def _init_autonomy(bundle: Path) -> list[Path]:
     return [_create_autonomy_doc(bundle, rel) for rel in (QUEUE_DOC, STATUS_DOC) if not (bundle / rel).exists()]
 
 
+@review_guard.protected(lambda bundle: bundle.parent)
 def archive_closed(bundle: Path) -> list[str]:
     """Move DONE and CANCELLED tasks from the queue to the archive; return their IDs.
 
@@ -1877,7 +1884,7 @@ def run_merge_driver(base_path: str, ours_path: str, theirs_path: str, path: str
         Path(ours_path).write_text(merged, encoding="utf-8")
         return 0
     # Fall back to git's line merge so the conflict is presented the usual way.
-    subprocess.run(["git", "merge-file", "-L", "ours", "-L", "base", "-L", "theirs", ours_path, base_path, theirs_path], check=False)
+    review_guard.run_owned(["git", "merge-file", "-L", "ours", "-L", "base", "-L", "theirs", ours_path, base_path, theirs_path], check=False)
     return 1
 
 
@@ -2159,6 +2166,7 @@ def cmd_git_setup(bundle: Path, args: argparse.Namespace) -> int:
     return 0
 
 
+@review_guard.protected(lambda bundle, args: bundle.parent)
 def cmd_merge_driver(bundle: Path, args: argparse.Namespace) -> int:
     return run_merge_driver(args.base, args.ours, args.theirs, args.path)
 
@@ -2437,6 +2445,7 @@ def cmd_set(bundle: Path, args: argparse.Namespace) -> int:
     return 0
 
 
+@review_guard.protected(lambda bundle, args: bundle.parent)
 def cmd_stamp(bundle: Path, args: argparse.Namespace) -> int:
     require_bundle(bundle)
     at = args.at or utc_now()
@@ -2482,7 +2491,7 @@ def _run_for_stamp(repo: Path, command: list[str]) -> None:
     if not command:
         raise OkfError("--run needs a command after its NAME=VALUE assignments; nothing stamped")
     try:
-        result = subprocess.run(command, cwd=repo, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace")
+        result = review_guard.run_owned(command, cwd=repo, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace")
     except OSError as error:
         raise OkfError(f"cannot run {command[0]!r}: {error}; nothing stamped") from error
     if result.returncode != 0:
@@ -2790,8 +2799,19 @@ def main(argv: list[str] | None = None) -> int:
             print("okf: error: --run needs a command", file=sys.stderr)
             return 1
     try:
-        return args.handler(find_bundle(args.bundle), args)
-    except OkfError as error:
+        import review_guard
+        bundle = find_bundle(args.bundle)
+        mutating = args.handler.__name__ in {
+            'cmd_init', 'cmd_onboard', 'cmd_new', 'cmd_set', 'cmd_stamp', 'cmd_log',
+            'cmd_git_setup', 'cmd_merge_driver'}
+        mutating = mutating or (args.handler.__name__ == 'cmd_reindex' and not args.check)
+        mutating = mutating or (args.handler.__name__ == 'cmd_queue' and
+                                (getattr(args, 'archive', False) or getattr(args, 'record_session', False)))
+        if mutating:
+            with review_guard.target_producer(bundle.parent):
+                return args.handler(bundle, args)
+        return args.handler(bundle, args)
+    except (OkfError, review_guard.ReviewError) as error:
         print(f"okf: error: {error}", file=sys.stderr)
         return 1
 

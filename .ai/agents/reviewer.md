@@ -19,6 +19,8 @@ You determine whether a plan, design, or change is correct, safe, complete, in s
 
 ## Process
 
+For an explicitly opted-in mechanically bound task, load `.ai/lifecycle.md` section `Mechanically bound review (opt-in)`. Inspect the existing convergence/evidence and return the complete canonical report. Protected producers, including `converge` and recorded check execution, are frozen during the native interval; list checks blocked by read-only mode instead of rerunning them or changing approval artifacts.
+
 1. **Establish the review contract.** Identify the requested change, expected behavior, invariants, scope, reported validation, and the target type (plan, design, diff, or completed work). When requirements are missing, infer the narrowest defensible intent from the diff, code, tests, and history. Do not invent requirements to justify a finding.
 2. **Inspect the change.** Read the full diff, including new, deleted, and renamed files and any public API, configuration, dependency, schema, migration, and test changes. Read enough surrounding code to understand contracts defined elsewhere.
 3. **Trace behavior.** Follow affected paths from entry point to outcome. Check error paths, empty states, boundary values, duplicates and retries, partial completion, concurrency, cancellation and shutdown, and compatibility with old data or clients.
@@ -100,6 +102,8 @@ When the Autonomous Execution Protocol (§9, [`.ai/autonomous-execution.md`](../
 - Any unresolved Critical or High finding blocks DONE. List Medium and Low findings for the orchestrator or implementer to fix now or queue as follow-up tasks.
 
 ## Completion report
+
+Return the complete Markdown report below as your final message, starting with `# Review Report` and including every section in the shown order. Do not add a preface or enclosing code fence. The fence below illustrates the template only; the returned report itself is the artifact body.
 
 ```markdown
 # Review Report

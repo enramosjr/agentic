@@ -18,12 +18,13 @@ import time
 sys.dont_write_bytecode = True
 import timed_check
 import scratch
+import review_guard
 
 
 # These identify the supervising session, not the product under validation.
 # Remove them from execution too: ignored inputs must not influence a check.
 SESSION_ENV = frozenset({
-    "CODEX_THREAD_ID", "SHLVL", "_", "OKF_VALIDATION_REQUEST",
+    "CODEX_THREAD_ID", "SHLVL", "_", "OKF_VALIDATION_REQUEST", "_AGENTIC_REVIEW_PRODUCER",
     "OKF_WORK_REGISTRY", "OKF_CLOSURE_RELEASE", "OKF_DOCUMENT_AUDIT",
     "OKF_HANDOFF_REQUEST", "OKF_PROGRESS_REQUEST", "OKF_AUTONOMOUS_RECOVERY",
 })
@@ -147,6 +148,8 @@ def repair_candidate(job: dict, previous: Path | None, previous_digest: str | No
     return True
 
 
+@review_guard.protected(lambda registry, repo, worktree: repo)
+@review_guard.protected(lambda registry, repo, worktree: worktree)
 def register(registry: Path, repo: Path, worktree: Path) -> None:
     worktree = worktree.resolve()
     if Path(git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir")) != Path(git(worktree, "rev-parse", "--path-format=absolute", "--git-common-dir")):
@@ -212,6 +215,7 @@ class Cancelled(Exception):
     """A peer failed or the owning supervisor stopped validation."""
 
 
+@review_guard.protected(lambda command, number, log_path, repo, *args, **kwargs: repo)
 def execute(command: dict, number: int, log_path: Path, repo: Path, environment: dict,
             available: float, cancel: threading.Event) -> dict:
     started = time.monotonic()
@@ -221,11 +225,13 @@ def execute(command: dict, number: int, log_path: Path, repo: Path, environment:
     try:
         check_cancel()
         with log_path.open("x") as log:
-            outcome = timed_check.run(command["argv"], label=f"validation-{number}", cwd=repo,
+            launched, launch_error = review_guard.launch_plan(repo, command['argv'])
+            outcome = timed_check.run(launched, label=f"validation-{number}", cwd=repo,
                                       env=environment,
                                       timeout_seconds=min(command["timeout_seconds"], available),
                                       on_tick=check_cancel, tick_seconds=.05,
                                       on_output=lambda line: (log.write(line), log.flush()), merge_stderr=True)
+            review_guard.check_launch(launch_error)
         value = {"state": "PASS" if outcome.returncode == 0 else "FAIL", "exit_code": outcome.returncode}
     except Cancelled:
         value = {"state": "CANCELLED", "exit_code": 130}
@@ -241,6 +247,7 @@ def execute(command: dict, number: int, log_path: Path, repo: Path, environment:
     return value
 
 
+@review_guard.protected(lambda request, repo, *args, **kwargs: repo)
 def run(request: Path, repo: Path, deadline: float, reserve: float, report, tick, tick_seconds: float = 1) -> Path:
     job = plan(json.loads(request.read_text()))
     candidate = job.get("candidate")
@@ -391,6 +398,15 @@ def main() -> int:
     track = sub.add_parser("track-worker")
     track.add_argument("--worktree", type=Path, required=True)
     args = parser.parse_args()
+    try:
+        with review_guard.target_producer(Path.cwd()):
+            return submit_request(args)
+    except review_guard.ReviewError as error:
+        print(f'validation: {error}', file=sys.stderr)
+        return 1
+
+
+def submit_request(args) -> int:
     try:
         repo = Path.cwd()
         if args.action == "track-worker":

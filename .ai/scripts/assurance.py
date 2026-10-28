@@ -354,8 +354,8 @@ def selected(globs: list[str], path: str) -> bool:
     return chosen
 
 
-def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(['git', '-C', str(root), *args], capture_output=True, text=True, timeout=60)
+def _git(root: Path, *args: str, binary: bool = False) -> subprocess.CompletedProcess:
+    return subprocess.run(['git', '-C', str(root), *args], capture_output=True, text=not binary, timeout=60)
 
 
 def changed(root: Path, base: str, obligations: list[Obligation]) -> list[tuple[Obligation, str]]:
@@ -383,6 +383,70 @@ def changed(root: Path, base: str, obligations: list[Obligation]) -> list[tuple[
             if hits:
                 listed.append((obligation, 'inputs changed: ' + ', '.join(hits[:8]) + (' ...' if len(hits) > 8 else '')))
     return listed
+
+
+def touched(root: Path, base: str, obligations: list[Obligation], operated: tuple = ()) -> list[Obligation]:
+    """Gate scope from task-start BASE, including requirement edits; unlike changed(), fail closed."""
+    def git(*args: str) -> str:
+        result = _git(root, *args, binary=True)
+        if result.returncode:
+            raise ValueError('assurance selection failed: ' + decoded_git(result.stderr).strip())
+        return decoded_git(result.stdout)
+
+    def decoded_git(value: bytes | str) -> str:
+        # Preserve blob CRLF and NUL-delimited path bytes; text-mode universal newlines alter both.
+        return value.decode('utf-8') if isinstance(value, bytes) else value
+
+    if not base or base.startswith('-'):
+        raise ValueError('assurance baseline is missing or invalid')
+    try:
+        resolved = git('rev-parse', '--verify', '--quiet', base + '^{commit}').strip()
+    except ValueError as error:
+        raise ValueError(f'assurance baseline {base!r} is not a resolvable commit') from error
+    files = set(git('diff', '--no-renames', '--name-only', '-z', resolved, '--').split('\0'))
+    files.update(git('ls-files', '--others', '--exclude-standard', '-z').split('\0'))
+    files.discard('')
+    baseline = {}
+    paths = git('ls-tree', '-r', '--name-only', '-z', resolved, '--', 'knowledge/capabilities').split('\0')
+    for name in paths:
+        if not name.endswith('.md') or Path(name).name in ('index.md', 'log.md'):
+            continue
+        text = git('show', f'{resolved}:{name}')
+        meta, spans = brownfield.document(text)
+        if meta.get('namespace') and 'requirements' in spans:
+            for rid, block in brownfield.blocks(text, spans['requirements']).items():
+                baseline[name, rid] = brownfield.sha(block.raw)
+    ids = [o.id for o in obligations]
+    if len(ids) != len(set(ids)):
+        raise ValueError('assurance capabilities contain duplicate requirement IDs')
+    return [o for o in obligations if o.id in operated or o.invalid
+            or baseline.get((o.capability, o.id)) != o.block_sha256
+            or (o.declared and (not o.globs or any(selected(o.evidence_globs, name) for name in files)))]
+
+
+def gate_problem(root: Path, state: dict, records_dir: Path, tree: str) -> str | None:
+    """Read-only Verify check; risk and attested annotations do not waive mechanical failures."""
+    try:
+        obligations, diagnostics = requirements(root)
+        if diagnostics:
+            raise ValueError('; '.join(diagnostics))
+        if not obligations:
+            return None
+        operated = tuple(op['id'] for op in (state.get('merge') or {}).get('operations', []))
+        chosen = touched(root, state.get('head'), obligations, operated)
+        items, diagnostics = evidence(records_dir, state)
+        if diagnostics:
+            raise ValueError('; '.join(diagnostics))
+        results = [evaluate(root, o, items, tree) for o in chosen]
+    except (OSError, ValueError, UnicodeError, subprocess.SubprocessError) as error:
+        return f'assurance gate refused: {error}; repair selection/evidence and retry Verify'
+    failing = [item for item in results if item['status'] in FAILING]
+    if failing:
+        return 'assurance gate refused:\n' + '\n'.join(
+            f"  {item['id']} {item['status']}: {item['reason']}; repair invalid declarations if needed, "
+            f"then run `python3 .ai/scripts/lifecycle.py assure --run {item['id']}` and retry Verify"
+            for item in failing)
+    return None
 
 
 def exit_code(results: list[dict], strict: bool, broken: bool) -> int:

@@ -18,6 +18,7 @@ sys.dont_write_bytecode = True
 
 import scratch
 import timed_check
+import review_guard
 
 
 def digest(path):
@@ -65,6 +66,7 @@ def verify(bundle, pin):
     return data
 
 
+@review_guard.protected(lambda repo, *args, **kwargs: repo)
 def freeze(repo, root, names):
     sources = {name: member(root, name) for name in names}
     if len(sources) != len(names):
@@ -115,6 +117,15 @@ def main(argv=None):
             p.add_argument('argv', nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     try:
+        return perform(args)
+    except review_guard.ReviewError as error:
+        print(f'artifact: {error}', file=sys.stderr)
+        return 1
+
+
+@review_guard.protected(lambda args: Path.cwd(), when=lambda args: args.action != 'verify')
+def perform(args):
+    try:
         repo = Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True).strip())
         if args.action == 'freeze':
             print(json.dumps(freeze(repo, args.root.resolve(), args.file)))
@@ -148,10 +159,12 @@ def main(argv=None):
         env.update(CARGO_TARGET_DIR=build, AGENTIC_BUILD_DIR=build)
         try:
             if os.name == 'posix':
-                result = timed_check.run(command, label='artifact-acceptance', cwd=repo, env=env,
+                launched, launch_error = review_guard.launch_plan(repo, command)
+                result = timed_check.run(launched, label='artifact-acceptance', cwd=repo, env=env,
                                          timeout_seconds=args.timeout)
+                review_guard.check_launch(launch_error)
             else:
-                result = subprocess.run(command, cwd=repo, env=env, timeout=args.timeout)
+                result = review_guard.run(repo, command, cwd=repo, env=env, timeout=args.timeout)
         finally:
             verify(args.bundle, args.sha256)
         return result.returncode
