@@ -22,7 +22,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True  # Bytecode beside the scripts would dirty the work tree.
 
 KEYS = ("label", "argv", "exit", "tree", "head", "duration", "at", "inputs", "inputs_sha256")
-OPTIONAL_KEYS = ('input_files', 'context_sha256', 'profile')
+OPTIONAL_KEYS = ('input_files', 'context_sha256', 'profile', 'runtime_sha256')
 SESSION_KEYS = {'CODEX_THREAD_ID', 'SHLVL', '_'}
 OUTPUT_KEYS = ("tail", "output", "stdout", "stderr")
 MAX_ENTRIES = 100
@@ -181,6 +181,16 @@ def context_digest(argv):
     return hashlib.sha256(json.dumps({'env': env, 'executable': executable, 'runtime': runtime}, sort_keys=True).encode()).hexdigest()
 
 
+def runtime_digest(argv):
+    """The resolved executable and its content, without session environment, so evidence survives new shells."""
+    executable = shutil.which(argv[0]) if argv else None
+    try:
+        runtime = hashlib.sha256(Path(executable).read_bytes()).hexdigest() if executable else None
+    except OSError:
+        runtime = None
+    return hashlib.sha256(json.dumps({'executable': executable, 'runtime': runtime}, sort_keys=True).encode()).hexdigest()
+
+
 def make_entry(label: str, argv: list[str], code: int | None, tree: str, head: str, duration: float,
                at: str, globs: list[str], digest: str | None) -> dict:
     return {"label": label, "argv": list(argv), "exit": code, "tree": tree, "head": head,
@@ -226,6 +236,8 @@ def _entry_verdict(root: Path, entry: dict, tree: str | None = None) -> tuple[bo
     try:
         if entry.get('context_sha256') and context_digest(entry['argv']) != entry['context_sha256']:
             return False, f'{name} execution environment or runtime changed'
+        if entry.get('runtime_sha256') and runtime_digest(entry['argv']) != entry['runtime_sha256']:
+            return False, f'{name} runtime executable changed'
         current_digest = inputs_digest(root, globs)
         current_files = inputs_snapshot(root, globs) if 'input_files' in entry else None
     except (OSError, ValueError) as error:

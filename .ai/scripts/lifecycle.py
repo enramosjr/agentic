@@ -61,6 +61,7 @@ learning = lazy("learning")
 ledger = lazy("ledger")
 scan = lazy("scan")
 project_context = lazy('project_context')
+assurance = lazy('assurance')
 import difflib  # noqa: E402
 from datetime import date
 
@@ -83,7 +84,7 @@ HOOK_WIP = re.compile(r"""(?:-[a-zA-Z]*m|--message)[ =]*["']?wip:""")  # Only a 
 HOOK_ADD = re.compile(r"\bgit\s+add\b([^;&|]*)")
 RECORD_DIR = "knowledge/history/lifecycle"
 RUN_ROOTS_ENV = "_AGENTIC_LIFECYCLE_RUN_ROOTS"
-MUTATING_COMMANDS = frozenset({'tier', 'stage', 'redgreen', 'run', 'converge', 'merge', 'learn', 'promote', 'retire', 'retrospect', 'finish'})
+MUTATING_COMMANDS = frozenset({'tier', 'stage', 'redgreen', 'run', 'converge', 'merge', 'learn', 'promote', 'retire', 'retrospect', 'finish', 'assure'})
 RECORD_KEYS = ("version", "task", "branch", "head", "tier", "reason", "user_set", "history", "stages", "redgreen")
 DEFAULT_VAGUE_TERMS = (
     "fast", "quickly", "robust", "intuitive", "user-friendly", "appropriate", "as needed", "easy",
@@ -975,41 +976,121 @@ def cmd_run(args: argparse.Namespace) -> int:
     try:
         profile = ledger.infer_inputs(root, command) if not args.inputs else None
         globs = ledger.check_globs(args.inputs or (profile[1] if profile else []))
-        if profile:
-            globs = [*globs, '!knowledge/history/lifecycle/**']  # Output receipts cannot fingerprint themselves.
+    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+        raise LifecycleError(f"run refused, nothing was run: {error}") from error
+    if profile:
+        globs = [*globs, '!knowledge/history/lifecycle/**']  # Output receipts cannot fingerprint themselves.
+    return execute_check(root, state, args.label, command, globs, args.timeout, profile=profile)
+
+
+def execute_check(root: Path, state: dict, label: str, command: list[str], globs: list[str], timeout: float,
+                  profile: tuple | None = None, runtime: bool = False) -> int:
+    """Run COMMAND once in scratch and append its ledger entry; `run` and `assure --run` share this path."""
+    try:
         env = scratch.environment(root)  # Checks build fixtures with tempfile; scratch refuses /tmp and tmpfs.
         if profile:
             for key in ledger.SESSION_KEYS:
                 env.pop(key, None)
         env[RUN_ROOTS_ENV] = json.dumps([*run_roots(), str(root.resolve())])
         before_digest = ledger.inputs_digest(root, globs)
-        before_files = ledger.inputs_snapshot(root, globs) if profile else None
+        before_files = ledger.inputs_snapshot(root, globs) if profile or (runtime and globs) else None
         before_context = ledger.context_digest(command) if profile else None
+        before_runtime = ledger.runtime_digest(command) if runtime else None
         before_tree, before_head = tree_hash(root), head_sha(root)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         raise LifecycleError(f"run refused, nothing was run: {error}") from error
     started, code, output = time.monotonic(), None, ""
     try:
-        result = subprocess.run(command, cwd=root, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace", timeout=args.timeout)
+        result = subprocess.run(command, cwd=root, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace", timeout=timeout)
         code, output = result.returncode, result.stdout + result.stderr
     except subprocess.TimeoutExpired as error:
         output = decoded(error.stdout) + decoded(error.stderr) + "\ntimeout"
     except (ValueError, OSError) as error:
         output = f"cannot run: {error}"
-    entry = ledger.make_entry(args.label, command, code, before_tree if globs else tree_hash(root),
+    entry = ledger.make_entry(label, command, code, before_tree if globs else tree_hash(root),
                               before_head if globs else head_sha(root), time.monotonic() - started,
                               now(), globs, before_digest)
     if profile:
         entry.update(profile=profile[0], input_files=before_files, context_sha256=before_context)
+    elif before_files is not None:
+        entry["input_files"] = before_files
+    if before_runtime:
+        entry["runtime_sha256"] = before_runtime
     with state_lock(root):
         state = evidence_state(root, state)
         ledger.append(state, entry)
         save(root, state)
-    print(f"run {args.label}: exit={code if code is not None else 'none'} tree={entry['tree'][:7]}")
+    print(f"run {label}: exit={code if code is not None else 'none'} tree={entry['tree'][:7]}")
     if code != 0:
         for line in output.strip().splitlines()[-12:]:
             print(f"    {line}")
     return 1 if code is None else code
+
+
+def cmd_assure(args: argparse.Namespace) -> int:
+    """Report requirement assurance status; with --run, record evidence for declared obligations."""
+    root = repo_root()
+    if args.run is not None:
+        ignored = [flag for flag, given in (('--changed', args.changed), ('--base', args.base), ('--strict', args.strict), ('--json', args.json)) if given]
+        if ignored:
+            print(f"lifecycle: assure refused: --run does not combine with {', '.join(ignored)}", file=sys.stderr)
+            return 2
+        return assure_run(root, args)
+    args.base = args.base or 'HEAD'
+    obligations, diagnostics = assurance.requirements(root)
+    broken = bool(diagnostics)
+    items, more = assurance.evidence(record_path(root, {"task": "_"}).parent, load(root))
+    diagnostics += more
+    tree = tree_hash(root)
+    reasons: dict[str, str] = {}
+    if args.changed:
+        try:
+            listed = assurance.changed(root, args.base, obligations)
+        except ValueError as error:
+            print(f"lifecycle: assure refused: {error}", file=sys.stderr)
+            return 2
+        obligations = [obligation for obligation, _ in listed]
+        reasons = {obligation.id: reason for obligation, reason in listed}
+    results = [assurance.evaluate(root, obligation, items, tree) for obligation in obligations]
+    for item in results:
+        if item["id"] in reasons:
+            item["reason"] = f"{reasons[item['id']]}; {item['status']}: {item['reason']}"
+    if args.json:
+        print(json.dumps(assurance.document(results, diagnostics, args.base if args.changed else None), indent=2, sort_keys=True))
+    else:
+        print(assurance.render(results, diagnostics))
+    return assurance.exit_code(results, args.strict, broken)
+
+
+def assure_run(root: Path, args: argparse.Namespace) -> int:
+    try:
+        with state_lock(root):
+            state = require_state(root)
+    except LifecycleError as error:
+        raise LifecycleError(f"assure --run refused, nothing was run: {error}") from error
+    obligations, diagnostics = assurance.requirements(root)
+    if diagnostics:
+        raise LifecycleError("assure --run refused, nothing was run: " + "; ".join(diagnostics))
+    known = {obligation.id: obligation for obligation in obligations}
+    unknown = [rid for rid in args.run if rid not in known]
+    if unknown:
+        raise LifecycleError(f"assure --run refused, nothing was run: unknown requirement(s) {', '.join(unknown)}")
+    chosen = [known[rid] for rid in args.run] if args.run else [o for o in obligations if o.declared]
+    failed = False
+    for obligation in chosen:
+        if obligation.invalid or not obligation.declared:
+            print(f"skip {obligation.id}: {obligation.invalid or 'no Verify: line'}")
+            failed = True
+        elif obligation.manual is not None:
+            print(f"skip {obligation.id}: manual ({obligation.manual})")
+    runnable = [o for o in chosen if o.declared and not o.invalid and o.manual is None]
+    for obligation in runnable:
+        code = execute_check(root, state, f"req:{obligation.id}", list(obligation.argv),
+                             obligation.evidence_globs, args.timeout, runtime=True)
+        failed = failed or code != 0
+    if not runnable:
+        print("assure: no runnable obligations")
+    return 1 if failed else 0
 
 
 def cmd_reuse(args: argparse.Namespace) -> int:
@@ -1699,6 +1780,14 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--inputs", nargs="+", metavar="GLOB", help="repo-relative globs whose content `reuse` re-checks")
     p.add_argument("--timeout", type=float, default=600)
     p.set_defaults(func=cmd_run, run_command=[])
+    p = sub.add_parser('assure', help='report whether each capability requirement has current passing evidence; exit 1 on STALE, FAILED, UNVERIFIED or INVALID')
+    p.add_argument('--run', nargs='*', metavar='ID', help="record evidence for declared obligations (all when no ID is given)")
+    p.add_argument('--changed', action='store_true', help='list only obligations a change since --base may affect; runs nothing')
+    p.add_argument('--base', default=None, metavar='REV', help='baseline for --changed (default: HEAD)')
+    p.add_argument('--strict', action='store_true', help='also fail on UNDECLARED requirements')
+    p.add_argument('--json', action='store_true')
+    p.add_argument('--timeout', type=float, default=600, help='seconds per obligation with --run (default 600)')
+    p.set_defaults(func=cmd_assure)
     p = sub.add_parser('finish', help='consolidate completion blockers; --apply uses existing evidence only')
     p.add_argument('--json', action='store_true')
     p.add_argument('--apply', action='store_true')
@@ -1759,11 +1848,12 @@ def main(argv: list[str] | None = None) -> int:
         args.run_command = command
     try:
         verb = args.func.__name__.removeprefix('cmd_')
-        if verb in MUTATING_COMMANDS and not ((verb == 'merge' and args.dry_run) or (verb == 'finish' and not args.apply)):
+        if verb in MUTATING_COMMANDS and not ((verb == 'merge' and args.dry_run) or (verb == 'finish' and not args.apply)
+                                              or (verb == 'assure' and args.run is None)):
             roots = run_roots()
             if roots and str(repo_root().resolve()) in roots:
                 raise LifecycleError('invoke lifecycle mutations directly, outside lifecycle.py run; ancestor run owns this repository evidence')
-            if verb not in {'run', 'converge'}:
+            if verb not in {'run', 'converge', 'assure'}:
                 with state_lock(repo_root()):
                     return args.func(args)
         return args.func(args)

@@ -225,6 +225,20 @@ class MechanicalDocs(unittest.TestCase):
             self.assertNotRegex(okf_source, rf"^(?:import|from) {module}\b", module)
 
 
+class Assurance(unittest.TestCase):
+    """Requirement assurance status is documented in the lifecycle guide."""
+
+    def test_assurance_documented(self) -> None:  # assurance-increment-1 R10
+        section = re.search(r"(?s)## Assurance status\n(.*?)(?=\n## )", text(".ai/lifecycle.md"))
+        self.assertIsNotNone(section, ".ai/lifecycle.md needs an '## Assurance status' section")
+        body = section.group(1)
+        for term in ("- Verify:", "- Inputs:", "VERIFIED", "STALE", "FAILED", "UNVERIFIED", "INVALID", "MANUAL", "UNDECLARED",
+                     "lifecycle.py assure", "--run", "--changed", "--strict",
+                     "covers only that command on those inputs", "whole tree", "squash", "runtime executable changed", "does not combine with"):
+            self.assertIn(term, body, term)
+        self.assertRegex(text(".ai/lifecycle.md"), r"(?m)^\| Assurance \| `assure", "Recording table row")
+
+
 class HarnessWiring(unittest.TestCase):
     def hooks(self, path: str) -> dict:
         return json.loads(text(path))["hooks"]
