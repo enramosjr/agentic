@@ -102,6 +102,15 @@ class CompletionTests(LifecycleCase):
         tokens = shlex.split(json.loads(result.stdout)['meta']['verified']['by'].removeprefix('process:'))
         self.assertEqual(shlex.split(tokens[tokens.index('reuse') + 1]), command)
 
+    def test_direct_runtime_command_can_have_a_reuse_argument(self):
+        _, okf = self.prepare_adopter()
+        command = [*lifecycle.load(self.repo)['ledger'][-1]['argv'], 'reuse', 'receipt']
+        self.ok('run', 'greeting', '--inputs', 'app.py', '--', *command)
+        okf('stamp', 'verified', 'capabilities/greeting.md', '--run', *command)
+        okf('set', 'capabilities/greeting.md', 'evidence=validated-runtime')
+        code, data = self.finish('--apply', '--bind', 'knowledge/capabilities/greeting.md=greeting')
+        self.assertEqual(code, 0, data)
+
     def test_read_only_report_then_apply_existing_evidence_without_rerun(self):
         (self.repo / '.agentic.json').write_text('{"repository_kind":"framework"}')
         self.ok('tier', 'L1', '--reason', 'source completion')

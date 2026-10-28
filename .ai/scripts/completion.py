@@ -107,10 +107,9 @@ def apply_bindings(root, state, bindings):
             prior = meta.get('verified', {}).get('by', '')
             tokens = shlex.split(prior.removeprefix('process:'))
             original = tokens
-            if 'reuse' in tokens:
-                original = tokens[tokens.index('reuse') + 1:]
-                if len(original) == 1:
-                    original = shlex.split(original[0])
+            if (tokens != entry['argv'] and len(tokens) == 4 and tokens[2] == 'reuse'
+                    and (root / tokens[1]).resolve() == (root / '.ai/scripts/lifecycle.py').resolve()):
+                original = shlex.split(tokens[3])
             same = original == entry['argv']
             if not prior.startswith('process:') or not same:
                 raise ValueError(f'{doc}: runtime claims need their original check binding; not refreshed')

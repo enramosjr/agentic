@@ -11,6 +11,27 @@ from test_ledger import LedgerCase
 
 
 class DefaultScopeTests(LedgerCase):
+    def test_input_fingerprints_use_literal_git_paths(self):
+        for name in ('café.txt', 'line\nbreak.txt', 'quote".txt'):
+            with self.subTest(name=name):
+                path = self.repo / name
+                path.write_text('original')
+                self.assertIn(name, ledger.input_paths(self.repo, ['**']))
+                before = ledger.inputs_digest(self.repo, ['**'])
+                path.write_text('changed')
+                self.assertNotEqual(before, ledger.inputs_digest(self.repo, ['**']))
+
+    def test_package_scope_keeps_selected_packages_nested_under_unselected_members(self):
+        parent = self.repo / 'crates/parent'
+        child = parent / 'child'
+        child.mkdir(parents=True)
+        (child / 'lib.rs').write_text('selected source')
+        metadata = {'workspace_members': ['parent', 'child'], 'packages': [
+            {'id': 'parent', 'name': 'parent', 'manifest_path': str(parent / 'Cargo.toml'), 'dependencies': []},
+            {'id': 'child', 'name': 'child', 'manifest_path': str(child / 'Cargo.toml'), 'dependencies': []}]}
+        globs = ledger.package_inputs(self.repo, ['cargo', 'test', '-p', 'child'], metadata)
+        self.assertIn('crates/parent/child/lib.rs', ledger.input_paths(self.repo, globs))
+
     def test_known_commands_get_scopes_unknown_commands_do_not(self):
         self.assertEqual(ledger.default_inputs(['cargo', 'fmt', '--all', '--', '--check'])[0], 'cargo-format')
         self.assertEqual(ledger.default_inputs([sys.executable, '-m', 'unittest', 'discover'])[1], ['**'])

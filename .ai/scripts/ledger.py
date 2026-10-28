@@ -71,10 +71,10 @@ def default_inputs(argv):
 
 
 def input_paths(root, globs):
-    result = _git(root, "ls-files", "-co", "--exclude-standard")
+    result = _git(root, "ls-files", "-z", "-co", "--exclude-standard")
     if result.returncode:
         raise ValueError('cannot read input inventory: ' + result.stderr.strip())
-    listing = result.stdout.splitlines()
+    listing = result.stdout.rstrip('\0').split('\0') if result.stdout else []
     selected = set()
     for glob in globs:
         negative = glob.startswith('!')
@@ -115,6 +115,9 @@ def package_inputs(root, argv, metadata):
         if name not in selected:
             if relative == '.':
                 return ['**']
+            if any(Path(members[item]['manifest_path']).parent.resolve().is_relative_to(directory)
+                   for item in selected):
+                continue  # Excluding this parent would also hide a selected nested package.
             globs.extend(['!' + relative + '/**', relative + '/Cargo.toml'])
     return globs
 
