@@ -149,9 +149,12 @@ def inputs_snapshot(root: Path, globs: list[str]) -> dict:
         path = root / name
         try:
             data = path.read_bytes()
+            metadata = [path.lstat().st_mode, os.readlink(path) if path.is_symlink() else None]
         except OSError:
             data = b'<missing>'
-        files[name] = hashlib.sha256(data).hexdigest()
+            metadata = None
+        files[name] = hashlib.sha256(hashlib.sha256(data).digest() +
+                                     json.dumps(metadata).encode()).hexdigest()
     return files
 
 
@@ -224,11 +227,12 @@ def _entry_verdict(root: Path, entry: dict, tree: str | None = None) -> tuple[bo
         if entry.get('context_sha256') and context_digest(entry['argv']) != entry['context_sha256']:
             return False, f'{name} execution environment or runtime changed'
         current_digest = inputs_digest(root, globs)
+        current_files = inputs_snapshot(root, globs) if 'input_files' in entry else None
     except (OSError, ValueError) as error:
         return False, f'{name} inputs could not be verified: {error}'
-    if current_digest != entry.get("inputs_sha256"):
+    if current_digest != entry.get("inputs_sha256") or (current_files is not None and current_files != entry['input_files']):
         if 'input_files' in entry:
-            current, previous = inputs_snapshot(root, globs), entry['input_files']
+            current, previous = current_files, entry['input_files']
             changed = sorted(p for p in current.keys() | previous.keys() if current.get(p) != previous.get(p))
             return False, f"{name} inputs changed: {', '.join(changed[:8])}" + (' ...' if len(changed) > 8 else '')
         changed = _git(root, "diff", "--name-only", head, "HEAD").stdout.splitlines()

@@ -64,7 +64,8 @@ the repository-wide scope rather than guessed imports. `--inputs` remains the
 explicit override; unknown commands or unsupported external inputs retain the
 exact-tree fallback. Generated lifecycle receipts are excluded from inferred inputs.
 
-Inferred receipts include file fingerprints and a hash of runtime/environment
+Inferred receipts include file fingerprints covering bytes, permission modes and
+symlink targets, plus a hash of runtime/environment
 identity; environment values are not written to the ledger. Committing identical
 tested bytes does not invalidate input-scoped evidence. Changed files are named
 where a snapshot exists; legacy receipts keep their digest format and conservative

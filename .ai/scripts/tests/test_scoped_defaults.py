@@ -1,5 +1,6 @@
 """Conservative automatic input scopes and explainable content-based reuse."""
 from pathlib import Path
+import os
 import sys
 import unittest
 from unittest import mock
@@ -11,6 +12,48 @@ from test_ledger import LedgerCase
 
 
 class DefaultScopeTests(LedgerCase):
+    def prepare_helper_check(self, command, expected):
+        tests = self.repo / 'tests'
+        tests.mkdir()
+        (tests / 'test_helper.py').write_text(
+            'import unittest, subprocess\nclass Helper(unittest.TestCase):\n'
+            f' def test_helper(self):\n  self.assertEqual(subprocess.check_output({command!r}, text=True).strip(), {expected!r})\n')
+        self.ok('tier', 'L1', '--reason', 'input metadata')
+        self.ok('run', 'unit', '--', sys.executable, '-m', 'unittest', 'discover', '-s', 'tests')
+        self.assertEqual(self.run_cli('reuse', 'unit')[0], 0)
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX executable permissions')
+    def test_inferred_reuse_rejects_changed_executable_permissions(self):
+        helper = self.repo / 'helper.py'
+        helper.write_text(f'#!{sys.executable}\nprint("ok")\n')
+        helper.chmod(0o755)
+        self.prepare_helper_check(['./helper.py'], 'ok')
+        helper.chmod(0o644)
+        result = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests'],
+                                cwd=self.repo, capture_output=True)
+        self.assertNotEqual(result.returncode, 0, 'helper execution should fail after chmod')
+        code, out, err = self.run_cli('reuse', 'unit')
+        self.assertEqual(code, 1, out + err)
+        self.assertIn('helper.py', out + err)
+
+    @unittest.skipUnless(os.name == 'posix', 'POSIX symlinks')
+    def test_inferred_reuse_rejects_retargeted_symlinks_with_identical_bytes(self):
+        for name in ('left', 'right'):
+            directory = self.repo / name
+            directory.mkdir()
+            (directory / 'helper.py').write_text('from pathlib import Path\nprint(Path(__file__).resolve().parent.name)\n')
+        helper = self.repo / 'helper.py'
+        helper.symlink_to('left/helper.py')
+        self.prepare_helper_check([sys.executable, 'helper.py'], 'left')
+        helper.unlink()
+        helper.symlink_to('right/helper.py')
+        result = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests'],
+                                cwd=self.repo, capture_output=True)
+        self.assertNotEqual(result.returncode, 0, 'helper output should change after retargeting')
+        code, out, err = self.run_cli('reuse', 'unit')
+        self.assertEqual(code, 1, out + err)
+        self.assertIn('helper.py', out + err)
+
     def test_submodule_inputs_cannot_be_hashed_as_missing_files(self):
         (self.repo / 'vendor').mkdir()
         self.git('update-index', '--add', '--cacheinfo', f'160000,{self.head()},vendor')
