@@ -614,6 +614,9 @@ def cmd_tier(args: argparse.Namespace) -> int:
                     del state["stages"][stage]
     else:
         state = {"version": 1, "tier": args.tier, "reason": args.reason, "user_set": args.user_set, "stages": {}, "redgreen": [], "history": [], "head": head_sha(root)}
+        if args.tier == 'L0':
+            import uuid
+            state['task'] = new_task_id(root) + '-' + uuid.uuid4().hex[:12]
     if args.kind:
         state["kind"] = args.kind
     save(root, state)

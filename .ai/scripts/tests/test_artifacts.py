@@ -74,6 +74,19 @@ class ArtifactTests(LifecycleCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('symlink refused', result.stderr)
 
+    @unittest.skipUnless(os.name == 'posix', 'POSIX process-group supervision')
+    def test_timeout_stops_descendants_before_post_run_verification(self):
+        receipt = self.freeze()
+        ready, escaped = self.repo / '.git/child-ready', self.repo / '.git/escaped'
+        child = (f'from pathlib import Path; import time; Path({str(ready)!r}).touch(); '
+                 f'time.sleep(2); Path({str(escaped)!r}).write_text("escaped")')
+        parent = f'import subprocess,sys,time; subprocess.Popen([sys.executable,"-c",{child!r}]); time.sleep(10)'
+        result = self.cli('run', '--bundle', receipt['bundle'], '--sha256', receipt['sha256'],
+                          '--timeout', '1', '--', sys.executable, '-c', parent, '{artifact:app.py}')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(ready.exists(), 'descendant was not started, so cleanup was not exercised')
+        self.assertFalse(escaped.exists(), 'descendant outlived the artifact timeout')
+
 
 if __name__ == '__main__':
     unittest.main()

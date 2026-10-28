@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -16,6 +17,7 @@ import tempfile
 sys.dont_write_bytecode = True
 
 import scratch
+import timed_check
 
 
 def digest(path):
@@ -139,11 +141,17 @@ def main(argv=None):
             command.append(re.sub(r'\{artifact:([^}]+)\}', replace, arg))
         if not command or not referenced:
             raise ValueError('acceptance must reference a declared {artifact:PATH}')
+        if not math.isfinite(args.timeout) or args.timeout <= 0:
+            raise ValueError('artifact timeout must be positive and finite')
         build = tempfile.mkdtemp(prefix='acceptance-build-', dir=scratch.directory(repo))
         env = scratch.environment(repo)
         env.update(CARGO_TARGET_DIR=build, AGENTIC_BUILD_DIR=build)
         try:
-            result = subprocess.run(command, cwd=repo, env=env, timeout=args.timeout)
+            if os.name == 'posix':
+                result = timed_check.run(command, label='artifact-acceptance', cwd=repo, env=env,
+                                         timeout_seconds=args.timeout)
+            else:
+                result = subprocess.run(command, cwd=repo, env=env, timeout=args.timeout)
         finally:
             verify(args.bundle, args.sha256)
         return result.returncode

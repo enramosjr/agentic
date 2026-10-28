@@ -71,7 +71,10 @@ def default_inputs(argv):
 
 
 def input_paths(root, globs):
-    listing = _git(root, "ls-files", "-co", "--exclude-standard").stdout.splitlines()
+    result = _git(root, "ls-files", "-co", "--exclude-standard")
+    if result.returncode:
+        raise ValueError('cannot read input inventory: ' + result.stderr.strip())
+    listing = result.stdout.splitlines()
     selected = set()
     for glob in globs:
         negative = glob.startswith('!')
@@ -206,9 +209,13 @@ def _entry_verdict(root: Path, entry: dict, tree: str | None = None) -> tuple[bo
     head = entry.get("head") or ""
     if not head or _git(root, "cat-file", "-e", f"{head}^{{commit}}").returncode != 0:
         return False, f"the commit {head[:7] or '?'} it ran on is not resolvable"
-    if entry.get('context_sha256') and context_digest(entry['argv']) != entry['context_sha256']:
-        return False, f'{name} execution environment or runtime changed'
-    if inputs_digest(root, globs) != entry.get("inputs_sha256"):
+    try:
+        if entry.get('context_sha256') and context_digest(entry['argv']) != entry['context_sha256']:
+            return False, f'{name} execution environment or runtime changed'
+        current_digest = inputs_digest(root, globs)
+    except (OSError, ValueError) as error:
+        return False, f'{name} inputs could not be verified: {error}'
+    if current_digest != entry.get("inputs_sha256"):
         if 'input_files' in entry:
             current, previous = inputs_snapshot(root, globs), entry['input_files']
             changed = sorted(p for p in current.keys() | previous.keys() if current.get(p) != previous.get(p))

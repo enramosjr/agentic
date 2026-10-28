@@ -66,8 +66,13 @@ def report(root, state, tests):
             data['checks'].append({'name': command[0], 'ok': result.returncode == 0})
             if result.returncode:
                 if command[0] == 'sync-check':
-                    violations = json.loads(result.stdout).get('violations', [])
-                    blockers.extend(f"knowledge {v['rule']}: {v['path']}" for v in violations)
+                    try:
+                        violations = json.loads(result.stdout).get('violations', [])
+                        messages = [f"knowledge {v['rule']}: {v['path']}" for v in violations]
+                    except (ValueError, AttributeError, TypeError, KeyError):
+                        messages = []
+                    blockers.extend(messages or ['knowledge sync-check: ' +
+                                                 (result.stderr or result.stdout or 'check failed').strip()])
                 else:
                     blockers.append('knowledge records: ' + (result.stdout + result.stderr).strip())
     data['evidence'] = [e['label'] for e in ledger.current_entries(root, state.get('ledger', []), lifecycle.tree_hash(root))]
@@ -101,7 +106,12 @@ def apply_bindings(root, state, bindings):
         if meta.get('evidence') == 'validated-runtime':
             prior = meta.get('verified', {}).get('by', '')
             tokens = shlex.split(prior.removeprefix('process:'))
-            same = tokens == entry['argv'] or ('reuse' in tokens and ' '.join(tokens[tokens.index('reuse') + 1:]) == label)
+            original = tokens
+            if 'reuse' in tokens:
+                original = tokens[tokens.index('reuse') + 1:]
+                if len(original) == 1:
+                    original = shlex.split(original[0])
+            same = original == entry['argv']
             if not prior.startswith('process:') or not same:
                 raise ValueError(f'{doc}: runtime claims need their original check binding; not refreshed')
         changed = lifecycle.changed_names(root)
@@ -119,18 +129,22 @@ def apply_bindings(root, state, bindings):
         covered = set(ledger.input_paths(root, entry['inputs']))
         if not sources or not set(sources) <= covered:
             raise ValueError(f'{doc}: evidence does not cover its changed mapped sources')
-        prepared.append((doc, label))
-    for doc, label in prepared:
+        command = shlex.join(entry['argv'])
+        reusable, reason = ledger.verdict(root, entries, command, lifecycle.tree_hash(root))
+        if not reusable:
+            raise ValueError(f'{doc}: original command evidence is not current: {reason}')
+        prepared.append((doc, label, command))
+    for doc, label, command in prepared:
         result = okf(root, 'stamp', 'verified', doc, '--run', sys.executable,
-                     str(root / '.ai/scripts/lifecycle.py'), 'reuse', label)
+                     str(root / '.ai/scripts/lifecycle.py'), 'reuse', command)
         if result.returncode:
             raise ValueError(result.stdout + result.stderr)
     if prepared:
         result = okf(root, 'log', 'Completion metadata refreshed from existing PASS evidence: ' +
-                     '; '.join(f'{doc}: lifecycle.py reuse {label} -> PASS' for doc, label in prepared))
+                     '; '.join(f'{doc}: lifecycle.py reuse {command} -> PASS' for doc, _, command in prepared))
         if result.returncode:
             raise ValueError(result.stderr)
-    return [f'verified metadata: {doc} from {label}' for doc, label in prepared]
+    return [f'verified metadata: {doc} from {label}' for doc, label, _ in prepared]
 
 
 def finish(args):

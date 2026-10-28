@@ -2,6 +2,8 @@
 from pathlib import Path
 import sys
 import unittest
+from unittest import mock
+import subprocess
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import ledger
@@ -39,6 +41,12 @@ class DefaultScopeTests(LedgerCase):
         self.assertEqual(self.entries()[-1]['inputs'], [])
         (self.repo / 'changed.txt').write_text('changed')
         self.assertNotEqual(self.run_cli('reuse', 'unknown')[0], 0)
+
+    def test_failed_input_inventory_cannot_be_fingerprinted_as_an_empty_repository(self):
+        failed = subprocess.CompletedProcess(['git', 'ls-files'], 128, '', 'fatal: index is corrupt')
+        with mock.patch.object(ledger, '_git', return_value=failed):
+            with self.assertRaisesRegex(ValueError, 'input inventory'):
+                ledger.inputs_digest(self.repo, ['**'])
 
     def test_package_scope_covers_dependencies_and_all_manifests_but_not_unrelated_code(self):
         metadata = {'workspace_members': ['a', 'b', 'c'], 'packages': [

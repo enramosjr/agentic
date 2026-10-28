@@ -269,13 +269,16 @@ class ConcurrentLedgerTests(LedgerCase):
         self.assert_durable(state)
 
     def test_late_result_cannot_overwrite_replacement_task(self):
-        self.ok('tier', 'L1', '--reason', 'original task')
-        process, release = self.start_run('late')
-        self.ok('tier', 'L1', '--new', '--reason', 'replacement task')
-        replacement = lifecycle.load(self.repo)
-        self.assertIn('task changed', self.finish(process, release, expected=1))
-        self.assertEqual(lifecycle.load(self.repo), replacement)
-        self.assert_durable(replacement)
+        for tier in ('L0', 'L1'):
+            with self.subTest(tier=tier):
+                self.ok('tier', tier, '--new', '--reason', 'original task')
+                process, release = self.start_run('late-' + tier)
+                self.ok('tier', tier, '--new', '--reason', 'replacement task')
+                replacement = lifecycle.load(self.repo)
+                self.assertIn('task changed', self.finish(process, release, expected=1))
+                self.assertEqual(lifecycle.load(self.repo), replacement)
+                if tier == 'L1':
+                    self.assert_durable(replacement)
 
     def test_convergence_preserves_overlapping_run(self):
         ready = self.repo / '.git' / 'converge-ready'
