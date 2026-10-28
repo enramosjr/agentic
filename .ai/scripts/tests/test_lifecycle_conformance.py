@@ -237,6 +237,9 @@ class Assurance(unittest.TestCase):
                      "covers only that command on those inputs", "whole tree", "squash", "runtime executable changed", "does not combine with",
                      "python3 .ai/scripts/assurance_demo.py"):
             self.assertIn(term, body, term)
+        for term in ("judgment (attested, not verified):", "## Validation Reviewed", "Accept-risk:", "risk_acceptance",
+                     "not bound to", "`note:`", "unauthenticated"):  # assurance-increment-4
+            self.assertIn(term, body, term)
         self.assertRegex(text(".ai/lifecycle.md"), r"(?m)^\| Assurance \| `assure", "Recording table row")
 
 
