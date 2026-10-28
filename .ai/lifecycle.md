@@ -130,8 +130,29 @@ Use for any bug, failing check, or unexpected behavior, at any tier above L0.
 | Traceability | `trace SPEC --plan PLAN --tests PATH...` | Every requirement is cited by the plan and by a test. |
 | L3 | `queue-from-spec SPEC --group G` | Prints §9.3 queue entries, one per requirement, with its acceptance check. |
 | State | `status`, `gate implement\|review\|verify\|ship` | Exit 1 with the missing stages. |
+| Assurance | `assure [--run [ID ...]] [--changed --base REV] [--strict] [--json]` | Report-only status of each capability requirement's `- Verify:` obligation; see Assurance status. |
 
 Hooks (Claude Code, Codex, Cursor) call `lifecycle.py hook`. They deny source edits until the tier is declared and the stages required before Implement are recorded, deny `git commit` (other than `wip:`) and PR creation until Verify is recorded, deny such a commit when it would leave the audit record untracked or unstaged, and inject the Router at session start. Markdown and `knowledge/` edits are exempt. `LIFECYCLE_GUARD=off` bypasses tool gates, and autonomous driver sessions are gated by the work queue instead. Both bypasses still receive approved project rules at SessionStart, without the interactive lifecycle router. An approval is a recorded claim that must come from a user message; the guard raises the cost of skipping a stage and does not prove human consent.
+
+## Assurance status
+
+A structured capability requirement may declare, before its first scenario, at most one indented `- Verify:` line (one backticked command, or `manual` and a reason) and, only with `Verify:`, at most one `- Inputs:` line (backticked repo-relative globs; no absolute or `..` globs). A duplicate line, a line after a scenario, `Inputs:` alone, an empty command or a bad glob makes the requirement INVALID.
+
+`lifecycle.py assure` reports one line per requirement, from the newest `req:<ID>` ledger entry in committed lifecycle records and the active task whose command and inputs equal the current obligation:
+
+| Status | Meaning |
+|--------|---------|
+| VERIFIED | The entry passed and ledger freshness holds. |
+| STALE | An input file changed (named) or the environment changed. |
+| FAILED | The entry exited nonzero. |
+| UNVERIFIED | No matching entry exists. |
+| INVALID | The obligation is malformed. |
+| MANUAL | `Verify: manual`; listed, never affects the exit code. |
+| UNDECLARED | No `Verify:` line; counts as a failure only with `--strict`. |
+
+`assure --run [ID ...]` executes the selected non-manual obligations through the `lifecycle.py run` path and records one `req:<ID>` ledger entry each; it needs an active task and refuses inside `lifecycle.py run`. `assure --changed --base REV` lists, without running anything, the obligations whose inputs changed since REV. `--run` does not combine with `--changed`, `--base`, `--strict` or `--json` (exit 2, nothing run). `--json` emits `schema_version` 1. Exit 0 when nothing is STALE, FAILED, UNVERIFIED or INVALID, 1 otherwise, 2 for refused input; a report writes nothing.
+
+Limits. A VERIFIED status covers only that command on those inputs, not the requirement's full intent. An obligation without `Inputs:` depends on the whole tree (Markdown and `knowledge/` are exempt, as in `tree_hash`), so any other edit makes it STALE. Evidence recorded on commits a squash merge drops shows as STALE. `--run` entries also record the resolved executable, so a committed record read on a machine or Python install with a different executable shows STALE ("runtime executable changed"), for example in CI; rerun `assure --run` there. Records on unmerged branches are invisible, and a schema-valid hand-written record is accepted: the audit detects drift, not forgery.
 
 ## Evals
 
