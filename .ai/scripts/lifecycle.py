@@ -1039,7 +1039,9 @@ def cmd_assure(args: argparse.Namespace) -> int:
     args.base = args.base or 'HEAD'
     obligations, diagnostics = assurance.requirements(root)
     broken = bool(diagnostics)
-    items, more = assurance.evidence(record_path(root, {"task": "_"}).parent, load(root))
+    records_dir = record_path(root, {"task": "_"}).parent
+    state = load(root)
+    items, more = assurance.evidence(records_dir, state)
     diagnostics += more
     tree = tree_hash(root)
     reasons: dict[str, str] = {}
@@ -1055,10 +1057,11 @@ def cmd_assure(args: argparse.Namespace) -> int:
     for item in results:
         if item["id"] in reasons:
             item["reason"] = f"{reasons[item['id']]}; {item['status']}: {item['reason']}"
+    notes = assurance.annotate(root, records_dir, state, obligations, results)
     if args.json:
-        print(json.dumps(assurance.document(results, diagnostics, args.base if args.changed else None), indent=2, sort_keys=True))
+        print(json.dumps(assurance.document(results, diagnostics, args.base if args.changed else None, notes), indent=2, sort_keys=True))
     else:
-        print(assurance.render(results, diagnostics))
+        print(assurance.render(results, diagnostics, notes))
     return assurance.exit_code(results, args.strict, broken)
 
 
