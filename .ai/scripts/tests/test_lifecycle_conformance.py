@@ -234,7 +234,8 @@ class Assurance(unittest.TestCase):
         body = section.group(1)
         for term in ("- Verify:", "- Inputs:", "VERIFIED", "STALE", "FAILED", "UNVERIFIED", "INVALID", "MANUAL", "UNDECLARED",
                      "lifecycle.py assure", "--run", "--changed", "--strict",
-                     "covers only that command on those inputs", "whole tree", "squash", "runtime executable changed", "does not combine with"):
+                     "covers only that command on those inputs", "whole tree", "squash", "runtime executable changed", "does not combine with",
+                     "python3 .ai/scripts/assurance_demo.py"):
             self.assertIn(term, body, term)
         self.assertRegex(text(".ai/lifecycle.md"), r"(?m)^\| Assurance \| `assure", "Recording table row")
 
