@@ -142,14 +142,15 @@ Read the [autonomous execution protocol](.ai/autonomous-execution.md), especiall
 
 | Script | Purpose |
 | --- | --- |
-| `lifecycle.py` | Declare tiers, record and gate stages, record red/green evidence, trace spec to plan to tests; `run` and `reuse` keep an output-free evidence ledger, `scan-diff` flags stubs in added lines |
+| `lifecycle.py` | Declare tiers, record and gate stages; `run` and `reuse` keep scoped evidence, `finish` consolidates completion blockers and explicit evidence-backed bookkeeping |
 | `okf.py` | Read, search, validate, and update the knowledge bundle; `sync-check` and `stamp verified --run` make Gate 3 mechanical; queue, checkpoint, and handoff |
-| `repo.py` | Bounded read, grep, and file listing for harnesses without those tools |
+| `repo.py` | Bounded file tools plus read-only `context`, actual command help and Markdown heading discovery |
+| `artifacts.py` | Seal declared artifacts, verify hash-pinned acceptance inputs and create separate unqualified mutation copies |
 | `shell_guard.py` | Rejects shell patterns that waste tokens or bypass the structured tools |
 | `autonomy_driver.py` and friends | Supervised multi-session execution and out-of-session validation |
 | `lifecycle_eval.py` | Scenario evals (L0 to L3) you can run against a real agent |
 
-**Knowledge.** The installer creates your project's empty OKF v0.2 `knowledge/` bundle, keeping existing knowledge when present. Knowledge about the AGENTIC framework stays in its source checkout and is never installed into adopter projects. `okf.py init` can also initialize a bundle explicitly.
+**Knowledge.** The installer creates the adopter project's empty OKF v0.2 `knowledge/` bundle, keeping existing knowledge when present. The framework source declares its identity in `.agentic.json`, keeps its own documentation outside `knowledge/`, and stores lifecycle receipts in Git scratch. Its source marker and evaluation documents are not installed into adopter projects.
 
 ## Philosophy
 

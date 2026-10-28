@@ -11,6 +11,7 @@ import os
 import shlex
 import sys
 import subprocess
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -193,6 +194,126 @@ class LedgerRunTests(LedgerCase):
         self.assertEqual((labels[0], labels[-1]), ("n1", "n100"))
 
 
+class ConcurrentLedgerTests(LedgerCase):
+    def start_run(self, label, exit_code=0):
+        ready = self.repo / '.git' / (label + '-ready')
+        release = self.repo / '.git' / (label + '-release')
+        script = (
+            'from pathlib import Path\nimport sys, time\n'
+            'Path(sys.argv[1]).touch()\n'
+            'deadline=time.monotonic()+15\n'
+            'while not Path(sys.argv[2]).exists():\n'
+            '    if time.monotonic()>deadline: raise SystemExit(99)\n'
+            '    time.sleep(.01)\n'
+            'raise SystemExit(int(sys.argv[3]))\n'
+        )
+        process = subprocess.Popen(
+            [PY, str(SCRIPTS / 'lifecycle.py'), 'run', label, '--', PY, '-c',
+             script, str(ready), str(release), str(exit_code)],
+            cwd=self.repo, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        self.addCleanup(self.stop_process, process)
+        self.wait_ready(process, ready)
+        return process, release
+
+    @staticmethod
+    def stop_process(process):
+        if process.poll() is None:
+            process.kill()
+        process.communicate(timeout=10)
+
+    def wait_ready(self, process, ready):
+        deadline = time.monotonic() + 10
+        while not ready.exists():
+            if process.poll() is not None:
+                self.fail(f'worker exited before overlap: {process.communicate()}')
+            if time.monotonic() > deadline:
+                self.fail('worker did not overlap the running check')
+            time.sleep(.01)
+
+    def finish(self, process, release, expected=0):
+        release.touch()
+        out, err = process.communicate(timeout=15)
+        self.assertEqual(process.returncode, expected, out + err)
+        return out + err
+
+    def assert_durable(self, state):
+        record = json.loads(lifecycle.record_path(self.repo, state).read_text())
+        self.assertEqual(record, lifecycle.public(state, self.repo))
+
+    def test_overlapping_runs_preserve_results_and_intervening_lesson(self):
+        self.ok('tier', 'L1', '--reason', 'concurrent evidence')
+        first, release_first = self.start_run('first')
+        second, release_second = self.start_run('second', exit_code=3)
+        self.finish(second, release_second, expected=3)
+        self.ok('learn', 'Preserve concurrent evidence', '--evidence', 'fixture')
+        self.finish(first, release_first)
+        state = lifecycle.load(self.repo)
+        self.assertEqual([(e['label'], e['exit']) for e in state['ledger']],
+                         [('second', 3), ('first', 0)])
+        self.assertEqual(len(state['lessons']), 1)
+        self.assert_durable(state)
+        self.assertEqual(self.run_cli('reuse', 'first')[0], 0)
+        self.assertIn('exited 3', self.run_cli('reuse', 'second')[1])
+
+    def test_simultaneous_run_publication_preserves_every_result(self):
+        self.ok('tier', 'L1', '--reason', 'concurrent evidence')
+        workers = [self.start_run(f'check-{i}') for i in range(4)]
+        for _, release in workers:
+            release.touch()
+        for process, release in workers:
+            self.finish(process, release)
+        state = lifecycle.load(self.repo)
+        self.assertEqual(sorted(e['label'] for e in state['ledger']),
+                         [f'check-{i}' for i in range(4)])
+        self.assert_durable(state)
+
+    def test_late_result_cannot_overwrite_replacement_task(self):
+        for tier in ('L0', 'L1'):
+            with self.subTest(tier=tier):
+                self.ok('tier', tier, '--new', '--reason', 'original task')
+                process, release = self.start_run('late-' + tier)
+                self.ok('tier', tier, '--new', '--reason', 'replacement task')
+                replacement = lifecycle.load(self.repo)
+                self.assertIn('task changed', self.finish(process, release, expected=1))
+                self.assertEqual(lifecycle.load(self.repo), replacement)
+                if tier == 'L1':
+                    self.assert_durable(replacement)
+
+    def test_convergence_preserves_overlapping_run(self):
+        ready = self.repo / '.git' / 'converge-ready'
+        release = self.repo / '.git' / 'converge-release'
+        spec = self.repo / 'spec.md'
+        original = spec.read_text()
+        for command in ('python3 -m unittest test_greet.GreetTests.test_hello',
+                        'python3 -m unittest test_greet.GreetTests.test_empty'):
+            original = original.replace(command, 'python3 acceptance.py')
+        spec.write_text(original)
+        (self.repo / 'acceptance.py').write_text(
+            'from pathlib import Path\nimport time\n'
+            f'Path({str(ready)!r}).touch()\n'
+            'deadline=time.monotonic()+15\n'
+            f'while not Path({str(release)!r}).exists():\n'
+            '    if time.monotonic()>deadline: raise SystemExit(99)\n'
+            '    time.sleep(.01)\n'
+        )
+        self.ok('tier', 'L2', '--reason', 'concurrent convergence')
+        self.ok('stage', 'intent', '--ref', 'spec.md', '--approved-by', 'human:fixture')
+        process = subprocess.Popen(
+            [PY, str(SCRIPTS / 'lifecycle.py'), 'converge', 'spec.md'],
+            cwd=self.repo, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        self.addCleanup(self.stop_process, process)
+        self.wait_ready(process, ready)
+        self.ok('run', 'overlapping', '--', PY, '-c', 'pass')
+        self.finish(process, release)
+        state = lifecycle.load(self.repo)
+        self.assertEqual([e['label'] for e in state['ledger']],
+                         ['overlapping', 'converge:R1', 'converge:R2'])
+        self.assertTrue(all(e['status'] == 'PASS' for e in state['converge']['results']))
+        self.assert_durable(state)
+
+
 class ReuseTests(LedgerCase):
     def test_input_globs_match_rules_and_reject_absolute_and_dotdot(self) -> None:
         self.assertTrue(ledger.matches("src/*.py", "src/a.py"))
@@ -248,6 +369,9 @@ class ReuseTests(LedgerCase):
         self.assertIn("edited since", verdict("dirty"))
         self.ok("run", "committed", "--inputs", "app.py", "--", PY, "-c", "pass")
         self.git("commit", "-qam", "change input")
+        self.assertEqual(self.run_cli('reuse', 'committed')[0], 0)  # Committing the tested bytes is not an input change.
+        (self.repo / 'app.py').write_text("print('different committed bytes')\n")
+        self.git('commit', '-qam', 'actual input change')
         self.assertIn("changed in a commit", verdict("committed"))
         self.ok("run", "fresh", "--inputs", "*.py", "--", PY, "-c", "pass")
         self.assertEqual(self.run_cli("reuse", "fresh")[0], 0)
@@ -272,6 +396,19 @@ class ReuseTests(LedgerCase):
 
 
 class LedgerVerifyTests(LedgerCase):
+    def test_current_scoped_failure_blocks_after_unrelated_edits(self):
+        self.ok('tier', 'L1', '--reason', 'current scoped failure')
+        self.ok('run', 'passing', '--inputs', 'spec.md', '--', PY, '-c', 'pass')
+        self.assertEqual(self.run_cli('run', 'failing', '--inputs', 'app.py', '--',
+                                      PY, '-c', 'raise SystemExit(1)')[0], 1)
+        (self.repo / 'unrelated.py').write_text('value = 1\n')
+        problem = ledger.verify_problem(self.repo, self.entries(), lifecycle.tree_hash(self.repo))
+        self.assertIsNotNone(problem)
+        self.assertIn('failing', problem)
+        # A later passing result for that lane supersedes its failure.
+        self.ok('run', 'failing', '--inputs', 'app.py', '--', PY, '-c', 'pass')
+        self.assertIsNone(ledger.verify_problem(self.repo, self.entries(), lifecycle.tree_hash(self.repo)))
+
     def l2_to_verify(self) -> None:
         """An L2 task with approved intent, traced plan and approved review, ready for converge and verify."""
         self.ok("tier", "L2", "--reason", "feature", "--kind", "feature")

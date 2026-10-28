@@ -166,7 +166,7 @@ def _split_flow(inner: str, line: int) -> list[str]:
                 continue
             if ch == quote:
                 quote = None
-        elif ch in "\"'" and not "".join(buf).strip():
+        elif ch in "\"'" and (not "".join(buf).strip() or "".join(buf).rstrip().endswith((":", "[", "{", ","))):
             quote = ch
             buf.append(ch)
         elif ch in "[{":
@@ -2056,6 +2056,10 @@ def cmd_onboard(bundle: Path, args: argparse.Namespace) -> int:
 
 
 def cmd_init(bundle: Path, args: argparse.Namespace) -> int:
+    if (bundle.parent / '.agentic.json').is_file():
+        import project_context
+        if project_context.kind(bundle.parent) == 'framework':
+            raise OkfError('framework source does not own a knowledge bundle; use repo.py context --json')
     bundle.mkdir(parents=True, exist_ok=True)
     for name in STANDARD_SECTIONS:
         (bundle / name).mkdir(exist_ok=True)
@@ -2444,7 +2448,7 @@ def cmd_stamp(bundle: Path, args: argparse.Namespace) -> int:
             raise OkfError("--run is only for `stamp verified`")
         if args.by:
             print(f"okf: warning: --by {args.by!r} ignored: with --run the command is the verifier", file=sys.stderr)
-        by = "process:" + " ".join(args.run)
+        by = "process:" + shlex.join(args.run)
         _run_for_stamp(bundle.parent, args.run)  # Raises, writing nothing, unless the command exits 0.
     elif not by:
         raise OkfError("give --run CMD... (stamps the command that just passed) or --by ACTOR")

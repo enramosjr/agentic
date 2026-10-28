@@ -12,14 +12,14 @@ The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", and "MAY" in this docu
 
 ## 1. Core Mandate: Open Knowledge Format (OKF) Synchronization
 
-All AI agents working on this project MUST ensure that the Open Knowledge Format corpus (`knowledge/`) remains synchronized with any code, specification, architecture, or workflow changes introduced during execution.
+In adopter projects, agents MUST keep `knowledge/` synchronized with code, specification, architecture and workflow changes.
 
 ### Rationale & Purpose
 The OKF corpus (`knowledge/`) is the repository's persistent knowledge graph. Keeping it synchronized gives future agents and contributors reliable context and prevents knowledge decay.
 
 - **Requirement**: Any agent change that alters functionality, contracts, specifications, dependencies, or architectural patterns MUST update the corresponding OKF document(s) and append a log entry to `knowledge/log.md`.
 - **Scope**: Code changes are not considered complete until OKF synchronization is verified and updated where relevant.
-- **Bootstrap**: If `knowledge/index.md` does not exist yet, create the bundle with `python3 .ai/scripts/okf.py init` before the first OKF update.
+- **Bootstrap**: Adopters missing `knowledge/index.md` run `python3 .ai/scripts/okf.py init`. Source `.agentic.json` with `repository_kind: framework` uses `python3 .ai/scripts/repo.py context --json`, MUST NOT create `knowledge/`, and keeps docs in existing locations and receipts in Git scratch.
 
 ---
 

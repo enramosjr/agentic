@@ -6,6 +6,7 @@ import contextlib
 import io
 import os
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -40,6 +41,11 @@ sources:
 
 
 class FrontmatterTests(unittest.TestCase):
+    def test_flow_mapping_round_trips_quoted_command(self) -> None:
+        value = {'by': 'process:python -c \'print("a,b", [1, 2])\'',
+                 'at': '2026-10-27T00:00:00Z'}
+        self.assertEqual(okf.parse_scalar(okf.dump_scalar(value), 1), value)
+
     def test_parses_agents_md_example(self) -> None:
         meta = okf.parse_frontmatter(SPEC_EXAMPLE)
         self.assertEqual(meta["tags"], ["tag1", "tag2", "tag3"])
@@ -383,12 +389,14 @@ class StampRunTests(BundleTestCase):
         self.new_doc()
         self.verified_line = lambda: next((l for l in (self.bundle / self.DOC).read_text().splitlines() if l.startswith("verified:")), "")
 
-    def test_run_stamps_only_on_exit_zero_and_rejects_by_combination(self) -> None:
+    def test_run_stamps_only_on_exit_zero_and_overrides_by(self) -> None:
         probe = "import os, sys; open('probe.txt', 'w').write(repr([sys.argv[1:], os.environ['TMPDIR'], os.getcwd()]))"
         self.assertEqual(self.verified_line(), "")
         code, out, err = self.run_cli("stamp", "verified", self.DOC, "--run", sys.executable, "-c", probe, "a;touch shell_ran")
         self.assertEqual(code, 0, out + err)
-        self.assertIn(f'by: "process:{sys.executable} -c {probe} a;touch shell_ran"', self.verified_line())
+        verifier = okf.parse_frontmatter(self.verified_line())['verified']['by']
+        self.assertEqual(shlex.split(verifier.removeprefix('process:')),
+                         [sys.executable, '-c', probe, 'a;touch shell_ran'])
         self.assertFalse((self.repo / "shell_ran").exists())  # argv, no shell.
         argv, tmpdir, cwd = eval((self.repo / "probe.txt").read_text())
         self.assertEqual(argv, ["a;touch shell_ran"])
@@ -398,11 +406,14 @@ class StampRunTests(BundleTestCase):
         code, out, err = self.run_cli("stamp", "verified", self.DOC, "--at", "2030-01-01T00:00:00Z", "--run", sys.executable, "-c", "raise SystemExit(3)")
         self.assertEqual(code, 1)
         self.assertEqual((self.bundle / self.DOC).read_bytes(), before)
-        for argv in (("stamp", "verified", self.DOC, "--by", "human:me", "--run", "true"), ("stamp", "generated", self.DOC, "--run", "true")):
-            code, out, err = self.run_cli(*argv)
-            self.assertEqual(code, 1, argv)
-            self.assertIn("--run", err)
+        code, out, err = self.run_cli("stamp", "generated", self.DOC, "--run", "true")
+        self.assertEqual(code, 1)
+        self.assertIn("--run", err)
         self.assertEqual((self.bundle / self.DOC).read_bytes(), before)
+        code, out, err = self.run_cli("stamp", "verified", self.DOC, "--by", "human:me", "--run", "true")
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("ignored", err)
+        self.assertEqual(okf.parse_frontmatter(self.verified_line())['verified']['by'], 'process:true')
         self.assertEqual(self.run_cli("stamp", "verified", self.DOC)[0], 1)  # Neither --by nor --run.
 
     def test_by_verified_warns_for_process_and_agent_not_human(self) -> None:
