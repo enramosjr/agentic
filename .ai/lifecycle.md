@@ -154,6 +154,8 @@ A structured capability requirement may declare, before its first scenario, at m
 
 Limits. A VERIFIED status covers only that command on those inputs, not the requirement's full intent. An obligation without `Inputs:` depends on the whole tree (Markdown and `knowledge/` are exempt, as in `tree_hash`), so any other edit makes it STALE. Evidence recorded on commits a squash merge drops shows as STALE. `--run` entries also record the resolved executable, so a committed record read on a machine or Python install with a different executable shows STALE ("runtime executable changed"), for example in CI; rerun `assure --run` there. Records on unmerged branches are invisible, and a schema-valid hand-written record is accepted: the audit detects drift, not forgery.
 
+Run `python3 .ai/scripts/assurance_demo.py` to watch a requirement go VERIFIED, STALE, VERIFIED in a throwaway repository.
+
 ## Evals
 
 `python3 .ai/scripts/lifecycle_eval.py run [--repeat N --json OUT] -- AGENT_COMMAND` evaluates fresh copied-kit repositories and records deterministic behavior/artifact checks. Completed L2/spec-backed L3 outcomes additionally require a unique verified candidate and operator-observed independent-review evidence; the queue-only L3 case is separate. `--observation-adapter ID` captures an operator-owned argv parser from `--checks-dir`; unsupported review visibility is a measurement error, not assumed independence.
