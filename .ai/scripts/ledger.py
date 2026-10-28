@@ -80,6 +80,14 @@ def input_paths(root, globs):
         negative = glob.startswith('!')
         hits = {n for n in listing if matches(glob[1:] if negative else glob, n)}
         selected = selected - hits if negative else selected | hits
+    if selected:
+        index = _git(root, 'ls-files', '--stage', '-z')
+        if index.returncode:
+            raise ValueError('cannot read input inventory: ' + index.stderr.strip())
+        for record in index.stdout.split('\0'):
+            metadata, separator, name = record.partition('\t')
+            if separator and metadata.startswith('160000 ') and name in selected:
+                raise ValueError(f'submodule input cannot be fingerprinted: {name}; record its checks separately')
     return sorted(selected)
 
 
@@ -262,11 +270,11 @@ def verify_problem(root: Path, entries: list[dict], tree: str) -> str | None:
     """Why `stage verify` at L2+ must refuse on this ledger, or None."""
     newest: dict[str, dict] = {}
     for entry in entries:
-        if entry.get("tree") == tree:
-            newest[entry.get("label")] = entry
-    failing = [label for label, entry in newest.items() if entry.get("exit") != 0]
+        newest[entry.get("label")] = entry
+    failing = [label for label, entry in newest.items() if entry.get("exit") != 0
+               and (entry.get('tree') == tree or _entry_verdict(root, {**entry, 'exit': 0}, tree)[0])]
     if failing:
-        return f"the newest run of {', '.join(map(str, failing))} on this tree did not pass: fix it and rerun `{RUN_HINT}`"
+        return f"the newest current run of {', '.join(map(str, failing))} did not pass: fix it and rerun `{RUN_HINT}`"
     if not current_entries(root, entries, tree):
         return f"no passing ledger entry is current for this tree: record one with `{RUN_HINT}`"
     return None

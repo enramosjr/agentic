@@ -70,6 +70,9 @@ tested bytes does not invalidate input-scoped evidence. Changed files are named
 where a snapshot exists; legacy receipts keep their digest format and conservative
 diagnostics. Runtime dependencies outside the captured inputs still require the
 project's qualification policy. No inference authorizes skipping a required lane.
+Scopes containing Git submodules are refused because their contents are not captured;
+record those checks in the submodule repository separately. A failed lane remains a
+verification blocker across unrelated edits while its scoped inputs are current.
 
 ## One completion operation
 

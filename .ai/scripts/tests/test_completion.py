@@ -15,6 +15,27 @@ from test_lifecycle import LifecycleCase
 
 
 class CompletionTests(LifecycleCase):
+    def test_diagnostic_failures_are_reported_together(self):
+        self.prepare_adopter()
+        real_okf = completion.okf
+        for failure in ('error', 'timeout', 'malformed'):
+            with self.subTest(failure=failure):
+                def failing_okf(root, *args):
+                    if args[0] == 'affected':
+                        if failure == 'timeout':
+                            raise subprocess.TimeoutExpired(args, 60)
+                        return subprocess.CompletedProcess(args, 1 if failure == 'error' else 0,
+                                                           'invalid json', 'inventory unavailable')
+                    if args[0] == 'records':
+                        return subprocess.CompletedProcess(args, 1, '', 'records unavailable')
+                    return real_okf(root, *args)
+                with mock.patch.object(completion, 'okf', side_effect=failing_okf):
+                    data = completion.report(self.repo, lifecycle.load(self.repo), [])
+                self.assertFalse(data['ready_for_verify'])
+                for name in ('affected', 'records'):
+                    self.assertTrue(any(name in b for b in data['blockers']), data)
+                    self.assertIn({'name': name, 'ok': False}, data['checks'])
+
     def test_sync_check_errors_are_completion_blockers(self):
         self.prepare_adopter()
         real_okf = completion.okf

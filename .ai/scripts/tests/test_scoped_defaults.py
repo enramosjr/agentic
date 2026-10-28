@@ -11,6 +11,14 @@ from test_ledger import LedgerCase
 
 
 class DefaultScopeTests(LedgerCase):
+    def test_submodule_inputs_cannot_be_hashed_as_missing_files(self):
+        (self.repo / 'vendor').mkdir()
+        self.git('update-index', '--add', '--cacheinfo', f'160000,{self.head()},vendor')
+        with self.assertRaisesRegex(ValueError, 'submodule'):
+            ledger.inputs_digest(self.repo, ['**'])
+        # Scopes outside the submodule still work.
+        self.assertIsNotNone(ledger.inputs_digest(self.repo, ['app.py']))
+
     def test_input_fingerprints_use_literal_git_paths(self):
         for name in ('café.txt', 'line\nbreak.txt', 'quote".txt'):
             with self.subTest(name=name):

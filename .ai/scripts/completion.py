@@ -17,6 +17,13 @@ def okf(root, *args):
                           cwd=root, capture_output=True, text=True, timeout=60)
 
 
+def diagnostic(root, *args):
+    try:
+        return okf(root, *args)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return subprocess.CompletedProcess(args, 1, '', str(error))
+
+
 def report(root, state, tests):
     import lifecycle
     data = {'schema_version': 1, 'repository_kind': project_context.kind(root),
@@ -59,10 +66,19 @@ def report(root, state, tests):
             except (ValueError, OSError) as error:
                 blockers.append(f'traceability: {error}')
     if data['repository_kind'] != 'framework' and (root / 'knowledge/index.md').is_file():
-        affected = okf(root, 'affected', '--json')
-        data['affected'] = json.loads(affected.stdout) if affected.returncode == 0 else {'error': affected.stderr}
+        affected = diagnostic(root, 'affected', '--json')
+        try:
+            if affected.returncode:
+                raise ValueError((affected.stderr or affected.stdout or 'check failed').strip())
+            data['affected'] = json.loads(affected.stdout)
+            if not isinstance(data['affected'], dict):
+                raise ValueError('expected an affected-file report object')
+        except ValueError as error:
+            data['affected'] = {'error': str(error)}
+            blockers.append('knowledge affected: ' + str(error))
+        data['checks'].append({'name': 'affected', 'ok': 'error' not in data['affected']})
         for command in (['sync-check', '--base', state.get('head') or 'HEAD', '--json'], ['records']):
-            result = okf(root, *command)
+            result = diagnostic(root, *command)
             data['checks'].append({'name': command[0], 'ok': result.returncode == 0})
             if result.returncode:
                 if command[0] == 'sync-check':

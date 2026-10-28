@@ -396,6 +396,19 @@ class ReuseTests(LedgerCase):
 
 
 class LedgerVerifyTests(LedgerCase):
+    def test_current_scoped_failure_blocks_after_unrelated_edits(self):
+        self.ok('tier', 'L1', '--reason', 'current scoped failure')
+        self.ok('run', 'passing', '--inputs', 'spec.md', '--', PY, '-c', 'pass')
+        self.assertEqual(self.run_cli('run', 'failing', '--inputs', 'app.py', '--',
+                                      PY, '-c', 'raise SystemExit(1)')[0], 1)
+        (self.repo / 'unrelated.py').write_text('value = 1\n')
+        problem = ledger.verify_problem(self.repo, self.entries(), lifecycle.tree_hash(self.repo))
+        self.assertIsNotNone(problem)
+        self.assertIn('failing', problem)
+        # A later passing result for that lane supersedes its failure.
+        self.ok('run', 'failing', '--inputs', 'app.py', '--', PY, '-c', 'pass')
+        self.assertIsNone(ledger.verify_problem(self.repo, self.entries(), lifecycle.tree_hash(self.repo)))
+
     def l2_to_verify(self) -> None:
         """An L2 task with approved intent, traced plan and approved review, ready for converge and verify."""
         self.ok("tier", "L2", "--reason", "feature", "--kind", "feature")
