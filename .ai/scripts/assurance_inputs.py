@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""Export declared inputs for reviewed Python checks; never execute the check.
+
+Standard library only; Python 3.9+. Profiles require input-completeness review.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+import subprocess
+import sys
+
+sys.dont_write_bytecode = True
+import ledger  # noqa: E402
+
+PROFILES = [{
+    'id': 'python-runner-test',
+    'cwd': '.',
+    'argv': ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests', '-p', 'test_run_tests.py'],
+    'inputs': ['.ai/scripts/tests/test_run_tests.py', '.ai/scripts/tests/disk_tmp.py',
+               '.ai/scripts/scratch.py', '.ai/scripts/run_tests.py'],
+    'rationale': {
+        '.ai/scripts/tests/test_run_tests.py': 'Selected test module, including its generated fixture source.',
+        '.ai/scripts/tests/disk_tmp.py': 'Imported fixture temporary-directory helper.',
+        '.ai/scripts/scratch.py': 'Transitive helper used to validate disk-backed temporary storage.',
+        '.ai/scripts/run_tests.py': 'Subprocess script exercised by the selected test.',
+    },
+}]
+LIMITATIONS = [
+    'Declared repository input scope; review required when command reads or dependencies change.',
+    'This is not complete read discovery, approval, or VERIFIED evidence; adoption is explicit.',
+    'Runtime environment, executable, temporary storage and mount state remain outside this file-scope claim.',
+    'Ignored files and external mutable data are not covered; unresolved application-data reads require retaining current scope.',
+    'Full-suite coverage and existing inference, evidence matching and gates remain unchanged.',
+]
+REMEDIATION = 'Retain the current input scope; inspect dependencies before adding a reviewed profile. Omitted Inputs is not equivalent to explicit **.'
+
+
+def strings(value):
+    return isinstance(value, list) and bool(value) and all(isinstance(v, str) and v.strip() for v in value)
+
+
+def check_pattern(value, positive=False):
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError('input glob must be a nonempty string')
+    if any(ord(c) < 32 or 127 <= ord(c) <= 159 or c in '\u2028\u2029`\\' for c in value):
+        raise ValueError('input glob cannot be represented as a single-line POSIX Inputs value')
+    if positive and value.startswith('!'):
+        raise ValueError('supplemental inputs must be positive globs')
+    if value.startswith('-'):
+        raise ValueError('input glob would be interpreted as a lifecycle option')
+    body = value[1:] if value.startswith('!') else value
+    ledger.check_globs([body])
+    return body
+
+
+def catalog_checked(profiles):
+    if not isinstance(profiles, list) or not profiles:
+        raise ValueError('profile catalog must be a nonempty list')
+    ids, commands = set(), set()
+    for profile in profiles:
+        if not isinstance(profile, dict) or set(profile) != {'id', 'cwd', 'argv', 'inputs', 'rationale'}:
+            raise ValueError('profile needs id, cwd, argv, inputs and rationale')
+        identity = profile['id']
+        if not isinstance(identity, str) or not identity.strip() or profile['cwd'] != '.':
+            raise ValueError('profile needs a nonempty ID and repository-root cwd')
+        if not strings(profile['argv']) or not strings(profile['inputs']):
+            raise ValueError('profile argv and inputs must be nonempty string lists')
+        command = tuple(profile['argv'])
+        if identity in ids or command in commands:
+            raise ValueError('duplicate profile ID or ambiguous command/root match')
+        ids.add(identity)
+        commands.add(command)
+        rationale = profile['rationale']
+        if not isinstance(rationale, dict) or set(rationale) != set(profile['inputs']) or not all(
+                isinstance(v, str) and v.strip() for v in rationale.values()):
+            raise ValueError('profile rationale must explain every input')
+        for pattern in profile['inputs']:
+            check_pattern(pattern)
+        if all(pattern.startswith('!') for pattern in profile['inputs']):
+            raise ValueError('profile needs positive inputs')
+    return profiles
+
+
+def contained(root, path):
+    try:
+        path.resolve().relative_to(root)
+    except (ValueError, RuntimeError) as error:
+        raise ValueError('input path escapes or cannot resolve within the repository: ' + str(path)) from error
+
+
+def check_paths(root, patterns, required):
+    for pattern in patterns:
+        body = check_pattern(pattern)
+        prefix = root
+        for part in body.split('/'):
+            if any(c in part for c in '*?['):
+                break
+            prefix /= part
+        contained(root, prefix)
+        if any(c in body for c in '*?[') and (root / body).exists():
+            raise ValueError('ambiguous literal filename containing glob metacharacters: ' + body)
+    selected = ledger.input_paths(root, patterns)
+    for name in selected:
+        path = root / name
+        contained(root, path)
+        if not path.is_file():
+            raise ValueError('selected input is missing or is not a file: ' + name)
+    for pattern in patterns:
+        if not pattern.startswith('!') and not any(c in pattern for c in '*?[') and not pattern.endswith('/'):
+            if (root / pattern).exists() and pattern not in selected:
+                raise ValueError('existing literal input is not a supported inventory file: ' + pattern)
+    for pattern in required:
+        if not pattern.startswith('!') and not any(c in pattern for c in '*?[') and not pattern.endswith('/'):
+            if pattern not in selected or not (root / pattern).is_file():
+                raise ValueError('required literal input is missing, ignored or excluded: ' + pattern)
+
+
+def suggest(root, argv, extra=(), profiles=None, cwd=None):
+    """Return a declared suggestion; supplied catalogs are a pure testing seam."""
+    root = Path(root).resolve()
+    if Path(cwd if cwd is not None else Path.cwd()).resolve() != root:
+        raise ValueError('invoke the exporter from its repository root')
+    result = subprocess.run(['git', '-C', str(root), 'rev-parse', '--show-toplevel'],
+                            capture_output=True, text=True, timeout=10, check=False)
+    if result.returncode or Path(result.stdout.strip()).resolve() != root:
+        raise ValueError('exporter location must be the Git worktree root')
+    catalog = catalog_checked(PROFILES if profiles is None else profiles)
+    profile = next((p for p in catalog if p['argv'] == list(argv)), None)
+    if profile is None:
+        raise ValueError('no reviewed profile for this exact command; full suites retain broad scope')
+    additions = list(extra)
+    for pattern in additions:
+        check_pattern(pattern, positive=True)
+    patterns = [*profile['inputs'], *additions]
+    check_paths(root, patterns, profile['inputs'])
+    rationale = dict(profile['rationale'])
+    for pattern in additions:
+        rationale.setdefault(pattern, 'Author-supplied supplemental input; completeness requires review.')
+    return {'schema_version': 1, 'ok': True, 'profile_id': profile['id'], 'argv': list(argv),
+            'inputs': patterns, 'inputs_line': '  - Inputs: ' + ' '.join('`' + p + '`' for p in patterns),
+            'lifecycle_inputs_argv': ['--inputs', *patterns], 'rationale': rationale,
+            'limitations': list(LIMITATIONS), 'review_required': True}
+
+
+class Parser(argparse.ArgumentParser):
+    def error(self, message):
+        raise ValueError(message)
+
+
+def main(argv=None):
+    raw = list(sys.argv[1:] if argv is None else argv)
+    separator = raw.index('--') if '--' in raw else None
+    options = raw[:separator] if separator is not None else raw
+    as_json = '--json' in options
+    parser = Parser(description=__doc__.split('\n\n')[0])
+    parser.add_argument('--json', action='store_true')
+    parser.add_argument('--extra-input', action='append', default=[], metavar='GLOB')
+    try:
+        args = parser.parse_args(options)
+        if separator is None or not raw[separator + 1:]:
+            raise ValueError('give a nonempty check command after --')
+        value = suggest(Path(__file__).resolve().parents[2], raw[separator + 1:], args.extra_input)
+    except (ValueError, OSError, subprocess.SubprocessError) as error:
+        value = {'schema_version': 1, 'ok': False, 'reason': str(error), 'remediation': REMEDIATION}
+        if as_json:
+            print(json.dumps(value))
+        else:
+            print('inputs refused: ' + value['reason'] + '\n' + REMEDIATION, file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(value))
+    else:
+        print('Profile: ' + value['profile_id'] + ' (declared; review required)')
+        print('Command argv: ' + json.dumps(value['argv']))
+        print(value['inputs_line'])
+        print('Lifecycle input argv: ' + json.dumps(value['lifecycle_inputs_argv']))
+        for name, reason in value['rationale'].items():
+            print(name + ': ' + reason)
+        for limit in value['limitations']:
+            print(limit)
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

@@ -207,6 +207,16 @@ Delta convergence also records `req:<ID>` evidence for an added/modified require
 Run `python3 .ai/scripts/assurance_demo.py` to watch a requirement go VERIFIED, STALE, VERIFIED in a throwaway repository.
 Run `python3 .ai/scripts/assurance_measure.py` to measure detection, false STALE, missed requirements and rerun contributions on six deterministic fixtures.
 
+### Python validation input profiles
+
+`python3 .ai/scripts/assurance_inputs.py -- python3 -m unittest discover -s .ai/scripts/tests -p test_run_tests.py` exports the declared `python-runner-test` profile from the repository root. It reads a built-in profile without importing or executing the supplied test. The four inputs cover the selected test, disk temporary-directory helper, scratch helper and subprocess runner. Direct execution of test_run_tests.py has no unittest main entry point and is not an equivalent check.
+
+Text output provides a copyable Inputs line and lifecycle `--inputs` argv as a JSON array; `--json` provides the same ordered values, profile ID, exact command, dependency rationale and limitations. Apply the tokens explicitly before the command separator in `lifecycle.py run`, or adopt the declaration through the existing capability approval/review process. Repeated `--extra-input GLOB` adds positive repo-relative inputs after the profile. The exporter never edits an obligation, records evidence or grants approval. Changed obligation commands or ordered Inputs need matching evidence under existing assurance rules; the receipt exclusion remains the producer's responsibility.
+
+Profiles require review when dependencies or reads change. These are declared repository inputs, not complete dependency discovery or VERIFIED evidence. In particular runtime environment, ignored/external data, temporary storage and mount state are outside this file-scope claim. Unresolved application-data reads require retaining the current scope. Additional profiles require separately reviewed mappings, including subprocess, copied-file and non-code reads; imports alone do not establish completeness.
+
+Unknown commands, unsafe paths and invalid profiles refuse with exit 2 and no candidate; successful export exits 0. Full run_tests.py and unrestricted unittest discovery keep broad coverage regardless of worker count, and automatic inference and gates are unchanged. Retain the existing scope on refusal: omitted Inputs and explicit `**` have different semantics.
+
 ### Governed architecture constraints
 
 An ordinary structured capability requirement may declare one indented `Governed-by:` line before its first scenario. Its value is exactly one Markdown link with a nonempty label and target to an existing `.md` file inside `knowledge/`. Angle-bracket destinations and optional Markdown titles are supported. Relative paths resolve from the capability document; `/project/...` paths resolve from the bundle root. Local URL-encoded paths follow the same conventions as OKF links. Optional query/fragment text is retained in the reference; section anchors and ADR approval/status are not validated. Empty/malformed values, duplicate/late declarations, external links, missing files, directories and resolved paths outside the bundle (including escaping symlinks) make the requirement INVALID with a repair diagnostic.
