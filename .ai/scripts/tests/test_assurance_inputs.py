@@ -620,5 +620,355 @@ class ArchitectureControlTests(ArchitectureFixture):  # R6
                 self.assertIn(criterion, '\n'.join(text for _, text in result.failures))
 
 
+# Harness wiring: specification-5c.md R1-R6. Independent of the profile catalog.
+WIRING_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py', 'HarnessWiring']
+WIRING_TESTS = [WIRING_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
+WIRING_JSON = ['.claude/settings.json', '.codex/hooks.json', '.cursor/hooks.json']
+WIRING_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**', *WIRING_TESTS, *WIRING_JSON]
+WIRING_IMPORTS = ['.ai/scripts/' + name + '.py' for name in
+                  ('scratch', 'lifecycle', 'review_guard', 'ledger', 'brownfield', 'okf',
+                   'learning', 'scan', 'project_context', 'assurance')]
+
+
+class HarnessWiringFixture(Fixture):
+    def setUp(self):
+        super().setUp()
+        for name in [WIRING_TESTS[0], *WIRING_JSON, *ARCH_TESTS[:-1], ARCH_GUIDE]:
+            destination = self.root / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(SCRIPTS.parent.parent / name, destination)
+        self.commit()
+
+    def export(self, argv=None, **kwargs):
+        return super().export(argv=WIRING_COMMAND if argv is None else argv, **kwargs)
+
+    def oracle(self):
+        return {name: (self.root / name).read_bytes()
+                for name in [*WIRING_TESTS, *WIRING_IMPORTS, *WIRING_JSON]}
+
+    def selected_bytes(self):
+        # Handwritten patterns, never the profile under test: detect writes to
+        # conservative descendants as well as the currently imported files.
+        return {name: (self.root / name).read_bytes()
+                for name in ledger.input_paths(self.root, WIRING_INPUTS)}
+
+    def preflight(self):
+        before = self.selected_bytes()
+        result = self.process(WIRING_COMMAND)
+        output = result.stdout + result.stderr
+        counts = re.findall(r'Ran (\d+) tests? in ', output)
+        self.assertTrue(counts, 'wiring execution count missing: ' + output)
+        self.assertEqual(int(counts[-1]), 3, 'wiring execution count must be three')
+        self.assertEqual(result.returncode, 0, output)
+        self.assert_inputs_unchanged(before)
+        return before
+
+    def assert_inputs_unchanged(self, before):
+        self.assertEqual(self.selected_bytes(), before, 'wiring execution changed inputs')
+
+    def edit_and_restore(self, name, check):
+        path = self.root / name
+        original = path.read_bytes() if path.exists() else None
+        # Whitespace changes valid JSON without changing required declarations.
+        self.write(name, (original.decode() if original is not None else '') + '\n ')
+        try:
+            check()
+        finally:
+            if original is None:
+                path.unlink()
+            else:
+                path.write_bytes(original)
+
+
+class HarnessWiringProfileTests(HarnessWiringFixture):  # R1
+    def test_exact_registration_and_prior_profiles(self):
+        value = self.suggestion()
+        self.assertEqual(value['profile_id'], 'python-harness-wiring')
+        self.assertEqual(value['argv'], WIRING_COMMAND)
+        self.assert_prior_profiles()
+        for argv in (WIRING_COMMAND[:2], WIRING_COMMAND + ['-v'],
+                     WIRING_COMMAND[:2] + ['Distribution'],
+                     WIRING_COMMAND[:2] + ['HarnessWiring.test_codex_gates_edits_commits_and_session_start'],
+                     [sys.executable, *WIRING_COMMAND[1:]],
+                     ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
+                      '-p', 'test_lifecycle_conformance.py']):
+            result = self.export(argv=argv)
+            self.assertEqual(result.returncode, 2, 'unregistered wiring argv exported: ' + repr(argv))
+            self.assertNotIn('inputs', json.loads(result.stdout))
+        self.refused(cwd=self.root / '.ai')
+
+    def assert_prior_profiles(self):
+        # Compare unchanged catalog entries with the delivered, invoking HEAD.
+        # This baseline is independent of the modified worktree catalog.
+        result = subprocess.run(['git', 'show', 'HEAD:.ai/scripts/assurance_inputs.py'],
+                                cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        import ast
+        tree = ast.parse(result.stdout)
+        baseline = next(ast.literal_eval(node.value) for node in tree.body
+                        if isinstance(node, ast.Assign)
+                        and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in node.targets))
+        actual = self.module().PROFILES
+        for identity, argv, inputs in [('python-runner-test', COMMAND, READS),
+                                       ('python-architecture-compatibility', ARCH_COMMAND, ARCH_INPUTS)]:
+            expected = next(p for p in baseline if p['id'] == identity)
+            self.assertEqual(next(p for p in actual if p['id'] == identity), expected)
+            exported = self.suggestion(argv=argv)
+            self.assertEqual((exported['profile_id'], exported['argv'], exported['inputs'], exported['rationale']),
+                             (identity, argv, inputs, expected['rationale']))
+
+
+class HarnessWiringDependencyTests(HarnessWiringFixture):  # R2
+    def test_order_scope_and_independent_oracle(self):
+        value = self.suggestion()
+        self.assertEqual(value['inputs'], WIRING_INPUTS)
+        self.assertEqual(set(value['rationale']), set(WIRING_INPUTS))
+        self.assertTrue(all(value['rationale'].values()))
+        self.write('.ai/scripts/future_wiring.py', '# future production\n')
+        self.write('.ai/scripts/assets/data.txt', 'conservative descendant')
+        self.write('.ai/scripts/tests/unrelated.py', '# unrelated test\n')
+        self.write('unrelated.md', 'non-input document')
+        selected = set(ledger.input_paths(self.root, value['inputs']))
+        self.assertTrue(set(self.oracle()).issubset(selected))
+        for name in ('.ai/scripts/future_wiring.py', '.ai/scripts/assets/data.txt'):
+            self.assertIn(name, selected)
+        for name in ('.ai/scripts/tests/unrelated.py', *ARCH_TESTS[:-1], ARCH_GUIDE, 'unrelated.md'):
+            self.assertNotIn(name, selected)
+        sentinels = {
+            WIRING_TESTS[0]: ('import disk_tmp', 'import lifecycle', '(ROOT / path).read_text()',
+                              'class HarnessWiring', *WIRING_JSON, 'unittest.main()'),
+            WIRING_TESTS[1]: ('import scratch', 'scratch.require_disk'),
+            '.ai/scripts/lifecycle.py': ('import scratch', 'import review_guard', 'LazyLoader',
+                                         'brownfield', 'project_context', 'assurance'),
+            '.ai/scripts/review_guard.py': ('import ledger', 'import scratch'),
+            '.ai/scripts/scratch.py': ('/proc/self/mountinfo',),
+        }
+        for name, phrases in sentinels.items():
+            source = (self.root / name).read_text()
+            for phrase in phrases:
+                self.assertIn(phrase, source, 'review wiring dependency oracle: ' + name)
+
+
+class HarnessWiringExportTests(HarnessWiringFixture):  # R3
+    def test_readonly_formats_supplements_and_json_is_not_parsed(self):
+        marker = self.root / 'executed'
+        for name in WIRING_TESTS:
+            self.write(name, f'from pathlib import Path\nPath({str(marker)!r}).touch()\nraise RuntimeError("executed")\n')
+        for name in WIRING_JSON:
+            self.write(name, '{malformed JSON')
+        self.write('space file.txt', 'supplement')
+        before = snapshot(self.root)
+        value = self.suggestion(extra=('space file.txt',))
+        text = self.export(extra=('space file.txt',), json_output=False)
+        self.assertEqual(text.returncode, 0, text.stderr)
+        self.assertEqual(value['inputs'], WIRING_INPUTS + ['space file.txt'])
+        self.assertEqual(value['lifecycle_inputs_argv'], ['--inputs', *value['inputs']])
+        for item in (value['profile_id'], value['inputs_line'], json.dumps(WIRING_COMMAND),
+                     json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
+            self.assertIn(item, text.stdout)
+        self.assertTrue(value['review_required'])
+        raw = '- WIRE-R1: The check MUST work.\n  - Verify: `' + ' '.join(WIRING_COMMAND) + '`\n' + value['inputs_line'] + '\n'
+        parsed = assurance.parse('WIRE-R1', 'capabilities/wiring.md', raw, root=self.root)
+        self.assertIsNone(parsed.invalid)
+        self.assertEqual(list(parsed.globs), value['inputs'])
+        self.assertEqual(snapshot(self.root), before)
+        self.assertFalse(marker.exists())
+
+    def test_required_literals_and_unsafe_boundaries_refuse(self):
+        for name in [*WIRING_TESTS, *WIRING_JSON]:
+            path = self.root / name
+            original = path.read_bytes()
+            path.unlink()
+            self.refused()
+            path.write_bytes(original)
+        name = WIRING_JSON[0]
+        self.git('rm', '--cached', name)
+        self.write('.gitignore', name + '\n')
+        self.refused()
+        self.git('add', '-f', name)
+        path = self.root / name
+        original = path.read_bytes()
+        outside = Path(self.temp.name) / 'outside.json'
+        outside.write_bytes(original)
+        path.unlink()
+        path.symlink_to(outside)
+        self.refused()
+        path.unlink()
+        path.write_bytes(original)
+        for extra in ('!README.md', '../x', '/etc/passwd', '', 'x`bad', '--other-option'):
+            self.refused(extra=(extra,))
+
+
+class HarnessWiringCompatibilityTests(HarnessWiringFixture):  # R4
+    def test_advisory_guide_and_existing_contracts(self):
+        HarnessWiringProfileTests.assert_prior_profiles(self)
+        self.assertIsNone(ledger.default_inputs(WIRING_COMMAND))
+        self.assertEqual(ledger.default_inputs(COMMAND), ('python-tests', ['**']))
+        for argv in (['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests'],
+                     *[['python3', '.ai/scripts/run_tests.py', '-j', str(n)] for n in (1, 8, 32)]):
+            self.refused(argv=argv)
+        value = self.suggestion()
+        self.assertNotIn(EXCLUDE, value['inputs'])
+        self.assertTrue(value['review_required'])
+        self.assertIn('runtime', ' '.join(value['limitations']).lower())
+        guide = (self.root / ARCH_GUIDE).read_text()
+        for phrase in ('python-harness-wiring', ' '.join(WIRING_COMMAND), 'static',
+                       'conservative', 'explicit', 'native', *WIRING_JSON):
+            self.assertIn(phrase, guide)
+
+
+class HarnessWiringFrameworkEndToEndTests(HarnessWiringFixture):  # R5
+    def record(self):
+        value = self.suggestion()
+        before = self.preflight()
+        self.lc('tier', 'L1', '--reason', 'static wiring framework fixture')
+        self.lc('run', 'wiring', *value['lifecycle_inputs_argv'], '--', *WIRING_COMMAND)
+        self.assert_inputs_unchanged(before)
+        import lifecycle
+        entry = lifecycle.load(self.root)['ledger'][-1]
+        self.assertEqual((entry['argv'], entry['inputs'], entry['exit']),
+                         (WIRING_COMMAND, value['inputs'], 0))
+        self.assertIn('REUSE', self.lc('reuse', 'wiring'))
+
+    def test_each_input_and_addition_invalidates(self):
+        self.record()
+        for name in ('.ai/scripts/tests/unrelated.py', 'unrelated.md'):
+            self.edit_and_restore(name, lambda: self.assertIn('REUSE', self.lc('reuse', 'wiring')))
+        for name in [*WIRING_JSON, *WIRING_TESTS, '.ai/scripts/review_guard.py', '.ai/scripts/new_wiring.py']:
+            with self.subTest(name=name):
+                def stale():
+                    result = self.process([sys.executable, '.ai/scripts/lifecycle.py', 'reuse', 'wiring'])
+                    self.assertEqual(result.returncode, 1, 'missing wiring freshness invalidation: ' + name)
+                    self.assertIn('RERUN', result.stdout)
+                self.edit_and_restore(name, stale)
+        self.assertIn('REUSE', self.lc('reuse', 'wiring'))
+        self.assertFalse((self.root / 'knowledge').exists())
+
+
+class HarnessWiringFailureTests(HarnessWiringFixture):  # R5
+    def test_each_harness_malformed_and_missing_wiring_fails_actual_command(self):
+        for name in WIRING_JSON:
+            path = self.root / name
+            original = path.read_text()
+            data = json.loads(original)
+            event = 'sessionStart' if name.startswith('.cursor/') else 'SessionStart'
+            data['hooks'][event] = []
+            for content, error in (('{malformed JSON', 'JSONDecodeError'),
+                                   (json.dumps(data), 'AssertionError')):
+                with self.subTest(name=name, error=error):
+                    try:
+                        path.write_text(content)
+                        self.assertEqual(path.read_text(), content, 'failure control not applied')
+                        self.suggestion()  # Export validates paths, not JSON/wiring.
+                        before = self.selected_bytes()
+                        result = self.process(WIRING_COMMAND)
+                        output = result.stdout + result.stderr
+                        counts = re.findall(r'Ran (\d+) tests? in ', output)
+                        self.assertTrue(counts, output)
+                        self.assertEqual(int(counts[-1]), 3, output)
+                        self.assertNotEqual(result.returncode, 0, output)
+                        self.assertIn(error, output)
+                        harness = name.split('/')[0][1:]
+                        self.assertIn('test_' + harness + '_', output)
+                        self.assert_inputs_unchanged(before)
+                    finally:
+                        path.write_text(original)
+
+
+class HarnessWiringAdopterEndToEndTests(HarnessWiringFixture):  # R6
+    def test_explicit_adoption_freshness_identity_and_receipt(self):
+        (self.root / '.agentic.json').unlink()
+        self.lc('tier', 'L1', '--reason', 'static wiring adopter fixture')
+        result = self.process([sys.executable, '.ai/scripts/okf.py', 'init'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.write('knowledge/project/sync-ignore', '*\n')
+        value = self.suggestion()
+        prefix = ('---\ntype: Capability\ntitle: Wiring\nnamespace: WIRE\nstatus: draft\n---\n'
+                  '# Wiring\n\n## Requirements\n\n- WIRE-R1: The static check MUST pass.\n'
+                  '  - Verify: `' + ' '.join(WIRING_COMMAND) + '`\n')
+        original = prefix + value['inputs_line'] + '\n'
+        capability = self.write('knowledge/capabilities/wiring.md', original)
+        self.commit()
+
+        def status():
+            result = self.process([sys.executable, '.ai/scripts/lifecycle.py', 'assure', '--json'])
+            data = json.loads(result.stdout)
+            state = next(r['status'] for r in data['requirements'] if r['id'] == 'WIRE-R1')
+            self.assertEqual(result.returncode, 0 if state == 'VERIFIED' else 1, result.stdout + result.stderr)
+            return state
+
+        self.assertEqual(status(), 'UNVERIFIED')
+        before = self.preflight()
+        self.lc('assure', '--run', 'WIRE-R1')
+        self.assert_inputs_unchanged(before)
+        self.assertEqual(status(), 'VERIFIED')
+        for name in ('.ai/scripts/tests/unrelated.py', 'unrelated.md'):
+            self.edit_and_restore(name, lambda: self.assertEqual(status(), 'VERIFIED'))
+        for name in [*WIRING_JSON, *WIRING_TESTS, '.ai/scripts/review_guard.py', '.ai/scripts/new_wiring.py']:
+            with self.subTest(name=name):
+                self.edit_and_restore(name, lambda: self.assertEqual(status(), 'STALE'))
+        self.assertEqual(status(), 'VERIFIED')
+        reordered = [*value['inputs'][:-2], value['inputs'][-1], value['inputs'][-2]]
+        capability.write_text(prefix + '  - Inputs: ' + ' '.join('`' + p + '`' for p in reordered) + '\n')
+        self.assertEqual(status(), 'UNVERIFIED')
+        capability.write_text(original.replace('HarnessWiring`', 'HarnessWiring -v`'))
+        self.assertEqual(status(), 'UNVERIFIED')
+        capability.write_text(original)
+        self.assertEqual(status(), 'VERIFIED')
+        entries = [e for p in (self.root / 'knowledge/history/lifecycle').glob('*.json')
+                   for e in json.loads(p.read_text()).get('ledger', []) if e['label'] == 'req:WIRE-R1']
+        self.assertEqual(entries[-1]['inputs'], WIRING_INPUTS + [EXCLUDE])
+        self.write('knowledge/history/lifecycle/extra-receipt.json', '{}\n')
+        self.assertEqual(status(), 'VERIFIED')
+
+
+class HarnessWiringControlTests(HarnessWiringFixture):  # R6
+    def test_confirmed_broken_variants_fail_intended_criteria(self):
+        method = 'test_each_input_and_addition_invalidates'
+        variants = [(name, HarnessWiringFrameworkEndToEndTests, method,
+                     'missing wiring freshness invalidation: ' + name) for name in WIRING_JSON]
+        variants += [('loose', HarnessWiringProfileTests, 'test_exact_registration_and_prior_profiles',
+                      'unregistered wiring argv exported'),
+                     ('empty', HarnessWiringFrameworkEndToEndTests, method,
+                      'wiring execution count must be three')]
+        for variant, cls, test, criterion in variants:
+            with self.subTest(variant=variant):
+                case = cls(test)
+                setup = case.setUp
+
+                def mutated_setup():
+                    setup()
+                    path = case.root / '.ai/scripts/assurance_inputs.py'
+                    original = path.read_text()
+                    if variant in WIRING_JSON:
+                        catalog = copy.deepcopy(case.module().PROFILES)
+                        profile = next(p for p in catalog if p['id'] == 'python-harness-wiring')
+                        profile['inputs'].remove(variant)
+                        del profile['rationale'][variant]
+                        replacement = (original.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
+                                       + '\nLIMITATIONS =' + original.split('\nLIMITATIONS =', 1)[1])
+                    elif variant == 'loose':
+                        old = "p['argv'] == list(argv)"
+                        case.assertEqual(original.count(old), 1)
+                        replacement = original.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                    else:
+                        path = case.root / WIRING_TESTS[0]
+                        original = path.read_text()
+                        replacement = 'import unittest\nunittest.main()\n'
+                    path.write_text(replacement)
+                    case.assertNotEqual(original, replacement, 'mutation was not applied')
+                    case.assertEqual(path.read_text(), replacement, 'mutation bytes differ')
+                    if variant in WIRING_JSON:
+                        case.assertNotIn(variant, case.suggestion()['inputs'])
+
+                case.setUp = mutated_setup
+                result = unittest.TestResult()
+                case.run(result)
+                self.assertEqual(result.testsRun, 1)
+                self.assertFalse(result.errors, result.errors)
+                self.assertTrue(result.failures, 'broken wiring variant survived: ' + variant)
+                self.assertIn(criterion, '\n'.join(detail for _, detail in result.failures))
+
+
 if __name__ == '__main__':
     unittest.main()

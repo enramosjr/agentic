@@ -43,6 +43,22 @@ PROFILES = [{
         '.ai/scripts/tests/disk_tmp.py': 'Imported disk temporary-directory helper; its scratch dependency is within the production-script scope.',
         '.ai/lifecycle.md': 'Direct Markdown read and byte watch; asserts the published demo command, declaration and checker.',
     },
+}, {
+    'id': 'python-harness-wiring',
+    'cwd': '.',
+    'argv': ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py', 'HarnessWiring'],
+    'inputs': ['.ai/scripts/**', '!.ai/scripts/tests/**',
+               '.ai/scripts/tests/test_lifecycle_conformance.py', '.ai/scripts/tests/disk_tmp.py',
+               '.claude/settings.json', '.codex/hooks.json', '.cursor/hooks.json'],
+    'rationale': {
+        '.ai/scripts/**': 'Conservative production import and lazy-loader setup scope; includes unused non-test descendants and future scripts, not a copied-directory boundary.',
+        '!.ai/scripts/tests/**': 'Exclude unrelated tests before restoring the selected module and its imported test helper.',
+        '.ai/scripts/tests/test_lifecycle_conformance.py': 'Selected HarnessWiring class parses hook JSON and asserts static lifecycle wiring declarations; it does not execute hooks.',
+        '.ai/scripts/tests/disk_tmp.py': 'Imported temporary-storage helper; its scratch dependency is within the production-script scope.',
+        '.claude/settings.json': 'Direct JSON read for Claude lifecycle event and matcher declarations.',
+        '.codex/hooks.json': 'Direct JSON read for Codex lifecycle event and matcher declarations.',
+        '.cursor/hooks.json': 'Direct JSON read for Cursor lifecycle event declarations.',
+    },
 }]
 LIMITATIONS = [
     'Declared repository input scope; review required when command reads or dependencies change.',
