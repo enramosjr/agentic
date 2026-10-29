@@ -338,5 +338,287 @@ class EndToEndTests(Fixture):  # R7
         self.assertEqual(entries[-1]['inputs'], READS + [EXCLUDE])
 
 
+# Architecture profile: specification-5b.md R1-R6. These declarations are
+# handwritten independently of the exporter; directory copies are not imports.
+ARCH_COMMAND = ['python3', '.ai/scripts/tests/test_assurance_architecture.py', 'CompatibilityTests']
+ARCH_TESTS = ['.ai/scripts/tests/' + name for name in
+              ('test_assurance_architecture.py', 'test_assurance.py', 'test_assurance_gate.py', 'disk_tmp.py')]
+ARCH_GUIDE = '.ai/lifecycle.md'
+ARCH_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**', *ARCH_TESTS, ARCH_GUIDE]
+
+
+class ArchitectureFixture(Fixture):
+    def setUp(self):
+        super().setUp()
+        for name in ARCH_TESTS:
+            shutil.copy2(SCRIPTS.parent.parent / name, self.root / name)
+        shutil.copy2(SCRIPTS.parent / 'lifecycle.md', self.root / ARCH_GUIDE)
+        self.commit()
+
+    def export(self, argv=None, **kwargs):
+        return super().export(argv=ARCH_COMMAND if argv is None else argv, **kwargs)
+
+    def oracle(self):
+        # Match the inspected all-top-level-script copies, not profile inputs.
+        names = [str(p.relative_to(self.root)) for p in (self.root / '.ai/scripts').glob('*.py')]
+        return {name: (self.root / name).read_bytes() for name in [*names, *ARCH_TESTS, ARCH_GUIDE]}
+
+    def preflight(self):
+        before = self.oracle()
+        result = self.process(ARCH_COMMAND)
+        output = result.stdout + result.stderr
+        counts = re.findall(r'Ran (\d+) tests? in ', output)
+        self.assertTrue(counts, 'architecture execution count missing: ' + output)
+        self.assertEqual(int(counts[-1]), 2, 'architecture execution count must be two')
+        self.assertEqual(result.returncode, 0, output)
+        self.assertEqual(self.oracle(), before, 'architecture inputs changed during execution')
+        return before
+
+    def assert_inputs_unchanged(self, before):
+        self.assertEqual(self.oracle(), before, 'architecture inputs changed during recording')
+
+    def edit_and_restore(self, name, check):
+        path = self.root / name
+        original = path.read_bytes() if path.exists() else None
+        self.write(name, (original.decode() if original is not None else '') + '\n# freshness edit\n')
+        try:
+            check()
+        finally:
+            if original is None:
+                path.unlink()
+            else:
+                path.write_bytes(original)
+
+
+class ArchitectureProfileTests(ArchitectureFixture):  # R1
+    def test_exact_registration_and_original_profile(self):
+        value = self.suggestion()
+        self.assertEqual(value['profile_id'], 'python-architecture-compatibility')
+        self.assertEqual(value['argv'], ARCH_COMMAND)
+        old = self.suggestion(argv=COMMAND)
+        self.assertEqual((old['profile_id'], old['inputs']), ('python-runner-test', READS))
+        variants = [ARCH_COMMAND[:2], ARCH_COMMAND + ['-v'], ARCH_COMMAND[:2] + ['DeclarationTests'],
+                    ARCH_COMMAND[:2] + ['CompatibilityTests.test_ungoverned_public_shape_stays_unchanged'],
+                    [sys.executable, *ARCH_COMMAND[1:]],
+                    ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
+                     '-p', 'test_assurance_architecture.py']]
+        for argv in variants:
+            result = self.export(argv=argv)
+            self.assertEqual(result.returncode, 2, 'unregistered argv exported: ' + repr(argv))
+            self.assertNotIn('inputs', json.loads(result.stdout))
+        self.refused(cwd=self.root / '.ai')
+
+
+class ArchitectureDependencyTests(ArchitectureFixture):  # R2
+    def test_order_scope_and_independent_read_oracle(self):
+        value = self.suggestion()
+        self.assertEqual(value['inputs'], ARCH_INPUTS)
+        self.assertEqual(set(value['rationale']), set(ARCH_INPUTS))
+        for reason in value['rationale'].values():
+            self.assertTrue(reason.strip())
+        self.write('.ai/scripts/future.py', '# copied in future\n')
+        self.write('.ai/scripts/assets/data.txt', 'conservative descendant')
+        self.write('.ai/scripts/tests/test_merge.py', '# unrelated\n')
+        selected = set(ledger.input_paths(self.root, value['inputs']))
+        self.assertTrue(set(self.oracle()).issubset(selected))
+        self.assertIn('.ai/scripts/future.py', selected)
+        self.assertIn('.ai/scripts/assets/data.txt', selected)
+        self.assertNotIn('.ai/scripts/tests/test_merge.py', selected)
+        self.assertNotIn(READS[0], selected)
+        for name, phrases in {
+                ARCH_TESTS[0]: ('from test_assurance import', 'from test_assurance_gate import',
+                                "SCRIPTS.glob('*.py')", "SCRIPTS.parent / 'lifecycle.md'",
+                                "['UNVERIFIED', 'VERIFIED', 'STALE', 'FAILED', 'VERIFIED']"),
+                ARCH_TESTS[1]: ("SCRIPTS.glob('*.py')", 'import disk_tmp'),
+                '.ai/scripts/assurance_demo.py': ('HERE.glob("*.py")',),
+                '.ai/scripts/assurance_architecture_demo.py': ('from assurance_demo import',),
+        }.items():
+            source = (self.root / name).read_text()
+            for phrase in phrases:
+                self.assertIn(phrase, source, 'review architecture read oracle: ' + name)
+
+
+class ArchitectureExportTests(ArchitectureFixture):  # R3
+    def test_readonly_formats_supplements_and_parser(self):
+        marker = self.root / 'executed'
+        for name in [*ARCH_TESTS[:-1], '.ai/scripts/assurance_architecture_demo.py']:
+            self.write(name, f'from pathlib import Path\nPath({str(marker)!r}).touch()\nraise RuntimeError("executed")\n')
+        self.write('space file.txt', 'supplement')
+        before = snapshot(self.root)
+        value = self.suggestion(extra=('space file.txt',))
+        text = self.export(extra=('space file.txt',), json_output=False)
+        self.assertEqual(text.returncode, 0, text.stderr)
+        self.assertEqual(value['inputs'], ARCH_INPUTS + ['space file.txt'])
+        self.assertEqual(value['lifecycle_inputs_argv'], ['--inputs', *value['inputs']])
+        for item in (value['profile_id'], value['inputs_line'], json.dumps(ARCH_COMMAND),
+                     json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
+            self.assertIn(item, text.stdout)
+        self.assertTrue(value['review_required'])
+        self.assertIn('runtime', ' '.join(value['limitations']).lower())
+        raw = '- ARCH-R1: The check MUST work.\n  - Verify: `' + ' '.join(ARCH_COMMAND) + '`\n' + value['inputs_line'] + '\n'
+        parsed = assurance.parse('ARCH-R1', 'capabilities/arch.md', raw, root=self.root)
+        self.assertIsNone(parsed.invalid)
+        self.assertEqual(list(parsed.globs), value['inputs'])
+        self.refused(argv=ARCH_COMMAND[:2])
+        self.assertEqual(snapshot(self.root), before)
+        self.assertFalse(marker.exists())
+
+    def test_required_literals_and_unsafe_inputs_refuse(self):
+        for name in [*ARCH_TESTS, ARCH_GUIDE]:
+            path = self.root / name
+            original = path.read_bytes()
+            path.unlink()
+            self.refused()
+            path.write_bytes(original)
+        name = ARCH_GUIDE
+        self.git('rm', '--cached', name)
+        self.write('.gitignore', name + '\n')
+        self.refused()
+        self.git('add', '-f', name)
+        path = self.root / name
+        original = path.read_bytes()
+        outside = Path(self.temp.name) / 'outside.md'
+        outside.write_bytes(original)
+        path.unlink()
+        path.symlink_to(outside)
+        self.refused()
+        path.unlink()
+        path.write_bytes(original)
+        for extra in ('!README.md', '../x', '/etc/passwd', '', 'x`bad', '--other-option'):
+            self.refused(extra=(extra,))
+
+
+class ArchitectureCompatibilityTests(ArchitectureFixture):  # R4
+    def test_existing_contracts_and_guide(self):
+        self.assertEqual(self.suggestion(argv=COMMAND)['inputs'], READS)
+        self.assertEqual(ledger.default_inputs(COMMAND), ('python-tests', ['**']))
+        self.assertIsNone(ledger.default_inputs(ARCH_COMMAND))
+        for argv in (['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests'],
+                     *[['python3', '.ai/scripts/run_tests.py', '-j', str(n)] for n in (1, 8, 32)]):
+            self.refused(argv=argv)
+        self.assertNotIn(EXCLUDE, self.suggestion()['inputs'])
+        guide = (self.root / ARCH_GUIDE).read_text()
+        for phrase in ('python-architecture-compatibility', ' '.join(ARCH_COMMAND),
+                       'copied', 'conservative', 'explicit', 'runtime', 'python-runner-test'):
+            self.assertIn(phrase, guide)
+
+
+class ArchitectureFrameworkEndToEndTests(ArchitectureFixture):  # R5
+    def record(self):
+        value = self.suggestion()
+        before = self.preflight()
+        self.lc('tier', 'L1', '--reason', 'architecture framework fixture')
+        self.lc('run', 'architecture', *value['lifecycle_inputs_argv'], '--', *ARCH_COMMAND)
+        self.assert_inputs_unchanged(before)
+        import lifecycle
+        entry = lifecycle.load(self.root)['ledger'][-1]
+        self.assertEqual((entry['argv'], entry['inputs'], entry['exit']),
+                         (ARCH_COMMAND, value['inputs'], 0))
+        self.assertIn('REUSE', self.lc('reuse', 'architecture'))
+
+    def test_each_input_and_addition_invalidates(self):
+        self.record()
+        self.write('.ai/scripts/tests/unrelated.py', '# unrelated\n')
+        self.assertIn('REUSE', self.lc('reuse', 'architecture'))
+        for name in [ARCH_GUIDE, *ARCH_TESTS, '.ai/scripts/assurance.py', '.ai/scripts/new_copy.py']:
+            with self.subTest(name=name):
+                def stale():
+                    result = self.process([sys.executable, '.ai/scripts/lifecycle.py', 'reuse', 'architecture'])
+                    self.assertEqual(result.returncode, 1, 'missing freshness invalidation: ' + name)
+                    self.assertIn('RERUN', result.stdout)
+                self.edit_and_restore(name, stale)
+        self.assertFalse((self.root / 'knowledge').exists())
+
+
+class ArchitectureAdopterEndToEndTests(ArchitectureFixture):  # R6
+    def test_explicit_adoption_freshness_and_identity(self):
+        (self.root / '.agentic.json').unlink()
+        self.lc('tier', 'L1', '--reason', 'architecture adopter fixture')
+        result = self.process([sys.executable, '.ai/scripts/okf.py', 'init'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.write('knowledge/project/sync-ignore', '*\n')
+        value = self.suggestion()
+        prefix = ('---\ntype: Capability\ntitle: Architecture\nnamespace: ARCH\nstatus: draft\n---\n'
+                  '# Architecture\n\n## Requirements\n\n- ARCH-R1: The check MUST work.\n'
+                  '  - Verify: `' + ' '.join(ARCH_COMMAND) + '`\n')
+        capability = self.write('knowledge/capabilities/arch.md', prefix + value['inputs_line'] + '\n')
+        self.commit()
+        before = self.preflight()
+        self.lc('assure', '--run', 'ARCH-R1')
+        self.assert_inputs_unchanged(before)
+
+        def status():
+            result = self.process([sys.executable, '.ai/scripts/lifecycle.py', 'assure', '--json'])
+            data = json.loads(result.stdout)
+            return next(r['status'] for r in data['requirements'] if r['id'] == 'ARCH-R1')
+
+        self.assertEqual(status(), 'VERIFIED')
+        self.write('.ai/scripts/tests/unrelated.py', '# excluded\n')
+        self.assertEqual(status(), 'VERIFIED')
+        for name in [ARCH_GUIDE, *ARCH_TESTS, '.ai/scripts/assurance.py', '.ai/scripts/new_copy.py']:
+            with self.subTest(name=name):
+                self.edit_and_restore(name, lambda: self.assertEqual(status(), 'STALE'))
+        self.assertEqual(status(), 'VERIFIED')
+        reordered = [*value['inputs'][:-2], value['inputs'][-1], value['inputs'][-2]]
+        capability.write_text(prefix + '  - Inputs: ' + ' '.join('`' + p + '`' for p in reordered) + '\n')
+        self.assertEqual(status(), 'UNVERIFIED')
+        entries = [e for p in (self.root / 'knowledge/history/lifecycle').glob('*.json')
+                   for e in json.loads(p.read_text()).get('ledger', []) if e['label'] == 'req:ARCH-R1']
+        self.assertEqual(entries[-1]['inputs'], ARCH_INPUTS + [EXCLUDE])
+
+
+class ArchitectureControlTests(ArchitectureFixture):  # R6
+    def test_confirmed_broken_variants_fail_their_criteria(self):
+        # Execute real acceptance cases against independent disposable sources.
+        variants = [('guide', ArchitectureFrameworkEndToEndTests, 'test_each_input_and_addition_invalidates',
+                     'missing freshness invalidation: ' + ARCH_GUIDE),
+                    ('helper', ArchitectureFrameworkEndToEndTests, 'test_each_input_and_addition_invalidates',
+                     'missing freshness invalidation: ' + ARCH_TESTS[1]),
+                    ('loose', ArchitectureProfileTests, 'test_exact_registration_and_original_profile',
+                     'unregistered argv exported'),
+                    ('empty', ArchitectureFrameworkEndToEndTests, 'test_each_input_and_addition_invalidates',
+                     'architecture execution count must be two')]
+        for variant, cls, method, criterion in variants:
+            with self.subTest(variant=variant):
+                case = cls(method)
+                setup = case.setUp
+
+                def mutated_setup():
+                    setup()
+                    path = case.root / '.ai/scripts/assurance_inputs.py'
+                    original = path.read_text()
+                    if variant in ('guide', 'helper'):
+                        module = case.module()
+                        catalog = copy.deepcopy(module.PROFILES)
+                        profile = next(p for p in catalog if p['id'] == 'python-architecture-compatibility')
+                        omitted = ARCH_GUIDE if variant == 'guide' else ARCH_TESTS[1]
+                        profile['inputs'].remove(omitted)
+                        del profile['rationale'][omitted]
+                        replacement = (original.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
+                                       + '\nLIMITATIONS =' + original.split('\nLIMITATIONS =', 1)[1])
+                        path.write_text(replacement)
+                        case.assertNotIn(omitted, case.suggestion()['inputs'])
+                    elif variant == 'loose':
+                        old = "p['argv'] == list(argv)"
+                        case.assertEqual(original.count(old), 1)
+                        replacement = original.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                        path.write_text(replacement)
+                    else:
+                        path = case.root / ARCH_TESTS[0]
+                        original = path.read_text()
+                        replacement = 'import unittest\nunittest.main()\n'
+                        path.write_text(replacement)
+                    case.assertNotEqual(original, replacement, 'mutation was not applied')
+                    case.assertEqual(path.read_text(), replacement, 'mutation bytes differ')
+
+                case.setUp = mutated_setup
+                result = unittest.TestResult()
+                case.run(result)
+                self.assertEqual(result.testsRun, 1)
+                self.assertFalse(result.errors, result.errors)
+                self.assertTrue(result.failures, 'broken variant survived: ' + variant)
+                self.assertIn(criterion, '\n'.join(text for _, text in result.failures))
+
+
 if __name__ == '__main__':
     unittest.main()

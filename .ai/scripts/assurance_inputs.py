@@ -26,6 +26,23 @@ PROFILES = [{
         '.ai/scripts/scratch.py': 'Transitive helper used to validate disk-backed temporary storage.',
         '.ai/scripts/run_tests.py': 'Subprocess script exercised by the selected test.',
     },
+}, {
+    'id': 'python-architecture-compatibility',
+    'cwd': '.',
+    'argv': ['python3', '.ai/scripts/tests/test_assurance_architecture.py', 'CompatibilityTests'],
+    'inputs': ['.ai/scripts/**', '!.ai/scripts/tests/**',
+               '.ai/scripts/tests/test_assurance_architecture.py',
+               '.ai/scripts/tests/test_assurance.py', '.ai/scripts/tests/test_assurance_gate.py',
+               '.ai/scripts/tests/disk_tmp.py', '.ai/lifecycle.md'],
+    'rationale': {
+        '.ai/scripts/**': 'Conservative non-test script-directory scope: fixtures and demo copy all top-level Python scripts; the check watches their bytes. Includes future scripts and non-test descendants.',
+        '!.ai/scripts/tests/**': 'Exclude unrelated tests before restoring the selected module and actual imported test helpers.',
+        '.ai/scripts/tests/test_assurance_architecture.py': 'Selected CompatibilityTests class; executes the demo and reads the guide.',
+        '.ai/scripts/tests/test_assurance.py': 'Imported Case fixture and constants; copies all top-level scripts into a temporary adopter.',
+        '.ai/scripts/tests/test_assurance_gate.py': 'Imported GateCase and DeltaCase definitions, with covered fixture and production imports.',
+        '.ai/scripts/tests/disk_tmp.py': 'Imported disk temporary-directory helper; its scratch dependency is within the production-script scope.',
+        '.ai/lifecycle.md': 'Direct Markdown read and byte watch; asserts the published demo command, declaration and checker.',
+    },
 }]
 LIMITATIONS = [
     'Declared repository input scope; review required when command reads or dependencies change.',
