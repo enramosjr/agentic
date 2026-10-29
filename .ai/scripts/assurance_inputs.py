@@ -128,6 +128,23 @@ PROFILES = [{
         '.ai/lifecycle.md': 'Direct text read requiring the lifecycle record-path and audit-command tokens, not actual audit behavior.',
         '.ai/docs/lifecycle.md': 'Direct text read requiring the same two tokens in the lifecycle guide, not command validity or record persistence.',
     },
+}, {
+    'id': 'python-analysis-convergence-doc-contract',
+    'cwd': '.',
+    'argv': ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+             'Tiers.test_analyze_and_converge_are_documented'],
+    'inputs': ['.ai/scripts/**', '!.ai/scripts/tests/**',
+               '.ai/scripts/tests/test_lifecycle_conformance.py', '.ai/scripts/tests/disk_tmp.py',
+               '.ai/lifecycle.md', '.ai/docs/lifecycle.md', '.ai/validation-policy.md'],
+    'rationale': {
+        '.ai/scripts/**': 'Conservative production import and lazy-loader/decorator setup scope; includes unused non-test descendants and future scripts, not a copied-directory boundary.',
+        '!.ai/scripts/tests/**': 'Exclude unrelated tests before restoring the selected module and imported helper.',
+        '.ai/scripts/tests/test_lifecycle_conformance.py': 'Selected analysis/convergence documentation method checks static whole-document substrings through a literal path loop and a separate literal read; it executes no extracted command.',
+        '.ai/scripts/tests/disk_tmp.py': 'Imported temporary-storage helper; scratch is within the production-script scope.',
+        '.ai/lifecycle.md': 'Direct text read requiring analyze and converge command tokens, not actual analysis or convergence.',
+        '.ai/docs/lifecycle.md': 'Direct text read requiring the same two command tokens in the lifecycle guide, not command validity.',
+        '.ai/validation-policy.md': 'Direct text read of both command tokens through the loop and the convergence-evidence phrase through a separate literal call, not evidence matching or reuse behavior.',
+    },
 }]
 LIMITATIONS = [
     'Declared repository input scope; review required when command reads or dependencies change.',
