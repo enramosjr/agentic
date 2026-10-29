@@ -1226,7 +1226,7 @@ def cmd_converge(args: argparse.Namespace) -> int:
     model = spec_model(root / spec)
     results: list[dict] = []
     durations: dict[str, float] = {}
-    obligations = {op['id']: assurance.parse(op['id'], model['target'], op['replacement'])
+    obligations = {op['id']: assurance.parse(op['id'], model['target'], op['replacement'], root=root)
                    for op in model.get('operations', []) if op['replacement']}
     requirement_entries: dict[str, dict] = {}
     for rid in model["requirements"]:

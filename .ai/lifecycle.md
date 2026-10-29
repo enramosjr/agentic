@@ -207,6 +207,41 @@ Delta convergence also records `req:<ID>` evidence for an added/modified require
 Run `python3 .ai/scripts/assurance_demo.py` to watch a requirement go VERIFIED, STALE, VERIFIED in a throwaway repository.
 Run `python3 .ai/scripts/assurance_measure.py` to measure detection, false STALE, missed requirements and rerun contributions on six deterministic fixtures.
 
+### Governed architecture constraints
+
+An ordinary structured capability requirement may declare one indented `Governed-by:` line before its first scenario. Its value is exactly one Markdown link with a nonempty label and target to an existing `.md` file inside `knowledge/`. Angle-bracket destinations and optional Markdown titles are supported. Relative paths resolve from the capability document; `/project/...` paths resolve from the bundle root. Local URL-encoded paths follow the same conventions as OKF links. Optional query/fragment text is retained in the reference; section anchors and ADR approval/status are not validated. Empty/malformed values, duplicate/late declarations, external links, missing files, directories and resolved paths outside the bundle (including escaping symlinks) make the requirement INVALID with a repair diagnostic.
+
+Governance is declared provenance. Text shows `governance (declared, not verified):` and the reference. Schema-version-1 JSON adds `governed_by` only for declaring requirements, with `basis: declared`, `reference` (the supplied trimmed value), and `document` (the resolved repository-relative path without a fragment, only for valid resolution). Invalid values retain their reference and diagnostic. Existing status, basis, summaries, exits and evidence are unchanged. Governance establishes neither decision approval nor architectural correctness; MANUAL and UNDECLARED retain their existing nonblocking behavior. Existing L2/L3 touched-requirement enforcement and exact-command delta evidence apply, without a new gate or automatic execution.
+
+The link adds no implicit evidence input. Include the ADR explicitly in `Inputs:` if editing it should stale verification. If omitted, evidence retains existing freshness behavior and may remain VERIFIED after ADR edits, including the existing whole-tree Markdown exemption. VERIFIED covers the command and its declared inputs; this cannot discover omitted dependencies or derive constraints from decision prose.
+
+Run `python3 .ai/scripts/assurance_architecture_demo.py` for an unattended stdlib fixture that asserts UNVERIFIED → VERIFIED → STALE → FAILED → VERIFIED using explicit `assure --run` commands. It introduces a real forbidden import, checks the failure, repairs it, and removes its temporary repository. It changes no invoking-repository source. Its capability contains:
+
+```markdown
+- DEMO-R1: The core MUST avoid imports from adapter.
+  - Governed-by: [Layer boundary](../project/decisions/layers.md#boundary)
+  - Verify: `python3 check.py`
+  - Inputs: `check.py` `src/**` `knowledge/project/decisions/layers.md`
+  - Scenario boundary: A forbidden import fails the checker.
+```
+
+The governing document is `knowledge/project/decisions/layers.md`. The fixture's `check.py` inspects `src/calc.py` without importing or executing it:
+
+```python
+import ast
+from pathlib import Path
+import sys
+
+nodes = ast.walk(ast.parse(Path('src/calc.py').read_text()))
+for node in nodes:
+    names = [alias.name for alias in node.names] if isinstance(node, ast.Import) else []
+    if isinstance(node, ast.ImportFrom):
+        names.append(node.module or '')
+    if any(name.split('.')[0] == 'adapter' for name in names):
+        raise SystemExit(3)
+sys.exit(0)
+```
+
 ## Evals
 
 `python3 .ai/scripts/lifecycle_eval.py run [--repeat N --json OUT] -- AGENT_COMMAND` evaluates fresh copied-kit repositories and records deterministic behavior/artifact checks. Completed L2/spec-backed L3 outcomes additionally require a unique verified candidate and operator-observed independent-review evidence; the queue-only L3 case is separate. `--observation-adapter ID` captures an operator-owned argv parser from `--checks-dir`; unsupported review visibility is a measurement error, not assumed independence.

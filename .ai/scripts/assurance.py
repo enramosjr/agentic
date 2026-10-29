@@ -20,6 +20,7 @@ import re
 import shlex
 import subprocess
 import sys
+from urllib.parse import unquote
 
 sys.dont_write_bytecode = True  # Bytecode beside the scripts would dirty the work tree.
 
@@ -34,6 +35,10 @@ STATUSES = ('VERIFIED', *FAILING, 'MANUAL', 'UNDECLARED')
 VERIFY = re.compile(r'^\s+[-*] Verify:(.*)$')
 INPUTS = re.compile(r'^\s+[-*] Inputs:(.*)$')
 RISK = re.compile(r'^\s+[-*] Accept-risk:(.*)$')
+GOVERNED = re.compile(r'^\s+[-*] Governed-by:(.*)$')
+LINK = re.compile(r'\[((?:[^\]\\]|\\.)+)\]\(\s*(?:<([^<>\s]+)>|([^()\s<>]+))'
+                  r'''(?:\s+(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^()\r\n]*\)))?\s*\)''')
+SCHEME = re.compile(r'^[a-zA-Z][a-zA-Z0-9+.-]*:')
 SCENARIO = re.compile(r'^\s+[-*] Scenario [^:\r\n]+:')
 COMMAND = re.compile(r'^`([^`]*)`$')
 MANUAL = re.compile(r'^manual(?![\w-])\s*[-–—:]?\s*(.*)$')
@@ -52,6 +57,7 @@ class Obligation:
     declared: bool = True
     risk: tuple = ()  # (until, by, reason) of a valid Accept-risk: line
     block_sha256: str = ''
+    governed_by: dict | None = None
 
     @property
     def evidence_globs(self) -> list[str]:
@@ -77,7 +83,7 @@ def parse_risk(value: str) -> tuple | str:
     return until, by[1], reason[1].strip()
 
 
-def parse(rid: str, capability: str, raw: str) -> Obligation:
+def _parse(rid: str, capability: str, raw: str) -> Obligation:
     """The obligation a requirement block declares, or why it is INVALID."""
     found: dict[str, str] = {}
     scenario = False
@@ -132,6 +138,46 @@ def parse(rid: str, capability: str, raw: str) -> Obligation:
     return Obligation(rid, capability, argv=argv, globs=globs, risk=risk)
 
 
+def parse(rid: str, capability: str, raw: str, *, root: Path | None = None) -> Obligation:
+    """Attach declared governance to every obligation outcome without changing its evidence scope."""
+    obligation = _parse(rid, capability, raw)
+    values = []
+    late = False
+    scenario = False
+    for line in raw.splitlines()[1:]:
+        scenario = scenario or bool(SCENARIO.match(line))
+        match = GOVERNED.match(line)
+        if match:
+            values.append(match[1].strip())
+            late = late or scenario
+    if not values:
+        return obligation
+    metadata = {'basis': 'declared', 'reference': values[0]}
+    try:
+        if len(values) != 1 or late:
+            raise ValueError('must appear once, before the first scenario')
+        link = LINK.fullmatch(values[0])
+        if not link or not link[1].strip():
+            raise ValueError('must contain exactly one Markdown link with a nonempty label and target')
+        if root is None:
+            raise ValueError('must have repository context to resolve the decision document')
+        root = root.resolve()
+        bundle = root / 'knowledge'
+        value = unquote((link[2] or link[3]).split('#', 1)[0].split('?', 1)[0])
+        if not value or SCHEME.match(value) or value.startswith('//'):
+            raise ValueError('must link to a local Markdown document within the knowledge bundle')
+        source = bundle / capability.lstrip('/') if capability.startswith('/') else root / capability
+        target = (bundle / value.lstrip('/') if value.startswith('/') else source.parent / value).resolve()
+        if not target.is_relative_to(bundle.resolve()) or not target.is_relative_to(root):
+            raise ValueError('must resolve within the knowledge bundle')
+        if target.suffix != '.md' or not target.is_file():
+            raise ValueError('must resolve to an existing Markdown file')
+        metadata['document'] = target.relative_to(root).as_posix()
+    except (OSError, RuntimeError, ValueError) as error:
+        return dataclasses.replace(obligation, governed_by=metadata, invalid=f'Governed-by: {error}')
+    return dataclasses.replace(obligation, governed_by=metadata)
+
+
 def requirements(root: Path) -> tuple[list[Obligation], list[str]]:
     """Obligations of every structured capability; prose capabilities have none. Diagnostics name unreadable files."""
     directory = root / 'knowledge/capabilities'
@@ -152,7 +198,7 @@ def requirements(root: Path) -> tuple[list[Obligation], list[str]]:
         except (OSError, UnicodeError, ValueError) as error:
             diagnostics.append(f'{relative}: capability cannot be parsed ({error})')
             continue
-        found.extend(dataclasses.replace(parse(rid, relative, block.raw), block_sha256=brownfield.sha(block.raw))
+        found.extend(dataclasses.replace(parse(rid, relative, block.raw, root=root), block_sha256=brownfield.sha(block.raw))
                      for rid, block in blocks.items())
     return found, diagnostics
 
@@ -311,8 +357,11 @@ def result(obligation: Obligation, status: str, reason: str, basis: str = 'none'
     if found is not None:
         record = {'record': found.record, 'head': found.entry.get('head'),
                   'at': found.entry.get('at'), 'exit': found.entry.get('exit')}
-    return {'id': obligation.id, 'capability': obligation.capability, 'status': status,
+    item = {'id': obligation.id, 'capability': obligation.capability, 'status': status,
             'basis': basis, 'evidence': record, 'reason': reason}
+    if obligation.governed_by is not None:
+        item['governed_by'] = obligation.governed_by
+    return item
 
 
 def evaluate(root: Path, obligation: Obligation, items: list[Evidence], tree: str) -> dict:
@@ -464,6 +513,8 @@ def render(results: list[dict], diagnostics: list[str], notes: list[str] | tuple
         evidence = item['evidence']
         where = f" head={str(evidence['head'] or '?')[:7]} at={evidence['at']}" if evidence else ''
         lines.append(f"{item['status']:<10} {item['id']} {item['capability']}{where} - {item['reason']}")
+        if 'governed_by' in item:
+            lines.append('    governance (declared, not verified): ' + item['governed_by']['reference'])
         if 'attested' in item:
             att = item['attested']
             lines.append(f"    judgment (attested, not verified): approved review {att['review']} "
