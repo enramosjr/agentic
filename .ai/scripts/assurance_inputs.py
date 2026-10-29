@@ -79,6 +79,23 @@ PROFILES = [{
         '.ai/lifecycle.md': 'Direct text read of Stage 3 report-preservation instructions.',
         '.claude/skills/review/SKILL.md': 'Direct text read of review-skill report-preservation instructions.',
     },
+}, {
+    'id': 'python-installer-doc-contract',
+    'cwd': '.',
+    'argv': ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+             'Distribution.test_readme_and_playbook_document_the_installer'],
+    'inputs': ['.ai/scripts/**', '!.ai/scripts/tests/**',
+               '.ai/scripts/tests/test_lifecycle_conformance.py', '.ai/scripts/tests/disk_tmp.py',
+               '.ai/README.md', '.ai/docs/install-and-upgrade.md', '.ai/VERSION'],
+    'rationale': {
+        '.ai/scripts/**': 'Conservative production import and lazy-loader setup scope; includes unused non-test descendants and future scripts, not a copied-directory boundary.',
+        '!.ai/scripts/tests/**': 'Exclude unrelated tests before restoring the selected module and imported helper.',
+        '.ai/scripts/tests/test_lifecycle_conformance.py': 'Selected installer-documentation method checks static text tokens and the numeric VERSION regex; it does not run the installer.',
+        '.ai/scripts/tests/disk_tmp.py': 'Imported temporary-storage helper; scratch is within the production-script scope.',
+        '.ai/README.md': 'Direct text read of the Quick start installer-path token.',
+        '.ai/docs/install-and-upgrade.md': 'Direct text read of five installer-documentation terms.',
+        '.ai/VERSION': 'Direct non-Markdown text read checked with the existing numeric-version/newline regex, not semantic-version compatibility.',
+    },
 }]
 LIMITATIONS = [
     'Declared repository input scope; review required when command reads or dependencies change.',
