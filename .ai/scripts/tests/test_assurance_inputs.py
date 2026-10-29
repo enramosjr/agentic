@@ -970,5 +970,452 @@ class HarnessWiringControlTests(HarnessWiringFixture):  # R6
                 self.assertIn(criterion, '\n'.join(detail for _, detail in result.failures))
 
 
+# Reviewer report: specification-5d.md R1-R6. Independent reviewed declarations.
+REPORT_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+                  'RolesAndSkills.test_reviewer_completion_report_contract']
+REPORT_TESTS = [REPORT_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
+REPORT_DOCS = ['.claude/agents/reviewer.md', '.codex/agents/reviewer.toml',
+               '.ai/agents/reviewer.md', '.ai/lifecycle.md', '.claude/skills/review/SKILL.md']
+REPORT_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**', *REPORT_TESTS, *REPORT_DOCS]
+REPORT_IMPORTS = ['.ai/scripts/' + name + '.py' for name in
+                  ('scratch', 'lifecycle', 'review_guard', 'ledger', 'brownfield', 'okf',
+                   'learning', 'scan', 'project_context', 'assurance')]
+REPORT_SETUP_PINS = {
+    '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
+    '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
+    '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
+    '.ai/scripts/lifecycle.py': '048f391c166ffb58b8ba1d769ca287adc78d5c155a28bebba043e0d93a30e1ca',
+    '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
+    '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
+}
+
+
+def report_setup_digest(path):
+    """Pin import-time statements and bodies called by the reviewed setup path.
+
+    Classes execute their bodies during import, so retain them conservatively.
+    Other functions retain signatures/decorators but not uncalled bodies.
+    """
+    import ast
+    source = path.read_text()
+    lines = source.splitlines()
+    called = {'test_lifecycle_conformance.py': {'text'},
+              'scratch.py': {'require_disk'}, 'lifecycle.py': {'lazy'},
+              'review_guard.py': {'protected'}}.get(path.name, set())
+    segments = []
+    for node in ast.parse(source).body:
+        decorators = getattr(node, 'decorator_list', [])
+        start = min([node.lineno, *[n.lineno for n in decorators]]) - 1
+        end = node.end_lineno
+        if (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.name not in called and node.body[0].lineno != node.lineno):
+            end = node.body[0].lineno - 1
+        segments.append('\n'.join(lines[start:end]))
+    return hashlib.sha256('\n'.join(segments).encode()).hexdigest()
+
+
+class ReviewerReportFixture(Fixture):
+    def setUp(self):
+        super().setUp()
+        # Prior-profile data supports compatibility exports, not the read oracle.
+        for name in dict.fromkeys([*REPORT_TESTS, *REPORT_DOCS, *WIRING_JSON, *ARCH_TESTS[:-1]]):
+            destination = self.root / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(SCRIPTS.parent.parent / name, destination)
+        self.commit()
+
+    def export(self, argv=None, **kwargs):
+        return super().export(argv=REPORT_COMMAND if argv is None else argv, **kwargs)
+
+    def selected_bytes(self):
+        return {name: (self.root / name).read_bytes()
+                for name in ledger.input_paths(self.root, REPORT_INPUTS)}
+
+    def assert_inputs_unchanged(self, before):
+        self.assertEqual(self.selected_bytes(), before, 'report execution changed inputs')
+
+    def execution(self, passing=True):
+        before = self.selected_bytes()
+        result = self.process(REPORT_COMMAND)
+        output = result.stdout + result.stderr
+        counts = re.findall(r'Ran (\d+) tests? in ', output)
+        self.assertEqual(len(counts), 1, 'report execution count missing or ambiguous: ' + output)
+        self.assertEqual(int(counts[0]), 1, 'report execution count must be one: ' + output)
+        if passing:
+            self.assertEqual(result.returncode, 0, output)
+            self.assertRegex(output, r'\nOK\s*$')
+        else:
+            self.assertNotEqual(result.returncode, 0, output)
+            self.assertIn('AssertionError', output)
+            self.assertIn('test_reviewer_completion_report_contract', output)
+        self.assert_inputs_unchanged(before)
+        return result
+
+    def preflight(self):
+        before = self.selected_bytes()
+        self.execution()
+        return before
+
+    def edit_and_restore(self, name, check):
+        path = self.root / name
+        original = path.read_bytes() if path.exists() else None
+        self.write(name, (original.decode() if original is not None else '') + '\n ')
+        try:
+            if name in REPORT_DOCS:
+                self.execution()  # Freshness changes must preserve the static contract.
+            check()
+        finally:
+            if original is None:
+                path.unlink()
+            else:
+                path.write_bytes(original)
+
+    def assert_prior_profiles(self):
+        HarnessWiringProfileTests.assert_prior_profiles(self)
+        result = subprocess.run(['git', 'show', 'HEAD:.ai/scripts/assurance_inputs.py'],
+                                cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        import ast
+        tree = ast.parse(result.stdout)
+        baseline = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign)
+                        and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in n.targets))
+        expected = next(p for p in baseline if p['id'] == 'python-harness-wiring')
+        actual = next(p for p in self.module().PROFILES if p['id'] == expected['id'])
+        self.assertEqual(actual, expected)
+        value = self.suggestion(argv=WIRING_COMMAND)
+        self.assertEqual((value['profile_id'], value['argv'], value['inputs'], value['rationale']),
+                         (expected['id'], WIRING_COMMAND, WIRING_INPUTS, expected['rationale']))
+
+
+class ReviewerReportProfileTests(ReviewerReportFixture):  # R1
+    def test_exact_registration_and_prior_profiles(self):
+        value = self.suggestion()
+        self.assertEqual(value['profile_id'], 'python-reviewer-report-contract')
+        self.assertEqual(value['argv'], REPORT_COMMAND)
+        self.assert_prior_profiles()
+        for argv in (REPORT_COMMAND[:2], REPORT_COMMAND[:2] + ['RolesAndSkills'],
+                     REPORT_COMMAND[:2] + ['RolesAndSkills.test_every_documented_okf_show_command_resolves'],
+                     REPORT_COMMAND + ['-v'], [sys.executable, *REPORT_COMMAND[1:]],
+                     ['python3', './' + REPORT_COMMAND[1], REPORT_COMMAND[2]],
+                     ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
+                      '-p', 'test_lifecycle_conformance.py']):
+            value = self.refused(argv=argv)
+            self.assertIn('exact command', value['reason'])
+        self.refused(cwd=self.root / '.ai')
+
+
+class ReviewerReportDependencyTests(ReviewerReportFixture):  # R2
+    def test_added_import_or_read_requires_review(self):
+        for name, addition in [(REPORT_TESTS[0], '\nimport unreviewed_report_helper\n'),
+                               (REPORT_TESTS[0], 'text-body'),
+                               *[(p, '\nfrom pathlib import Path as AddedPath\nAddedPath("unrelated.md").read_text()\n')
+                                 for p in [*REPORT_TESTS, *REPORT_IMPORTS[:4]]]]:
+            with self.subTest(name=name, addition=addition):
+                case = ReviewerReportDependencyTests('test_order_scope_and_independent_oracle')
+                setup = case.setUp
+
+                def changed_setup():
+                    setup()
+                    case.write('unrelated.md', 'new unreviewed input')
+                    case.write('.ai/scripts/tests/unreviewed_report_helper.py',
+                               'from pathlib import Path\nPath("unrelated.md").read_text()\n')
+                    path = case.root / name
+                    import ast
+                    source = path.read_text()
+                    # Insert before unittest.main can exit, after future imports.
+                    if addition == 'text-body':
+                        old = '    return (ROOT / path).read_text()'
+                        case.assertEqual(source.count(old), 1)
+                        changed = source.replace(old, '    (ROOT / "unrelated.md").read_text()\n' + old)
+                    else:
+                        after = max(n.end_lineno for n in ast.parse(source).body
+                                    if isinstance(n, (ast.Import, ast.ImportFrom)))
+                        lines = source.splitlines(keepends=True)
+                        changed = ''.join(lines[:after]) + addition + ''.join(lines[after:])
+                    path.write_text(changed)
+                    case.assertEqual(path.read_text(), changed)
+                    case.assertNotIn('unrelated.md', ledger.input_paths(case.root, REPORT_INPUTS))
+                    case.execution()  # The new excluded read is reachable, not dead code.
+
+                case.setUp = changed_setup
+                result = unittest.TestResult()
+                case.run(result)
+                self.assertFalse(result.errors, result.errors)
+                self.assertTrue(result.failures, 'unreviewed import-time dependency survived: ' + name)
+                self.assertIn('review report import-time boundary',
+                              '\n'.join(detail for _, detail in result.failures))
+
+    def test_order_scope_and_independent_oracle(self):
+        value = self.suggestion()
+        actual_setup = {p: report_setup_digest(self.root / p)
+                        for p in [*REPORT_TESTS, *REPORT_IMPORTS[:4]]}
+        self.assertEqual(actual_setup, REPORT_SETUP_PINS,
+                         'review report import-time boundary: ' + repr(actual_setup))
+        self.assertEqual(value['inputs'], REPORT_INPUTS)
+        self.assertEqual(set(value['rationale']), set(REPORT_INPUTS))
+        for name, terms in {
+            '.ai/scripts/**': ('import', 'lazy', 'conservative'),
+            '!.ai/scripts/tests/**': ('exclude',),
+            REPORT_TESTS[0]: ('method', 'static'), REPORT_TESTS[1]: ('helper',),
+            **{p: ('direct',) for p in REPORT_DOCS},
+        }.items():
+            for term in terms:
+                self.assertIn(term, value['rationale'][name].lower())
+        self.write('.ai/scripts/future_report.py', '# future production\n')
+        self.write('.ai/scripts/assets/report.txt', 'conservative descendant')
+        self.write('.ai/scripts/tests/unrelated.py', '# unrelated\n')
+        self.write('unrelated.md', 'non-input')
+        selected = set(ledger.input_paths(self.root, value['inputs']))
+        self.assertTrue(set([*REPORT_TESTS, *REPORT_DOCS, *REPORT_IMPORTS]).issubset(selected))
+        for name in ('.ai/scripts/future_report.py', '.ai/scripts/assets/report.txt'):
+            self.assertIn(name, selected)
+        for name in ('.ai/scripts/tests/unrelated.py', 'unrelated.md', *WIRING_JSON, *ARCH_TESTS[:-1]):
+            self.assertNotIn(name, selected)
+        import ast
+        source = (self.root / REPORT_TESTS[0]).read_text()
+        tree = ast.parse(source)
+        cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'RolesAndSkills')
+        method = next(n for n in cls.body if isinstance(n, ast.FunctionDef)
+                      and n.name == REPORT_COMMAND[2].split('.')[1])
+        # Pin the reviewed source, not a second copy of the current implementation.
+        reviewed = '\n'.join(source.splitlines()[method.lineno - 1:method.end_lineno])
+        self.assertEqual(hashlib.sha256(reviewed.encode()).hexdigest(),
+                         '81d3db1483a1c681224724f2817e43e6a59f603007f88bbaf4706c4e96eea1ee',
+                         'review report method dependency boundary')
+        literals = {n.value for n in ast.walk(method) if isinstance(n, ast.Constant)
+                    and isinstance(n.value, str) and n.value.startswith(('.ai/', '.claude/', '.codex/'))}
+        self.assertEqual(literals, set(REPORT_DOCS) | {'.ai/lifecycle.md#Stage3'})
+        sentinels = {
+            REPORT_TESTS[0]: ('import disk_tmp', 'import lifecycle', '(ROOT / path).read_text()',
+                              'SHOW.findall', 'shlex.split', 'unittest.main()'),
+            REPORT_TESTS[1]: ('import scratch', 'scratch.require_disk'),
+            '.ai/scripts/lifecycle.py': ('import scratch', 'import review_guard', 'LazyLoader',
+                                         'brownfield', 'project_context', 'assurance'),
+            '.ai/scripts/review_guard.py': ('import ledger', 'import scratch'),
+            '.ai/scripts/scratch.py': ('/proc/self/mountinfo',),
+        }
+        for name, phrases in sentinels.items():
+            for phrase in phrases:
+                self.assertIn(phrase, (self.root / name).read_text(), 'review report dependency: ' + name)
+
+
+class ReviewerReportExportTests(ReviewerReportFixture):  # R3
+    def test_readonly_formats_supplements_and_no_semantic_parsing(self):
+        marker = self.root / 'executed'
+        for name in REPORT_TESTS:
+            self.write(name, f'from pathlib import Path\nPath({str(marker)!r}).touch()\nraise RuntimeError("executed")\n')
+        for name in REPORT_DOCS:
+            self.write(name, 'nonconforming document, including invalid TOML """')
+        self.write('space file.txt', 'supplement')
+        before = snapshot(self.root)
+        value = self.suggestion(extra=('space file.txt',))
+        text = self.export(extra=('space file.txt',), json_output=False)
+        self.assertEqual(text.returncode, 0, text.stderr)
+        self.assertEqual(value['inputs'], REPORT_INPUTS + ['space file.txt'])
+        self.assertEqual(value['lifecycle_inputs_argv'], ['--inputs', *value['inputs']])
+        for item in (value['profile_id'], value['inputs_line'], json.dumps(REPORT_COMMAND),
+                     json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
+            self.assertIn(item, text.stdout)
+        raw = '- REPORT-R1: The check MUST pass.\n  - Verify: `' + ' '.join(REPORT_COMMAND) + '`\n' + value['inputs_line'] + '\n'
+        parsed = assurance.parse('REPORT-R1', 'capabilities/report.md', raw, root=self.root)
+        self.assertIsNone(parsed.invalid)
+        self.assertEqual(list(parsed.globs), value['inputs'])
+        self.assertTrue(value['review_required'])
+        self.assertEqual(snapshot(self.root), before)
+        self.assertFalse(marker.exists())
+
+    def test_required_literals_and_unsafe_boundaries_refuse(self):
+        for name in [*REPORT_TESTS, *REPORT_DOCS]:
+            path = self.root / name
+            original = path.read_bytes()
+            path.unlink()
+            try:
+                self.refused()
+            finally:
+                path.write_bytes(original)
+        name = REPORT_DOCS[0]
+        self.git('rm', '--cached', name)
+        self.write('.gitignore', name + '\n')
+        self.refused()
+        self.git('add', '-f', name)
+        path = self.root / name
+        original = path.read_bytes()
+        outside = Path(self.temp.name) / 'outside.md'
+        outside.write_bytes(original)
+        path.unlink()
+        path.symlink_to(outside)
+        try:
+            self.refused()
+        finally:
+            path.unlink()
+            path.write_bytes(original)
+        for extra in ('!README.md', '../x', '/etc/passwd', '', 'x`bad', '--other-option'):
+            self.refused(extra=(extra,))
+
+
+class ReviewerReportCompatibilityTests(ReviewerReportFixture):  # R4
+    def test_advisory_guide_and_existing_contracts(self):
+        self.assert_prior_profiles()
+        self.assertIsNone(ledger.default_inputs(REPORT_COMMAND))
+        self.assertEqual(ledger.default_inputs(COMMAND), ('python-tests', ['**']))
+        for argv in (['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests'],
+                     *[['python3', '.ai/scripts/run_tests.py', '-j', str(n)] for n in (1, 8, 32)]):
+            self.refused(argv=argv)
+        value = self.suggestion()
+        self.assertNotIn(EXCLUDE, value['inputs'])
+        self.assertTrue(value['review_required'])
+        self.assertIn('runtime', ' '.join(value['limitations']).lower())
+        guide = (self.root / ARCH_GUIDE).read_text()
+        for phrase in ('python-reviewer-report-contract', ' '.join(REPORT_COMMAND),
+                       'static', 'conservative', 'explicit', 'manual', 'TOML',
+                       'report production', *REPORT_DOCS):
+            self.assertIn(phrase, guide)
+
+
+class ReviewerReportFrameworkEndToEndTests(ReviewerReportFixture):  # R5
+    def record(self):
+        value = self.suggestion()
+        before = self.preflight()
+        self.lc('tier', 'L1', '--reason', 'static report framework fixture')
+        self.lc('run', 'report', *value['lifecycle_inputs_argv'], '--', *REPORT_COMMAND)
+        self.assert_inputs_unchanged(before)
+        import lifecycle
+        entry = lifecycle.load(self.root)['ledger'][-1]
+        self.assertEqual((entry['argv'], entry['inputs'], entry['exit']),
+                         (REPORT_COMMAND, value['inputs'], 0))
+        self.assertIn('REUSE', self.lc('reuse', 'report'))
+
+    def test_each_input_and_addition_invalidates(self):
+        self.record()
+        for name in ('.ai/scripts/tests/unrelated.py', 'unrelated.md'):
+            self.edit_and_restore(name, lambda: self.assertIn('REUSE', self.lc('reuse', 'report')))
+        for name in [*REPORT_DOCS, *REPORT_TESTS, '.ai/scripts/review_guard.py', '.ai/scripts/new_report.py']:
+            with self.subTest(name=name):
+                def stale():
+                    result = self.process([sys.executable, '.ai/scripts/lifecycle.py', 'reuse', 'report'])
+                    self.assertEqual(result.returncode, 1, 'missing report freshness invalidation: ' + name)
+                    self.assertIn('RERUN', result.stdout)
+                self.edit_and_restore(name, stale)
+        self.assertIn('REUSE', self.lc('reuse', 'report'))
+        self.assertFalse((self.root / 'knowledge').exists())
+
+
+class ReviewerReportFailureTests(ReviewerReportFixture):  # R5
+    def test_each_document_contract_fails_actual_command(self):
+        variants = [(p, '--section "Completion report"', '--section Severity') for p in REPORT_DOCS[:2]]
+        variants += [(REPORT_DOCS[2], '## Residual Risks', '## Missing Risks')]
+        variants += [(p, 'complete returned Markdown body unchanged', 'altered body') for p in REPORT_DOCS[3:]]
+        for name, old, new in variants:
+            with self.subTest(name=name):
+                path = self.root / name
+                original = path.read_text()
+                self.assertIn(old, original)
+                changed = original.replace(old, new)
+                path.write_text(changed)
+                try:
+                    self.assertEqual(path.read_text(), changed)
+                    self.suggestion()
+                    self.execution(passing=False)
+                finally:
+                    path.write_text(original)
+
+
+class ReviewerReportAdopterEndToEndTests(ReviewerReportFixture):  # R6
+    def test_explicit_adoption_freshness_identity_and_receipt(self):
+        (self.root / '.agentic.json').unlink()
+        self.lc('tier', 'L1', '--reason', 'static report adopter fixture')
+        result = self.process([sys.executable, '.ai/scripts/okf.py', 'init'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.write('knowledge/project/sync-ignore', '*\n')
+        value = self.suggestion()
+        prefix = ('---\ntype: Capability\ntitle: Report\nnamespace: REPORT\nstatus: draft\n---\n'
+                  '# Report\n\n## Requirements\n\n- REPORT-R1: The static check MUST pass.\n'
+                  '  - Verify: `' + ' '.join(REPORT_COMMAND) + '`\n')
+        original = prefix + value['inputs_line'] + '\n'
+        capability = self.write('knowledge/capabilities/report.md', original)
+        self.commit()
+
+        def status():
+            result = self.process([sys.executable, '.ai/scripts/lifecycle.py', 'assure', '--json'])
+            data = json.loads(result.stdout)
+            state = next(r['status'] for r in data['requirements'] if r['id'] == 'REPORT-R1')
+            self.assertEqual(result.returncode, 0 if state == 'VERIFIED' else 1, result.stdout + result.stderr)
+            return state
+
+        self.assertEqual(status(), 'UNVERIFIED')
+        before = self.preflight()
+        self.lc('assure', '--run', 'REPORT-R1')
+        self.assert_inputs_unchanged(before)
+        self.assertEqual(status(), 'VERIFIED')
+        for name in ('.ai/scripts/tests/unrelated.py', 'unrelated.md'):
+            self.edit_and_restore(name, lambda: self.assertEqual(status(), 'VERIFIED'))
+        for name in [*REPORT_DOCS, *REPORT_TESTS, '.ai/scripts/review_guard.py', '.ai/scripts/new_report.py']:
+            with self.subTest(name=name):
+                self.edit_and_restore(name, lambda: self.assertEqual(status(), 'STALE'))
+        self.assertEqual(status(), 'VERIFIED')
+        reordered = [*value['inputs'][:-2], value['inputs'][-1], value['inputs'][-2]]
+        capability.write_text(prefix + '  - Inputs: ' + ' '.join('`' + p + '`' for p in reordered) + '\n')
+        self.assertEqual(status(), 'UNVERIFIED')
+        capability.write_text(original.replace(REPORT_COMMAND[2] + '`', REPORT_COMMAND[2] + ' -v`'))
+        self.assertEqual(status(), 'UNVERIFIED')
+        capability.write_text(original)
+        self.assertEqual(status(), 'VERIFIED')
+        entries = [e for p in (self.root / 'knowledge/history/lifecycle').glob('*.json')
+                   for e in json.loads(p.read_text()).get('ledger', []) if e['label'] == 'req:REPORT-R1']
+        self.assertEqual(entries[-1]['inputs'], REPORT_INPUTS + [EXCLUDE])
+        self.write('knowledge/history/lifecycle/extra-receipt.json', '{}\n')
+        self.assertEqual(status(), 'VERIFIED')
+
+
+class ReviewerReportControlTests(ReviewerReportFixture):  # R6
+    def test_confirmed_broken_variants_fail_intended_criteria(self):
+        method = 'test_each_input_and_addition_invalidates'
+        variants = [(p, ReviewerReportFrameworkEndToEndTests, method,
+                     'missing report freshness invalidation: ' + p) for p in REPORT_DOCS]
+        variants += [('loose', ReviewerReportProfileTests, 'test_exact_registration_and_prior_profiles',
+                      '0 != 2'), ('empty', ReviewerReportFrameworkEndToEndTests, method,
+                                  'report execution count must be one')]
+        for variant, cls, test, criterion in variants:
+            with self.subTest(variant=variant):
+                case = cls(test)
+                setup = case.setUp
+
+                def mutated_setup():
+                    setup()
+                    path = case.root / '.ai/scripts/assurance_inputs.py'
+                    original = path.read_text()
+                    if variant in REPORT_DOCS:
+                        catalog = copy.deepcopy(case.module().PROFILES)
+                        profile = next(p for p in catalog if p['id'] == 'python-reviewer-report-contract')
+                        profile['inputs'].remove(variant)
+                        del profile['rationale'][variant]
+                        replacement = (original.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
+                                       + '\nLIMITATIONS =' + original.split('\nLIMITATIONS =', 1)[1])
+                    elif variant == 'loose':
+                        old = "p['argv'] == list(argv)"
+                        case.assertEqual(original.count(old), 1)
+                        replacement = original.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                    else:
+                        path = case.root / REPORT_TESTS[0]
+                        original = path.read_text()
+                        replacement = 'import sys\nimport unittest\nunittest.main(argv=[sys.argv[0]])\n'
+                    path.write_text(replacement)
+                    case.assertNotEqual(original, replacement, 'mutation was not applied')
+                    case.assertEqual(path.read_text(), replacement, 'mutation bytes differ')
+                    if variant in REPORT_DOCS:
+                        case.assertNotIn(variant, case.suggestion()['inputs'])
+                    if variant == 'empty':
+                        result = case.process(REPORT_COMMAND)
+                        case.assertRegex(result.stdout + result.stderr, r'Ran 0 tests? in ')
+
+                case.setUp = mutated_setup
+                result = unittest.TestResult()
+                case.run(result)
+                self.assertEqual(result.testsRun, 1)
+                self.assertFalse(result.errors, result.errors)
+                self.assertTrue(result.failures, 'broken report variant survived: ' + variant)
+                self.assertIn(criterion, '\n'.join(detail for _, detail in result.failures))
+
+
 if __name__ == '__main__':
     unittest.main()

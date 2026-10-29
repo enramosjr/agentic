@@ -59,6 +59,26 @@ PROFILES = [{
         '.codex/hooks.json': 'Direct JSON read for Codex lifecycle event and matcher declarations.',
         '.cursor/hooks.json': 'Direct JSON read for Cursor lifecycle event declarations.',
     },
+}, {
+    'id': 'python-reviewer-report-contract',
+    'cwd': '.',
+    'argv': ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+             'RolesAndSkills.test_reviewer_completion_report_contract'],
+    'inputs': ['.ai/scripts/**', '!.ai/scripts/tests/**',
+               '.ai/scripts/tests/test_lifecycle_conformance.py', '.ai/scripts/tests/disk_tmp.py',
+               '.claude/agents/reviewer.md', '.codex/agents/reviewer.toml',
+               '.ai/agents/reviewer.md', '.ai/lifecycle.md', '.claude/skills/review/SKILL.md'],
+    'rationale': {
+        '.ai/scripts/**': 'Conservative production import and lazy-loader setup scope; includes unused non-test descendants and future scripts, not a copied-directory boundary.',
+        '!.ai/scripts/tests/**': 'Exclude unrelated tests before restoring the selected module and imported helper.',
+        '.ai/scripts/tests/test_lifecycle_conformance.py': 'Selected reviewer-report method checks static instruction consistency; extracted commands are not executed and TOML is not structurally parsed.',
+        '.ai/scripts/tests/disk_tmp.py': 'Imported temporary-storage helper; scratch is within the production-script scope.',
+        '.claude/agents/reviewer.md': 'Direct text read of Claude reviewer section-loading instructions.',
+        '.codex/agents/reviewer.toml': 'Direct text read of Codex reviewer section-loading instructions, not structural TOML validation.',
+        '.ai/agents/reviewer.md': 'Direct text read of canonical report headings and return directions.',
+        '.ai/lifecycle.md': 'Direct text read of Stage 3 report-preservation instructions.',
+        '.claude/skills/review/SKILL.md': 'Direct text read of review-skill report-preservation instructions.',
+    },
 }]
 LIMITATIONS = [
     'Declared repository input scope; review required when command reads or dependencies change.',
