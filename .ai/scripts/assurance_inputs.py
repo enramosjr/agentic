@@ -160,6 +160,22 @@ PROFILES = [{
         '.ai/scripts/tests/disk_tmp.py': 'Imported temporary-storage helper; scratch is within the production-script scope.',
         '.ai/lifecycle.md': 'Sole direct document read requiring five exact heading substrings, not section contents, order or actual stage enforcement.',
     },
+}, {
+    'id': 'python-tier-doc-contract',
+    'cwd': '.',
+    'argv': ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+             'Tiers.test_tier_definitions_agree_across_agents_lifecycle_and_script'],
+    'inputs': ['.ai/scripts/**', '!.ai/scripts/tests/**',
+               '.ai/scripts/tests/test_lifecycle_conformance.py', '.ai/scripts/tests/disk_tmp.py',
+               'AGENTS.md', '.ai/lifecycle.md'],
+    'rationale': {
+        '.ai/scripts/**': 'Conservative production import, runtime TIERS/REQUIRED and lazy-loader/decorator construction scope; includes unused non-test descendants and future supported scripts, not a copied-directory boundary.',
+        '!.ai/scripts/tests/**': 'Exclude unrelated tests before restoring the selected module and imported helper.',
+        '.ai/scripts/tests/test_lifecycle_conformance.py': 'Selected method checks static bold substrings and regex matches per observed runtime tier, then REQUIRED/TIERS set equality within one test; no lifecycle command is executed.',
+        '.ai/scripts/tests/disk_tmp.py': 'Imported temporary-storage helper; scratch is within the production-script scope.',
+        'AGENTS.md': 'Direct text read repeated per observed runtime tier, requiring its bold substring; explicit despite general Markdown freshness exemptions.',
+        '.ai/lifecycle.md': 'Direct text read repeated per observed runtime tier, requiring its unescaped interpolated pipe/space regex match, not table semantics or actual enforcement.',
+    },
 }]
 LIMITATIONS = [
     'Declared repository input scope; review required when command reads or dependencies change.',
