@@ -112,6 +112,22 @@ PROFILES = [{
         'AGENTS.md': 'Direct text read of two required reference/loading tokens and absence of four policy strings; explicit despite general Markdown freshness exemptions.',
         '.ai/validation-policy.md': 'Direct text read requiring four literal policy strings, not actual policy enforcement.',
     },
+}, {
+    'id': 'python-audit-doc-contract',
+    'cwd': '.',
+    'argv': ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+             'Tiers.test_the_committed_audit_record_is_documented'],
+    'inputs': ['.ai/scripts/**', '!.ai/scripts/tests/**',
+               '.ai/scripts/tests/test_lifecycle_conformance.py', '.ai/scripts/tests/disk_tmp.py',
+               '.ai/lifecycle.md', '.ai/docs/lifecycle.md'],
+    'rationale': {
+        '.ai/scripts/**': 'Conservative production import and lazy-loader/decorator setup scope; includes unused non-test descendants and future scripts, not a copied-directory boundary.',
+        '!.ai/scripts/tests/**': 'Exclude unrelated tests before restoring the selected module and imported helper.',
+        '.ai/scripts/tests/test_lifecycle_conformance.py': 'Selected audit-documentation method checks static whole-document substring presence through a literal path loop; it does not execute audit commands.',
+        '.ai/scripts/tests/disk_tmp.py': 'Imported temporary-storage helper; scratch is within the production-script scope.',
+        '.ai/lifecycle.md': 'Direct text read requiring the lifecycle record-path and audit-command tokens, not actual audit behavior.',
+        '.ai/docs/lifecycle.md': 'Direct text read requiring the same two tokens in the lifecycle guide, not command validity or record persistence.',
+    },
 }]
 LIMITATIONS = [
     'Declared repository input scope; review required when command reads or dependencies change.',

@@ -2336,5 +2336,472 @@ class ValidationPolicyControlTests(ValidationPolicyFixture):  # R6
                 self.assertIn(criterion, '\n'.join(detail for _, detail in result.failures))
 
 
+# Audit documentation: specification-5g.md R1-R6. Independent of PROFILES.
+AUDIT_DOC_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+                     'Tiers.test_the_committed_audit_record_is_documented']
+AUDIT_DOC_TESTS = [AUDIT_DOC_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
+AUDIT_DOC_DOCS = ['.ai/lifecycle.md', '.ai/docs/lifecycle.md']
+AUDIT_DOC_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**', *AUDIT_DOC_TESTS, *AUDIT_DOC_DOCS]
+AUDIT_DOC_IMPORTS = ['.ai/scripts/' + name + '.py' for name in
+                     ('scratch', 'lifecycle', 'review_guard', 'ledger', 'brownfield',
+                      'okf', 'learning', 'scan', 'project_context', 'assurance')]
+AUDIT_DOC_TOKENS = ('knowledge/history/lifecycle/', 'lifecycle.py audit')
+
+
+class AuditDocFixture(Fixture):
+    def setUp(self):
+        super().setUp()
+        # Prior-profile compatibility copies are not the selected read oracle.
+        for name in dict.fromkeys([*AUDIT_DOC_TESTS, *AUDIT_DOC_DOCS, *VALIDATION_POLICY_DOCS,
+                                   *INSTALLER_DOC_TEXT, *REPORT_DOCS, *WIRING_JSON, *ARCH_TESTS[:-1]]):
+            destination = self.root / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(SCRIPTS.parent.parent / name, destination)
+        self.commit()
+
+    def export(self, argv=None, **kwargs):
+        return super().export(argv=AUDIT_DOC_COMMAND if argv is None else argv, **kwargs)
+
+    def selected_bytes(self):
+        return {name: (self.root / name).read_bytes()
+                for name in ledger.input_paths(self.root, AUDIT_DOC_INPUTS)}
+
+    def assert_inputs_unchanged(self, before):
+        self.assertEqual(self.selected_bytes(), before, 'audit doc execution changed inputs')
+
+    def execution(self, failure=None):
+        before = self.selected_bytes()
+        result = self.process(AUDIT_DOC_COMMAND)
+        output = result.stdout + result.stderr
+        counts = re.findall(r'Ran (\d+) tests? in ', output)
+        self.assertEqual(len(counts), 1, 'audit doc execution count missing or ambiguous: ' + output)
+        self.assertEqual(int(counts[0]), 1, 'audit doc execution count must be one: ' + output)
+        if failure is None:
+            self.assertEqual(result.returncode, 0, output)
+            self.assertRegex(output, r'\nOK\s*$')
+        else:
+            self.assertNotEqual(result.returncode, 0, output)
+            self.assertIn('AssertionError', output)
+            self.assertIn(AUDIT_DOC_COMMAND[2].split('.')[1], output)
+            self.assertIn(failure, output)
+            self.assertNotIn('ERROR:', output)
+        self.assert_inputs_unchanged(before)
+        return result
+
+    def preflight(self):
+        before = self.selected_bytes()
+        self.execution()
+        return before
+
+    def edit_and_restore(self, name, check):
+        path = self.root / name
+        original = path.read_bytes() if path.exists() else None
+        changed = (original or b'') + b'\n '
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(changed)
+        try:
+            self.assertNotEqual(original, changed)
+            self.assertEqual(path.read_bytes(), changed)
+            if name in AUDIT_DOC_DOCS:
+                self.execution()
+            check()
+        finally:
+            if original is None:
+                path.unlink()
+            else:
+                path.write_bytes(original)
+
+    def assert_prior_profiles(self):
+        result = subprocess.run(
+            ['git', 'show', 'c50034260a8c7e8a5ff42b44296720081dc9c039:.ai/scripts/assurance_inputs.py'],
+            cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        import ast
+        baseline = next(ast.literal_eval(n.value) for n in ast.parse(result.stdout).body
+                        if isinstance(n, ast.Assign)
+                        and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in n.targets))
+        identities = ('python-runner-test', 'python-architecture-compatibility', 'python-harness-wiring',
+                      'python-reviewer-report-contract', 'python-installer-doc-contract',
+                      'python-validation-policy-contract')
+        self.assertEqual(tuple(p['id'] for p in baseline), identities)
+        actual = self.module().PROFILES
+        for expected in baseline:
+            self.assertEqual(next(p for p in actual if p['id'] == expected['id']), expected)
+            value = self.suggestion(argv=expected['argv'])
+            self.assertEqual((value['profile_id'], value['argv'], value['inputs'], value['rationale']),
+                             (expected['id'], expected['argv'], expected['inputs'], expected['rationale']))
+
+
+class AuditDocProfileTests(AuditDocFixture):  # R1
+    def test_exact_registration_and_prior_profiles(self):
+        value = self.suggestion()
+        self.assertEqual(value['profile_id'], 'python-audit-doc-contract')
+        self.assertEqual(value['argv'], AUDIT_DOC_COMMAND)
+        self.assert_prior_profiles()
+        for argv in (AUDIT_DOC_COMMAND[:2], AUDIT_DOC_COMMAND[:2] + ['Tiers'],
+                     AUDIT_DOC_COMMAND[:2] + ['Tiers.test_analyze_and_converge_are_documented'],
+                     AUDIT_DOC_COMMAND + ['-v'], [sys.executable, *AUDIT_DOC_COMMAND[1:]],
+                     ['python3', './' + AUDIT_DOC_COMMAND[1], AUDIT_DOC_COMMAND[2]],
+                     ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
+                      '-p', 'test_lifecycle_conformance.py']):
+            self.assertIn('exact command', self.refused(argv=argv)['reason'])
+        self.refused(cwd=self.root / '.ai')
+
+
+class AuditDocExportTests(AuditDocFixture):  # R3
+    def test_readonly_formats_supplements_and_no_semantic_parsing(self):
+        marker = self.root / 'executed'
+        for name in AUDIT_DOC_TESTS:
+            self.write(name, f'from pathlib import Path\nPath({str(marker)!r}).touch()\nraise RuntimeError("executed")\n')
+        for name in AUDIT_DOC_DOCS:
+            self.write(name, 'nonconforming static document')
+        for name in ('space file.txt', 'second.txt'):
+            self.write(name, 'supplement')
+        before = snapshot(self.root)
+        extra = ('space file.txt', 'second.txt')
+        value = self.suggestion(extra=extra)
+        text = self.export(extra=extra, json_output=False)
+        self.assertEqual(text.returncode, 0, text.stderr)
+        self.assertEqual(value['inputs'], AUDIT_DOC_INPUTS + list(extra))
+        self.assertEqual(value['lifecycle_inputs_argv'], ['--inputs', *value['inputs']])
+        for item in (value['profile_id'], value['inputs_line'], json.dumps(AUDIT_DOC_COMMAND),
+                     json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
+            self.assertIn(item, text.stdout)
+        raw = ('- AUDITDOC-R1: The check MUST pass.\n  - Verify: `'
+               + ' '.join(AUDIT_DOC_COMMAND) + '`\n' + value['inputs_line'] + '\n')
+        parsed = assurance.parse('AUDITDOC-R1', 'capabilities/audit-doc.md', raw, root=self.root)
+        self.assertIsNone(parsed.invalid)
+        self.assertEqual(list(parsed.globs), value['inputs'])
+        self.assertTrue(value['review_required'])
+        self.assertEqual(snapshot(self.root), before)
+        self.assertFalse(marker.exists())
+
+    def test_required_literals_and_unsafe_boundaries_refuse(self):
+        for name in [*AUDIT_DOC_TESTS, *AUDIT_DOC_DOCS]:
+            path = self.root / name
+            original = path.read_bytes()
+            path.unlink()
+            try:
+                self.refused()
+            finally:
+                path.write_bytes(original)
+        name = AUDIT_DOC_DOCS[1]
+        self.git('rm', '--cached', name)
+        self.write('.gitignore', name + '\n')
+        self.refused()
+        self.git('add', '-f', name)
+        path = self.root / name
+        original = path.read_bytes()
+        outside = Path(self.temp.name) / 'outside.md'
+        outside.write_bytes(original)
+        path.unlink()
+        path.symlink_to(outside)
+        try:
+            self.refused()
+        finally:
+            path.unlink()
+            path.write_bytes(original)
+        for extra in ('!README.md', '../x', '/etc/passwd', '', 'x`bad', '--other-option'):
+            self.refused(extra=(extra,))
+
+
+# Independently reviewed shared initialization and called-body boundary.
+AUDIT_DOC_SETUP_PINS = {
+    '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
+    '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
+    '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
+    '.ai/scripts/lifecycle.py': '048f391c166ffb58b8ba1d769ca287adc78d5c155a28bebba043e0d93a30e1ca',
+    '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
+    '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
+}
+
+
+class AuditDocDependencyTests(AuditDocFixture):  # R2
+    def test_order_scope_and_independent_oracle(self):
+        value = self.suggestion()
+        actual_setup = {p: report_setup_digest(self.root / p) for p in AUDIT_DOC_SETUP_PINS}
+        self.assertEqual(actual_setup, AUDIT_DOC_SETUP_PINS,
+                         'review audit doc dependency boundary: ' + repr(actual_setup))
+        self.assertEqual(value['inputs'], AUDIT_DOC_INPUTS)
+        self.assertEqual(set(value['rationale']), set(AUDIT_DOC_INPUTS))
+        for name, terms in {
+            '.ai/scripts/**': ('conservative', 'import', 'lazy'),
+            '!.ai/scripts/tests/**': ('exclude',),
+            AUDIT_DOC_TESTS[0]: ('method', 'static'), AUDIT_DOC_TESTS[1]: ('helper',),
+            **{p: ('direct',) for p in AUDIT_DOC_DOCS},
+        }.items():
+            for term in terms:
+                self.assertIn(term, value['rationale'][name].lower())
+        included = ['.ai/scripts/future_audit.py', '.ai/scripts/assets/audit.txt']
+        excluded = ['.ai/scripts/tests/unrelated.py', 'unrelated.md', *VALIDATION_POLICY_DOCS,
+                    *INSTALLER_DOC_TEXT, *[p for p in REPORT_DOCS if p not in AUDIT_DOC_DOCS],
+                    *WIRING_JSON, *ARCH_TESTS[:-1]]
+        for name in included + excluded[:2]:
+            self.write(name, '# independent inventory fixture\n')
+        selected = set(ledger.input_paths(self.root, value['inputs']))
+        self.assertTrue(set([*AUDIT_DOC_TESTS, *AUDIT_DOC_DOCS,
+                             *AUDIT_DOC_IMPORTS, *included]).issubset(selected))
+        self.assertFalse(set(excluded) & selected)
+        import ast
+        source = (self.root / AUDIT_DOC_TESTS[0]).read_text()
+        cls = next(n for n in ast.parse(source).body if isinstance(n, ast.ClassDef) and n.name == 'Tiers')
+        method = next(n for n in cls.body if isinstance(n, ast.FunctionDef)
+                      and n.name == AUDIT_DOC_COMMAND[2].split('.')[1])
+        reviewed = '\n'.join(source.splitlines()[method.lineno - 1:method.end_lineno])
+        self.assertEqual(hashlib.sha256(reviewed.encode()).hexdigest(),
+                         'd1d692f3493f461404dc0d47826d785b950bccc774a175d96c61b14330c525ef',
+                         'review audit doc selected method boundary')
+        self.assertEqual(len(method.body), 1)
+        loop = method.body[0]
+        self.assertIsInstance(loop, ast.For)
+        self.assertIsInstance(loop.iter, ast.Tuple)
+        reads = ast.literal_eval(loop.iter)
+        self.assertEqual(list(reads), AUDIT_DOC_DOCS)
+        self.assertIsInstance(loop.target, ast.Name)
+        calls = [n for n in ast.walk(method) if isinstance(n, ast.Call)
+                 and isinstance(n.func, ast.Name) and n.func.id == 'text']
+        self.assertEqual(len(calls), 2)
+        for call in calls:
+            self.assertEqual(len(call.args), 1)
+            self.assertIsInstance(call.args[0], ast.Name)
+            self.assertEqual(call.args[0].id, loop.target.id)
+
+    def test_reachable_added_dependencies_require_review(self):
+        variants = [(p, ()) for p in AUDIT_DOC_SETUP_PINS]
+        variants += [(AUDIT_DOC_TESTS[0], ('Tiers', AUDIT_DOC_COMMAND[2].split('.')[1])),
+                     (AUDIT_DOC_TESTS[0], ('text',)),
+                     ('.ai/scripts/scratch.py', ('require_disk',)),
+                     ('.ai/scripts/lifecycle.py', ('lazy',)),
+                     ('.ai/scripts/review_guard.py', ('protected',)),
+                     ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
+                     (AUDIT_DOC_TESTS[0], ('import-helper',))]
+        self.assertEqual(len(variants), 13)
+        for name, body in variants:
+            with self.subTest(name=name, body=body):
+                case = AuditDocDependencyTests('test_order_scope_and_independent_oracle')
+                setup = case.setUp
+
+                def mutated_setup():
+                    setup()
+                    import ast
+                    path = case.root / name
+                    source = path.read_text()
+                    tree = ast.parse(source)
+                    addition = '__import__("pathlib").Path("unrelated.md").read_text()\n'
+                    if body == ('import-helper',):
+                        case.write('.ai/scripts/tests/unreviewed_audit_helper.py', addition)
+                        addition = 'import unreviewed_audit_helper\n'
+                    if body and body != ('import-helper',):
+                        node = tree
+                        for part in body:
+                            node = next(n for n in node.body if isinstance(n, (ast.FunctionDef, ast.ClassDef))
+                                        and n.name == part)
+                        first = node.body[0]
+                        if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) \
+                                and isinstance(first.value.value, str):
+                            after = first.end_lineno
+                        else:
+                            after = min([first.lineno, *[n.lineno for n in
+                                         getattr(first, 'decorator_list', [])]]) - 1
+                        addition = ' ' * first.col_offset + addition
+                    else:
+                        after = max(n.end_lineno for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom)))
+                    lines = source.splitlines(keepends=True)
+                    changed = ''.join(lines[:after]) + addition + ''.join(lines[after:])
+                    path.write_text(changed)
+                    case.assertNotEqual(source, changed)
+                    case.assertEqual(path.read_text(), changed)
+                    case.assertNotIn('unrelated.md', ledger.input_paths(case.root, AUDIT_DOC_INPUTS))
+                    missing = case.process(AUDIT_DOC_COMMAND)
+                    case.assertNotEqual(missing.returncode, 0)
+                    case.assertIn('FileNotFoundError', missing.stdout + missing.stderr)
+                    case.assertIn('unrelated.md', missing.stdout + missing.stderr)
+                    case.write('unrelated.md', 'new excluded dependency')
+                    case.execution()
+
+                case.setUp = mutated_setup
+                result = unittest.TestResult()
+                case.run(result)
+                self.assertEqual(result.testsRun, 1)
+                self.assertFalse(result.errors, result.errors)
+                self.assertTrue(result.failures, 'unreviewed audit doc dependency survived: ' + repr((name, body)))
+                self.assertIn('review audit doc dependency boundary',
+                              '\n'.join(detail for _, detail in result.failures))
+
+
+class AuditDocCompatibilityTests(AuditDocFixture):  # R4
+    def test_advisory_guide_and_existing_contracts(self):
+        self.assert_prior_profiles()
+        self.assertIsNone(ledger.default_inputs(AUDIT_DOC_COMMAND))
+        self.assertEqual(ledger.default_inputs(COMMAND), ('python-tests', ['**']))
+        for argv in (['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests'],
+                     *[['python3', '.ai/scripts/run_tests.py', '-j', str(n)] for n in (1, 8, 32)]):
+            self.refused(argv=argv)
+        value = self.suggestion()
+        self.assertNotIn(EXCLUDE, value['inputs'])
+        self.assertEqual(value['schema_version'], 1)
+        self.assertTrue(value['review_required'])
+        self.assertIn('runtime', ' '.join(value['limitations']).lower())
+        guide = (self.root / ARCH_GUIDE).read_text()
+        for phrase in ('python-audit-doc-contract', ' '.join(AUDIT_DOC_COMMAND),
+                       'static', 'conservative', 'explicit', 'manual', 'substring',
+                       'tamper detection', *AUDIT_DOC_DOCS):
+            self.assertIn(phrase, guide)
+
+
+class AuditDocFrameworkEndToEndTests(AuditDocFixture):  # R5
+    def record(self):
+        value = self.suggestion()
+        before = self.preflight()
+        self.lc('tier', 'L1', '--reason', 'static audit doc framework fixture')
+        self.lc('run', 'audit-doc', *value['lifecycle_inputs_argv'], '--', *AUDIT_DOC_COMMAND)
+        self.assert_inputs_unchanged(before)
+        import lifecycle
+        entry = lifecycle.load(self.root)['ledger'][-1]
+        self.assertEqual((entry['argv'], entry['inputs'], entry['exit']),
+                         (AUDIT_DOC_COMMAND, value['inputs'], 0))
+        self.assertIn('REUSE', self.lc('reuse', 'audit-doc'))
+
+    def test_each_input_and_addition_invalidates(self):
+        self.record()
+        for name in ('.ai/scripts/tests/unrelated.py', 'unrelated.md'):
+            self.edit_and_restore(name, lambda: self.assertIn('REUSE', self.lc('reuse', 'audit-doc')))
+            self.assertIn('REUSE', self.lc('reuse', 'audit-doc'))
+        for name in [*AUDIT_DOC_DOCS, *AUDIT_DOC_TESTS,
+                     '.ai/scripts/review_guard.py', '.ai/scripts/new_audit.py']:
+            with self.subTest(name=name):
+                def stale():
+                    result = self.process([sys.executable, '.ai/scripts/lifecycle.py', 'reuse', 'audit-doc'])
+                    self.assertEqual(result.returncode, 1, 'missing audit doc freshness invalidation: ' + name)
+                    self.assertIn('RERUN', result.stdout)
+                self.edit_and_restore(name, stale)
+                self.assertIn('REUSE', self.lc('reuse', 'audit-doc'))
+        self.assertFalse((self.root / 'knowledge').exists())
+
+
+class AuditDocFailureTests(AuditDocFixture):  # R5
+    def test_four_static_failures_fail_actual_command(self):
+        variants = [(name, term) for name in AUDIT_DOC_DOCS for term in AUDIT_DOC_TOKENS]
+        self.assertEqual(len(variants), 4)
+        for name, term in variants:
+            with self.subTest(name=name, term=term):
+                path = self.root / name
+                original = path.read_bytes()
+                token = term.encode()
+                self.assertIn(token, original)
+                changed = original.replace(token, b'removed')
+                self.assertNotIn(token, changed)
+                path.write_bytes(changed)
+                try:
+                    self.assertNotEqual(original, changed)
+                    self.assertEqual(path.read_bytes(), changed)
+                    self.suggestion()
+                    self.execution(failure=repr(term) + ' not found in')
+                finally:
+                    path.write_bytes(original)
+
+
+class AuditDocAdopterEndToEndTests(AuditDocFixture):  # R6
+    def test_explicit_adoption_freshness_identity_and_receipt(self):
+        (self.root / '.agentic.json').unlink()
+        self.lc('tier', 'L1', '--reason', 'static audit doc adopter fixture')
+        result = self.process([sys.executable, '.ai/scripts/okf.py', 'init'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.write('knowledge/project/sync-ignore', '*\n')
+        value = self.suggestion()
+        prefix = ('---\ntype: Capability\ntitle: Audit documentation\nnamespace: AUDITDOC\nstatus: draft\n---\n'
+                  '# Audit documentation\n\n## Requirements\n\n- AUDITDOC-R1: The static check MUST pass.\n'
+                  '  - Verify: `' + ' '.join(AUDIT_DOC_COMMAND) + '`\n')
+        original = prefix + value['inputs_line'] + '\n'
+        capability = self.write('knowledge/capabilities/audit-doc.md', original)
+        self.commit()
+
+        def status():
+            result = self.process([sys.executable, '.ai/scripts/lifecycle.py', 'assure', '--json'])
+            data = json.loads(result.stdout)
+            state = next(r['status'] for r in data['requirements'] if r['id'] == 'AUDITDOC-R1')
+            self.assertEqual(result.returncode, 0 if state == 'VERIFIED' else 1, result.stdout + result.stderr)
+            return state
+
+        self.assertEqual(status(), 'UNVERIFIED')
+        before = self.preflight()
+        self.lc('assure', '--run', 'AUDITDOC-R1')
+        self.assert_inputs_unchanged(before)
+        self.assertEqual(status(), 'VERIFIED')
+        for name in ('.ai/scripts/tests/unrelated.py', 'unrelated.md'):
+            self.edit_and_restore(name, lambda: self.assertEqual(status(), 'VERIFIED'))
+            self.assertEqual(status(), 'VERIFIED')
+        for name in [*AUDIT_DOC_DOCS, *AUDIT_DOC_TESTS,
+                     '.ai/scripts/review_guard.py', '.ai/scripts/new_audit.py']:
+            with self.subTest(name=name):
+                self.edit_and_restore(name, lambda: self.assertEqual(status(), 'STALE'))
+                self.assertEqual(status(), 'VERIFIED')
+        reordered = [*value['inputs'][:-2], value['inputs'][-1], value['inputs'][-2]]
+        capability.write_text(prefix + '  - Inputs: ' + ' '.join('`' + p + '`' for p in reordered) + '\n')
+        self.assertEqual(status(), 'UNVERIFIED')
+        capability.write_text(original.replace(AUDIT_DOC_COMMAND[2] + '`', AUDIT_DOC_COMMAND[2] + ' -v`'))
+        self.assertEqual(status(), 'UNVERIFIED')
+        capability.write_text(original)
+        self.assertEqual(status(), 'VERIFIED')
+        entries = [e for p in (self.root / 'knowledge/history/lifecycle').glob('*.json')
+                   for e in json.loads(p.read_text()).get('ledger', []) if e['label'] == 'req:AUDITDOC-R1']
+        self.assertEqual((entries[-1]['argv'], entries[-1]['inputs'], entries[-1]['exit']),
+                         (AUDIT_DOC_COMMAND, AUDIT_DOC_INPUTS + [EXCLUDE], 0))
+        self.write('knowledge/history/lifecycle/extra-receipt.json', '{}\n')
+        self.assertEqual(status(), 'VERIFIED')
+
+
+class AuditDocControlTests(AuditDocFixture):  # R6
+    def test_confirmed_broken_variants_fail_intended_criteria(self):
+        method = 'test_each_input_and_addition_invalidates'
+        variants = [(p, AuditDocFrameworkEndToEndTests, method,
+                     'missing audit doc freshness invalidation: ' + p) for p in AUDIT_DOC_DOCS]
+        variants += [('loose', AuditDocProfileTests, 'test_exact_registration_and_prior_profiles', '0 != 2'),
+                     ('empty', AuditDocFrameworkEndToEndTests, method, 'audit doc execution count must be one')]
+        self.assertEqual(len(variants), 4)
+        for variant, cls, test, criterion in variants:
+            with self.subTest(variant=variant):
+                case = cls(test)
+                setup = case.setUp
+
+                def mutated_setup():
+                    setup()
+                    path = case.root / '.ai/scripts/assurance_inputs.py'
+                    original = path.read_text()
+                    if variant in AUDIT_DOC_DOCS:
+                        catalog = copy.deepcopy(case.module().PROFILES)
+                        profile = next(p for p in catalog if p['id'] == 'python-audit-doc-contract')
+                        profile['inputs'].remove(variant)
+                        del profile['rationale'][variant]
+                        replacement = (original.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
+                                       + '\nLIMITATIONS =' + original.split('\nLIMITATIONS =', 1)[1])
+                    elif variant == 'loose':
+                        old = "p['argv'] == list(argv)"
+                        case.assertEqual(original.count(old), 1)
+                        replacement = original.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                    else:
+                        path = case.root / AUDIT_DOC_TESTS[0]
+                        original = path.read_text()
+                        replacement = 'import sys\nimport unittest\nunittest.main(argv=[sys.argv[0]])\n'
+                    path.write_text(replacement)
+                    case.assertNotEqual(original, replacement, 'mutation was not applied')
+                    case.assertEqual(path.read_text(), replacement, 'mutation bytes differ')
+                    if variant in AUDIT_DOC_DOCS:
+                        value = case.suggestion()
+                        case.assertNotIn(variant, value['inputs'])
+                        case.assertNotIn(variant, value['rationale'])
+                    if variant == 'empty':
+                        result = case.process(AUDIT_DOC_COMMAND)
+                        case.assertRegex(result.stdout + result.stderr, r'Ran 0 tests? in ')
+
+                case.setUp = mutated_setup
+                result = unittest.TestResult()
+                case.run(result)
+                self.assertEqual(result.testsRun, 1)
+                self.assertFalse(result.errors, result.errors)
+                self.assertTrue(result.failures, 'broken audit doc variant survived: ' + variant)
+                self.assertIn(criterion, '\n'.join(detail for _, detail in result.failures))
+
+
 if __name__ == '__main__':
     unittest.main()
