@@ -4452,7 +4452,7 @@ class AssuranceDocFixture(Fixture):
                       'python-tier-doc-contract')
         self.assertEqual(tuple(p['id'] for p in baseline), identities)
         actual = self.module().PROFILES
-        self.assertEqual(len(actual), 13)
+        self.assertEqual(len(actual), 14)
         for expected in baseline:
             self.assertEqual(next(p for p in actual if p['id'] == expected['id']), expected)
             value = self.suggestion(argv=expected['argv'])
@@ -4988,7 +4988,7 @@ class AgentsBudgetFixture(Fixture):
                       'python-tier-doc-contract', 'python-assurance-doc-contract')
         self.assertEqual(tuple(p['id'] for p in baseline), identities)
         actual = self.module().PROFILES
-        self.assertEqual(len(actual), 13)
+        self.assertEqual(len(actual), 14)
         for expected in baseline:
             self.assertEqual(next(p for p in actual if p['id'] == expected['id']), expected)
             value = self.suggestion(argv=expected['argv'])
@@ -5474,7 +5474,7 @@ class SemanticLensFixture(AgentsBudgetFixture):
                       'python-agents-budget-contract')
         self.assertEqual(tuple(p['id'] for p in baseline), identities)
         actual = self.module().PROFILES
-        self.assertEqual(len(actual), 13)
+        self.assertEqual(len(actual), 14)
         for expected in baseline:
             self.assertEqual(next(p for p in actual if p['id'] == expected['id']), expected)
             value = self.suggestion(argv=expected['argv'])
@@ -5489,7 +5489,7 @@ class SemanticLensProfileTests(SemanticLensFixture):  # R1
         self.assertEqual(value['argv'], SEMANTIC_LENS_COMMAND)
         self.assert_prior_profiles()
         for argv in (SEMANTIC_LENS_COMMAND[:2], SEMANTIC_LENS_COMMAND[:2] + ['RolesAndSkills'],
-                     SEMANTIC_LENS_COMMAND[:2] + ['RolesAndSkills.test_skills_have_name_matching_directory_and_a_description'],
+                     SEMANTIC_LENS_COMMAND[:2] + ['RolesAndSkills.test_codex_skills_are_a_symlink_to_the_claude_skills'],
                      SEMANTIC_LENS_COMMAND + ['-v'], [sys.executable, *SEMANTIC_LENS_COMMAND[1:]],
                      ['python3', './' + SEMANTIC_LENS_COMMAND[1], SEMANTIC_LENS_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
@@ -5927,6 +5927,663 @@ class SemanticLensControlTests(SemanticLensFixture):  # R6
                         case.assertNotIn(variant, value['rationale'])
                     if variant == 'empty':
                         result = case.process(SEMANTIC_LENS_COMMAND)
+                        case.assertEqual(re.findall(r'Ran (\d+) tests? in ', result.stdout + result.stderr), ['0'])
+
+                case.setUp = mutated_setup
+                result = unittest.TestResult()
+                case.run(result)
+                self.assertEqual(result.testsRun, 1)
+                self.assertFalse(result.errors, result.errors)
+                self.assertEqual(len(result.failures), 1, 'broken variant survived: ' + variant)
+                self.assertIn(criterion, result.failures[0][1])
+
+
+# Skill frontmatter: specification-5n.md R1-R6. Independent reviewed declarations.
+SKILL_FRONTMATTER_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+                             'RolesAndSkills.test_skills_have_name_matching_directory_and_a_description']
+SKILL_FRONTMATTER_TESTS = [SKILL_FRONTMATTER_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
+SKILL_FRONTMATTER_DOCS = ['.claude/skills/' + name + '/SKILL.md' for name in
+                         ('debug', 'implement', 'onboard', 'plan', 'review', 'ship', 'spec')]
+SKILL_FRONTMATTER_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**',
+                           *SKILL_FRONTMATTER_TESTS, '.claude/skills/**']
+SKILL_FRONTMATTER_HEAD = '87b8f5fdbf86fb1a7169a7fb8cd02d066bba5e8f'
+SKILL_FRONTMATTER_SIBLING = 'RolesAndSkills.test_codex_skills_are_a_symlink_to_the_claude_skills'
+
+
+class SkillFrontmatterFixture(SemanticLensFixture):
+    def setUp(self):
+        super().setUp()
+        # Copy supported data, not a fixed production skill taxonomy.
+        for name in ledger.input_paths(SCRIPTS.parent.parent, ['.claude/skills/**']):
+            destination = self.root / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(SCRIPTS.parent.parent / name, destination)
+        self.commit()
+
+    def export(self, argv=None, **kwargs):
+        return Fixture.export(self, argv=SKILL_FRONTMATTER_COMMAND if argv is None else argv, **kwargs)
+
+    def selected_bytes(self):
+        return {name: (self.root / name).read_bytes()
+                for name in ledger.input_paths(self.root, SKILL_FRONTMATTER_INPUTS)}
+
+    def assert_inputs_unchanged(self, before):
+        self.assertEqual(self.selected_bytes(), before, 'skill frontmatter execution changed inputs')
+
+    def execution(self):
+        before = self.selected_bytes()
+        result = self.process(SKILL_FRONTMATTER_COMMAND)
+        output = result.stdout + result.stderr
+        self.assertEqual(re.findall(r'Ran (\d+) tests? in ', output), ['1'],
+                         'skill frontmatter execution count must be one: ' + output)
+        self.assertEqual(result.returncode, 0, output)
+        self.assertRegex(output, r'\nOK\s*$')
+        self.assert_inputs_unchanged(before)
+        return result
+
+    def observe(self):
+        # A separate diagnostic; public argv/count/receipt proof never uses this wrapper.
+        source = '''import importlib.util, json, sys, unittest
+from pathlib import Path
+sys.path.insert(0, str(Path(".ai/scripts/tests").resolve()))
+spec = importlib.util.spec_from_file_location("observed_contract", ".ai/scripts/tests/test_lifecycle_conformance.py")
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+case = module.RolesAndSkills("test_skills_have_name_matching_directory_and_a_description")
+events = []
+read, name_check, description_check = module.text, case.assertIn, case.assertRegex
+def text(path):
+    value = read(path)
+    events.append([path, []])
+    return value
+def name(*args, **kwargs):
+    name_check(*args, **kwargs)
+    events[-1][1].append("name")
+def description(*args, **kwargs):
+    description_check(*args, **kwargs)
+    events[-1][1].append("description")
+module.text, case.assertIn, case.assertRegex = text, name, description
+result = unittest.TextTestRunner().run(unittest.TestSuite([case]))
+print("OBSERVATION:" + json.dumps(events))
+sys.exit(0 if result.wasSuccessful() else 1)
+'''
+        before = self.selected_bytes()
+        result = self.process([sys.executable, '-c', source])
+        output = result.stdout + result.stderr
+        self.assertEqual(re.findall(r'Ran (\d+) tests? in ', output), ['1'], output)
+        self.assertEqual(result.returncode, 0, output)
+        rows = [line.removeprefix('OBSERVATION:') for line in result.stdout.splitlines()
+                if line.startswith('OBSERVATION:')]
+        self.assertEqual(len(rows), 1, output)
+        self.assert_inputs_unchanged(before)
+        return json.loads(rows[0])
+
+    def assert_observation(self, events, expected):
+        self.assertCountEqual([row[0] for row in events], expected, 'skill traversal path mismatch')
+        for _, assertions in events:
+            self.assertEqual(assertions, ['name', 'description'], 'skill traversal assertion mismatch')
+
+    def preflight(self):
+        before = self.selected_bytes()
+        self.execution()
+        return before
+
+    def edit_and_restore(self, name, check):
+        path = self.root / name
+        original = path.read_bytes() if path.exists() else None
+        changed = (original or b'') + b'\n '
+        if original is None and name.endswith('/SKILL.md'):
+            changed = ('---\nname: ' + path.parent.name + '\ndescription: Valid new skill\n---\n').encode()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(changed)
+        try:
+            self.assertNotEqual(original, changed)
+            self.assertEqual(path.read_bytes(), changed)
+            self.execution()
+            check()
+        finally:
+            if original is None:
+                path.unlink()
+                self.assertFalse(path.exists())
+            else:
+                path.write_bytes(original)
+                self.assertEqual(path.read_bytes(), original)
+
+    def assert_prior_profiles(self):
+        result = subprocess.run(['git', 'show', SKILL_FRONTMATTER_HEAD + ':.ai/scripts/assurance_inputs.py'],
+                                cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        import ast
+        baseline = next(ast.literal_eval(n.value) for n in ast.parse(result.stdout).body
+                        if isinstance(n, ast.Assign)
+                        and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in n.targets))
+        identities = ('python-runner-test', 'python-architecture-compatibility', 'python-harness-wiring',
+                      'python-reviewer-report-contract', 'python-installer-doc-contract',
+                      'python-validation-policy-contract', 'python-audit-doc-contract',
+                      'python-analysis-convergence-doc-contract', 'python-stage-doc-contract',
+                      'python-tier-doc-contract', 'python-assurance-doc-contract',
+                      'python-agents-budget-contract', 'python-semantic-lens-doc-contract')
+        self.assertEqual(tuple(p['id'] for p in baseline), identities)
+        actual = self.module().PROFILES
+        self.assertEqual(len(actual), 14)
+        for expected in baseline:
+            self.assertEqual(next(p for p in actual if p['id'] == expected['id']), expected)
+            value = self.suggestion(argv=expected['argv'])
+            self.assertEqual((value['profile_id'], value['argv'], value['inputs'], value['rationale']),
+                             (expected['id'], expected['argv'], expected['inputs'], expected['rationale']))
+
+
+class SkillFrontmatterProfileTests(SkillFrontmatterFixture):  # R1
+    def test_unregistered_symlink_refuses(self):
+        self.assertIn('exact command', self.refused(
+            argv=SKILL_FRONTMATTER_COMMAND[:2] + [SKILL_FRONTMATTER_SIBLING])['reason'])
+
+    def test_exact_registration_and_prior_profiles(self):
+        value = self.suggestion()
+        self.assertEqual(value['profile_id'], 'python-skill-frontmatter-contract')
+        self.assertEqual(value['argv'], SKILL_FRONTMATTER_COMMAND)
+        self.assertEqual(value['inputs'], SKILL_FRONTMATTER_INPUTS)
+        self.assert_prior_profiles()
+        for argv in (SKILL_FRONTMATTER_COMMAND[:2], SKILL_FRONTMATTER_COMMAND[:2] + ['RolesAndSkills'],
+                     SKILL_FRONTMATTER_COMMAND[:2] + [SKILL_FRONTMATTER_SIBLING],
+                     SKILL_FRONTMATTER_COMMAND + ['-v'], [sys.executable, *SKILL_FRONTMATTER_COMMAND[1:]],
+                     ['python3', './' + SKILL_FRONTMATTER_COMMAND[1], SKILL_FRONTMATTER_COMMAND[2]],
+                     ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
+                      '-p', 'test_lifecycle_conformance.py']):
+            self.assertIn('exact command', self.refused(argv=argv)['reason'])
+        self.refused(cwd=self.root / '.ai')
+
+
+class SkillFrontmatterExportTests(SkillFrontmatterFixture):  # R3
+    def test_readonly_formats_supplements_and_no_execution(self):
+        marker = self.root / 'executed'
+        for name in SKILL_FRONTMATTER_TESTS:
+            self.write(name, f'from pathlib import Path\nPath({str(marker)!r}).touch()\nraise RuntimeError("executed")\n')
+        for name in SKILL_FRONTMATTER_DOCS:
+            self.write(name, 'assertion-failing existing skill\n')
+        for name in ('space file.txt', 'second.txt'):
+            self.write(name, 'supplement')
+        before = snapshot(self.root)
+        value = self.suggestion(extra=('space file.txt', 'second.txt'))
+        text = self.export(extra=('space file.txt', 'second.txt'), json_output=False)
+        self.assertEqual(text.returncode, 0, text.stderr)
+        self.assertEqual(value['inputs'], SKILL_FRONTMATTER_INPUTS + ['space file.txt', 'second.txt'])
+        self.assertEqual(value['lifecycle_inputs_argv'], ['--inputs', *value['inputs']])
+        for item in (value['profile_id'], value['inputs_line'], json.dumps(SKILL_FRONTMATTER_COMMAND),
+                     json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
+            self.assertIn(item, text.stdout)
+        raw = ('- SKILLFRONT-R1: The check MUST pass.\n  - Verify: `'
+               + ' '.join(SKILL_FRONTMATTER_COMMAND) + '`\n' + value['inputs_line'] + '\n')
+        parsed = assurance.parse('SKILLFRONT-R1', 'capabilities/skill-frontmatter.md', raw, root=self.root)
+        self.assertIsNone(parsed.invalid)
+        self.assertEqual(list(parsed.globs), value['inputs'])
+        self.assertTrue(value['review_required'])
+        self.assertEqual(snapshot(self.root), before)
+        self.assertFalse(marker.exists())
+
+    def test_literals_inventory_and_glob_boundaries(self):
+        for name in SKILL_FRONTMATTER_TESTS:
+            path = self.root / name
+            original = path.read_bytes()
+            path.unlink()
+            try:
+                self.refused()
+            finally:
+                path.write_bytes(original)
+                self.assertEqual(path.read_bytes(), original)
+        name = SKILL_FRONTMATTER_TESTS[1]
+        self.git('rm', '--cached', name)
+        self.write('.gitignore', name + '\n')
+        self.refused()
+        self.git('add', '-f', name)
+        path = self.root / name
+        original = path.read_bytes()
+        outside = Path(self.temp.name) / 'outside.py'
+        outside.write_bytes(original)
+        path.unlink()
+        path.symlink_to(outside)
+        try:
+            self.refused()
+        finally:
+            path.unlink()
+            path.write_bytes(original)
+            self.assertEqual(path.read_bytes(), original)
+        for extra in ('!README.md', '../x', '/etc/passwd', '', 'x`bad', '--other-option'):
+            self.refused(extra=(extra,))
+        new = '.claude/skills/new_supported/SKILL.md'
+        asset = '.claude/skills/new_supported/notes.txt'
+        ignored = '.claude/skills/ignored/SKILL.md'
+        self.write(new, '---\nname: new_supported\ndescription: Valid\n---\n')
+        self.write(asset, 'not read by selected method')
+        self.write(ignored, '---\nname: ignored\ndescription: Valid\n---\n')
+        self.write('.gitignore', ignored + '\n')
+        selected = ledger.input_paths(self.root, self.suggestion()['inputs'])
+        self.assertTrue({new, asset}.issubset(selected))
+        self.assertNotIn(ignored, selected)
+        observed = self.observe()
+        self.assertIn(ignored, [row[0] for row in observed])
+        self.assertIn(new, [row[0] for row in observed])
+        self.assertNotIn(asset, [row[0] for row in observed])
+
+
+SKILL_FRONTMATTER_SETUP_PINS = {
+    '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
+    '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
+    '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
+    '.ai/scripts/lifecycle.py': '048f391c166ffb58b8ba1d769ca287adc78d5c155a28bebba043e0d93a30e1ca',
+    '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
+    '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
+}
+
+
+class SkillFrontmatterDependencyTests(SkillFrontmatterFixture):  # R2
+    def test_order_scope_and_independent_oracle(self):
+        value = self.suggestion()
+        actual = {p: report_setup_digest(self.root / p) for p in SKILL_FRONTMATTER_SETUP_PINS}
+        self.assertEqual(actual, SKILL_FRONTMATTER_SETUP_PINS,
+                         'review skill frontmatter dependency boundary: ' + repr(actual))
+        self.assertEqual(value['inputs'], SKILL_FRONTMATTER_INPUTS)
+        self.assertEqual(set(value['rationale']), set(SKILL_FRONTMATTER_INPUTS))
+        for name, terms in {
+            '.ai/scripts/**': ('conservative', 'import', 'lazy'),
+            '!.ai/scripts/tests/**': ('exclude',),
+            SKILL_FRONTMATTER_TESTS[0]: ('dynamic', 'method', 'one test'),
+            SKILL_FRONTMATTER_TESTS[1]: ('helper',),
+            '.claude/skills/**': ('conservative', 'rglob', 'split', 'future', 'extra invalidation'),
+        }.items():
+            for term in terms:
+                self.assertIn(term, value['rationale'][name].lower())
+        included = ['.ai/scripts/future_skill.py', '.ai/scripts/assets/skill.txt',
+                    '.claude/skills/future/SKILL.md', '.claude/skills/future/asset.txt']
+        excluded = ['.ai/scripts/tests/unrelated.py', 'unrelated.md', 'AGENTS.md',
+                    '.ai/lifecycle.md', '.ai/agents/analyst.md', '.ai/agents/reviewer.md']
+        for name in included + excluded[:2]:
+            self.write(name, '# independent inventory fixture\n')
+        selected = set(ledger.input_paths(self.root, value['inputs']))
+        self.assertTrue(set([*SKILL_FRONTMATTER_TESTS, *SKILL_FRONTMATTER_DOCS,
+                             *REPORT_IMPORTS, *included]).issubset(selected))
+        self.assertFalse(set(excluded) & selected)
+        import ast
+        tree = ast.parse((self.root / SKILL_FRONTMATTER_TESTS[0]).read_text())
+        cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'RolesAndSkills')
+        method = next(n for n in cls.body if isinstance(n, ast.FunctionDef)
+                      and n.name == SKILL_FRONTMATTER_COMMAND[2].split('.')[1])
+        expected = ast.parse('''for path in (ROOT / ".claude/skills").rglob("SKILL.md"):
+    front = text(str(path.relative_to(ROOT))).split("---")[1]
+    self.assertIn(f"name: {path.parent.name}\\n", front)
+    self.assertRegex(front, r"description: \\S")
+''').body
+        self.assertEqual(len(method.body), 1)
+        self.assertEqual(len(method.body[0].body), 3)
+        self.assertEqual([ast.dump(n) for n in method.body], [ast.dump(n) for n in expected],
+                         'review skill frontmatter selected method boundary')
+
+    def test_reachable_added_dependencies_require_review(self):
+        variants = [(p, ()) for p in SKILL_FRONTMATTER_SETUP_PINS]
+        variants += [(SKILL_FRONTMATTER_TESTS[0], ('RolesAndSkills',)),
+                     (SKILL_FRONTMATTER_TESTS[0], tuple(SKILL_FRONTMATTER_COMMAND[2].split('.'))),
+                     (SKILL_FRONTMATTER_TESTS[0], ('text',)),
+                     ('.ai/scripts/scratch.py', ('require_disk',)),
+                     ('.ai/scripts/lifecycle.py', ('lazy',)),
+                     ('.ai/scripts/review_guard.py', ('protected',)),
+                     ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
+                     (SKILL_FRONTMATTER_TESTS[0], ('import-helper',))]
+        self.assertEqual(len(variants), 14)
+        for name, body in variants:
+            with self.subTest(name=name, body=body):
+                case = SkillFrontmatterDependencyTests('test_order_scope_and_independent_oracle')
+                setup = case.setUp
+
+                def mutated_setup():
+                    setup()
+                    import ast
+                    path = case.root / name
+                    original = path.read_bytes()
+                    def restore():
+                        path.write_bytes(original)
+                        case.assertEqual(path.read_bytes(), original, 'skill frontmatter restoration mismatch')
+                    case.addCleanup(restore)
+                    source = original.decode('utf-8')
+                    tree = ast.parse(source)
+                    addition = '__import__("pathlib").Path("unrelated.md").read_text()\n'
+                    if body == ('import-helper',):
+                        helper = '.ai/scripts/tests/unreviewed_skill_helper.py'
+                        case.write(helper, addition)
+                        case.assertEqual((case.root / helper).read_bytes(), addition.encode())
+                        case.assertNotIn(helper, ledger.input_paths(case.root, SKILL_FRONTMATTER_INPUTS))
+                        addition = 'import unreviewed_skill_helper\n'
+                    if body and body != ('import-helper',):
+                        node = tree
+                        for part in body:
+                            node = next(n for n in node.body if isinstance(n, (ast.FunctionDef, ast.ClassDef))
+                                        and n.name == part)
+                        first = node.body[0]
+                        if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) \
+                                and isinstance(first.value.value, str):
+                            after = first.end_lineno
+                        else:
+                            after = min([first.lineno, *[n.lineno for n in
+                                         getattr(first, 'decorator_list', [])]]) - 1
+                        addition = ' ' * first.col_offset + addition
+                    else:
+                        after = max(n.end_lineno for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom)))
+                    lines = source.splitlines(keepends=True)
+                    changed = (''.join(lines[:after]) + addition + ''.join(lines[after:])).encode()
+                    path.write_bytes(changed)
+                    case.assertNotEqual(original, changed)
+                    case.assertEqual(path.read_bytes(), changed)
+                    case.assertFalse((case.root / 'unrelated.md').exists())
+                    case.assertNotIn('unrelated.md', ledger.input_paths(case.root, SKILL_FRONTMATTER_INPUTS))
+                    missing = case.process(SKILL_FRONTMATTER_COMMAND)
+                    case.assertNotEqual(missing.returncode, 0)
+                    case.assertIn('FileNotFoundError', missing.stdout + missing.stderr)
+                    case.assertIn('unrelated.md', missing.stdout + missing.stderr)
+                    case.write('unrelated.md', 'new excluded dependency')
+                    case.execution()
+
+                case.setUp = mutated_setup
+                result = unittest.TestResult()
+                case.run(result)
+                self.assertEqual(result.testsRun, 1)
+                self.assertFalse(result.errors, result.errors)
+                self.assertEqual(len(result.failures), 1, 'unreviewed dependency survived: ' + repr((name, body)))
+                self.assertIn('review skill frontmatter dependency boundary', result.failures[0][1])
+
+
+class SkillFrontmatterCompatibilityTests(SkillFrontmatterFixture):  # R4
+    def test_advisory_guide_and_existing_contracts(self):
+        self.assert_prior_profiles()
+        self.assertIsNone(ledger.default_inputs(SKILL_FRONTMATTER_COMMAND))
+        self.assertEqual(ledger.default_inputs(COMMAND), ('python-tests', ['**']))
+        for argv in (['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests'],
+                     *[['python3', '.ai/scripts/run_tests.py', '-j', str(n)] for n in (1, 8, 32)]):
+            self.refused(argv=argv)
+        value = self.suggestion()
+        self.assertNotIn(EXCLUDE, value['inputs'])
+        self.assertEqual(value['schema_version'], 1)
+        self.assertTrue(value['review_required'])
+        self.assertIn('runtime', ' '.join(value['limitations']).lower())
+        guide = (self.root / ARCH_GUIDE).read_text()
+        for phrase in ('python-skill-frontmatter-contract', ' '.join(SKILL_FRONTMATTER_COMMAND),
+                       'dynamic', 'immediate parent', 'one test', 'zero assertions',
+                       'split', 'IndexError', 'YAML', 'extra invalidation', 'non-SKILL',
+                       'conservative', 'explicit', 'manual', 'thirteen prior profiles',
+                       *SKILL_FRONTMATTER_INPUTS):
+            self.assertIn(phrase, guide)
+        baseline = subprocess.run(['git', 'show', SKILL_FRONTMATTER_HEAD + ':.ai/lifecycle.md'],
+                                  cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
+        self.assertEqual(baseline.returncode, 0, baseline.stderr)
+        for paragraph in baseline.stdout.split('\n\n'):
+            self.assertIn(paragraph, guide, 'previous guide paragraph changed')
+
+
+SKILL_FRONTMATTER_FRESH = [*SKILL_FRONTMATTER_DOCS, *SKILL_FRONTMATTER_TESTS,
+                          '.ai/scripts/review_guard.py', '.ai/scripts/new_skill.py',
+                          '.claude/skills/new_supported/SKILL.md', '.claude/skills/asset.txt']
+
+
+class SkillFrontmatterFrameworkEndToEndTests(SkillFrontmatterFixture):  # R5
+    def assert_stale(self, name):
+        result = self.process([sys.executable, '.ai/scripts/lifecycle.py', 'reuse', 'skill-frontmatter'])
+        self.assertEqual(result.returncode, 1, 'missing skill frontmatter freshness invalidation: ' + name)
+        self.assertIn('RERUN', result.stdout)
+
+    def check_skill_subtree_invalidation(self):
+        # A single shared freshness criterion for the nested omission control.
+        self.record()
+        name = SKILL_FRONTMATTER_DOCS[0]
+        self.edit_and_restore(name, lambda: self.assert_stale(name))
+
+    def record(self):
+        value = self.suggestion()
+        before = self.preflight()
+        self.lc('tier', 'L1', '--reason', 'skill frontmatter framework fixture')
+        self.lc('run', 'skill-frontmatter', *value['lifecycle_inputs_argv'], '--', *SKILL_FRONTMATTER_COMMAND)
+        self.assert_inputs_unchanged(before)
+        import lifecycle
+        entry = lifecycle.load(self.root)['ledger'][-1]
+        self.assertEqual((entry['argv'], entry['inputs'], entry['exit']),
+                         (SKILL_FRONTMATTER_COMMAND, value['inputs'], 0))
+        self.assertIn('REUSE', self.lc('reuse', 'skill-frontmatter'))
+
+    def test_actual_current_traversal(self):
+        self.execution()
+        events = self.observe()
+        self.assert_observation(events, SKILL_FRONTMATTER_DOCS)
+        self.assertEqual(sum(len(row[1]) for row in events), 14)
+        broken = copy.deepcopy(events)
+        broken[0][1].pop()
+        with self.assertRaisesRegex(AssertionError, 'skill traversal assertion mismatch'):
+            self.assert_observation(broken, SKILL_FRONTMATTER_DOCS)
+
+    def test_each_input_and_addition_invalidates(self):
+        self.record()
+        for name in ('.ai/scripts/tests/unrelated.py', 'unrelated.md'):
+            self.edit_and_restore(name, lambda: self.assertIn('REUSE', self.lc('reuse', 'skill-frontmatter')))
+            self.assertIn('REUSE', self.lc('reuse', 'skill-frontmatter'))
+        for name in SKILL_FRONTMATTER_FRESH:
+            with self.subTest(name=name):
+                def stale():
+                    self.assert_stale(name)
+                    if name.endswith('/new_supported/SKILL.md'):
+                        self.assert_observation(self.observe(), [*SKILL_FRONTMATTER_DOCS, name])
+                self.edit_and_restore(name, stale)
+                self.assertIn('REUSE', self.lc('reuse', 'skill-frontmatter'))
+        self.assertFalse((self.root / 'knowledge').exists())
+
+
+class SkillFrontmatterFailureTests(SkillFrontmatterFixture):  # R5
+    def assert_failure(self, result, kind, source):
+        output = result.stdout + result.stderr
+        self.assertEqual(re.findall(r'Ran (\d+) tests? in ', output), ['1'], output)
+        self.assertNotEqual(result.returncode, 0, output)
+        self.assertIn(SKILL_FRONTMATTER_COMMAND[2].split('.')[1], output)
+        if kind == 'IndexError':
+            self.assertRegex(output, r'FAILED \(errors=1\)')
+            self.assertIn('IndexError: list index out of range', output)
+            self.assertNotIn('FAIL:', output)
+        else:
+            self.assertRegex(output, r'FAILED \(failures=1\)')
+            self.assertEqual(len(re.findall(r'^FAIL:', output, re.M)), 1, output)
+            self.assertNotIn('ERROR:', output)
+            self.assertIn('AssertionError:', output)
+            self.assertIn('not found' if kind == 'name' else "Regex didn't match", output)
+        self.assertIn(source, output)
+
+    def test_fourteen_intended_assertion_failures(self):
+        self.execution()
+        originals = {name: (self.root / name).read_bytes() for name in SKILL_FRONTMATTER_DOCS}
+        cases = [(name, kind) for name in SKILL_FRONTMATTER_DOCS for kind in ('name', 'description')]
+        self.assertEqual(len(cases), 14)
+        for name, kind in cases:
+            with self.subTest(name=name, kind=kind):
+                path = self.root / name
+                body = originals[name].decode('utf-8')
+                # Independent index bounds; no duplicate implementation of selected split.
+                start = body.index('---') + 3
+                end = body.index('---', start)
+                front = body[start:end]
+                token = 'name: ' + path.parent.name + '\n'
+                self.assertEqual(front.count(token), 1)
+                self.assertEqual(len(re.findall(r'description: \S', front)), 1)
+                changed_front = (front.replace(token, 'removed-name\n') if kind == 'name'
+                                 else re.sub(r'description: (?=\S)', 'REMOVED_DESCRIPTION: ', front))
+                self.assertEqual(token in changed_front, kind == 'description')
+                self.assertEqual(bool(re.search(r'description: \S', changed_front)), kind == 'name')
+                changed = (body[:start] + changed_front + body[end:]).encode()
+                path.write_bytes(changed)
+                try:
+                    self.assertNotEqual(changed, originals[name])
+                    self.assertEqual(path.read_bytes(), changed)
+                    self.assertEqual(self.suggestion()['inputs'], SKILL_FRONTMATTER_INPUTS)
+                    before = self.selected_bytes()
+                    result = self.process(SKILL_FRONTMATTER_COMMAND)
+                    source = ('self.assertIn(f"name: {path.parent.name}\\n", front)' if kind == 'name'
+                              else 'self.assertRegex(front, r"description: \\S")')
+                    self.assert_failure(result, kind, source)
+                    self.assert_inputs_unchanged(before)
+                finally:
+                    path.write_bytes(originals[name])
+                    self.assertEqual(path.read_bytes(), originals[name])
+        self.assertEqual({name: (self.root / name).read_bytes() for name in originals}, originals)
+
+    def test_split_substring_regex_and_empty_tree_semantics(self):
+        tree = self.root / '.claude/skills'
+        backup = Path(self.temp.name) / 'saved-skills'
+        before = {str(p.relative_to(tree)): p.read_bytes() for p in tree.rglob('*') if p.is_file()}
+        tree.rename(backup)
+        try:
+            # Deleted tracked paths remain inventory members until removed from the index.
+            # The semantic case is an actually empty supported inventory, not missing inputs.
+            self.git('rm', '-r', '--cached', '--', '.claude/skills')
+            # Both absent and existing-empty trees export and run one vacuous test.
+            for existing in (False, True):
+                if existing:
+                    tree.mkdir()
+                self.assertEqual(self.suggestion()['inputs'], SKILL_FRONTMATTER_INPUTS)
+                self.execution()
+                self.assert_observation(self.observe(), [])
+            path = tree / 'sample/SKILL.md'
+            good = 'name: sample\ndescription: Valid\n'
+            cases = [
+                ('---' + good, None),
+                ('arbitrary prose---' + good, None),
+                ('---prefix name: sample\nprefix description: Valid\n---', None),
+                ('---description: Valid\n---' + good, 'name'),
+                ('---name: sample\n---description: Valid\n', 'description'),
+                (good, 'IndexError'),
+                ('---name: wrong\ndescription: Valid\n---', 'name'),
+                ('---description: Valid\nname: sample---', 'name'),
+                ('---name: sample\ndescription:  Invalid\n---', 'description'),
+            ]
+            for body, failure in cases:
+                with self.subTest(body=body, failure=failure):
+                    self.write('.claude/skills/sample/SKILL.md', body)
+                    original = path.read_bytes()
+                    self.assertEqual(original, body.encode())
+                    self.suggestion()
+                    if failure is None:
+                        self.execution()
+                        self.assert_observation(self.observe(), ['.claude/skills/sample/SKILL.md'])
+                    else:
+                        result = self.process(SKILL_FRONTMATTER_COMMAND)
+                        source = ('front = text(str(path.relative_to(ROOT))).split("---")[1]'
+                                  if failure == 'IndexError' else
+                                  'self.assertIn(f"name: {path.parent.name}\\n", front)' if failure == 'name'
+                                  else 'self.assertRegex(front, r"description: \\S")')
+                        self.assert_failure(result, failure, source)
+                    self.assertEqual(path.read_bytes(), original)
+                    path.unlink()
+        finally:
+            if tree.exists():
+                shutil.rmtree(tree)
+            backup.rename(tree)
+            self.assertEqual({str(p.relative_to(tree)): p.read_bytes()
+                              for p in tree.rglob('*') if p.is_file()}, before)
+            self.git('add', '-f', '--', '.claude/skills')
+            self.git('diff', '--cached', '--exit-code')
+
+
+class SkillFrontmatterAdopterEndToEndTests(SkillFrontmatterFixture):  # R6
+    def test_explicit_adoption_freshness_identity_and_receipt(self):
+        (self.root / '.agentic.json').unlink()
+        self.lc('tier', 'L1', '--reason', 'skill frontmatter adopter fixture')
+        result = self.process([sys.executable, '.ai/scripts/okf.py', 'init'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.write('knowledge/project/sync-ignore', '*\n')
+        value = self.suggestion()
+        prefix = ('---\ntype: Capability\ntitle: Skill frontmatter\nnamespace: SKILLFRONT\nstatus: draft\n---\n'
+                  '# Skill frontmatter\n\n## Requirements\n\n- SKILLFRONT-R1: The documentation check MUST pass.\n'
+                  '  - Verify: `' + ' '.join(SKILL_FRONTMATTER_COMMAND) + '`\n')
+        original = prefix + value['inputs_line'] + '\n'
+        capability = self.write('knowledge/capabilities/skill-frontmatter.md', original)
+        self.commit()
+
+        def status():
+            result = self.process([sys.executable, '.ai/scripts/lifecycle.py', 'assure', '--json'])
+            data = json.loads(result.stdout)
+            state = next(r['status'] for r in data['requirements'] if r['id'] == 'SKILLFRONT-R1')
+            self.assertEqual(result.returncode, 0 if state == 'VERIFIED' else 1, result.stdout + result.stderr)
+            return state
+
+        self.assertEqual(status(), 'UNVERIFIED')
+        before = self.preflight()
+        self.lc('assure', '--run', 'SKILLFRONT-R1')
+        self.assert_inputs_unchanged(before)
+        self.assertEqual(status(), 'VERIFIED')
+        for name in ('.ai/scripts/tests/unrelated.py', 'unrelated.md'):
+            self.edit_and_restore(name, lambda: self.assertEqual(status(), 'VERIFIED'))
+            self.assertEqual(status(), 'VERIFIED')
+        for name in SKILL_FRONTMATTER_FRESH:
+            with self.subTest(name=name):
+                self.edit_and_restore(name, lambda: self.assertEqual(status(), 'STALE'))
+                self.assertEqual(status(), 'VERIFIED')
+        try:
+            reordered = [*value['inputs'][:-2], value['inputs'][-1], value['inputs'][-2]]
+            capability.write_text(prefix + '  - Inputs: ' + ' '.join('`' + p + '`' for p in reordered) + '\n')
+            self.assertEqual(status(), 'UNVERIFIED')
+            capability.write_text(original.replace(SKILL_FRONTMATTER_COMMAND[2] + '`',
+                                                   SKILL_FRONTMATTER_COMMAND[2] + ' -v`'))
+            self.assertEqual(status(), 'UNVERIFIED')
+        finally:
+            capability.write_text(original)
+            self.assertEqual(capability.read_bytes(), original.encode())
+        self.assertEqual(status(), 'VERIFIED')
+        entries = [e for p in (self.root / 'knowledge/history/lifecycle').glob('*.json')
+                   for e in json.loads(p.read_text()).get('ledger', []) if e['label'] == 'req:SKILLFRONT-R1']
+        self.assertEqual((entries[-1]['argv'], entries[-1]['inputs'], entries[-1]['exit']),
+                         (SKILL_FRONTMATTER_COMMAND, SKILL_FRONTMATTER_INPUTS + [EXCLUDE], 0))
+        self.write('knowledge/history/lifecycle/extra-receipt.json', '{}\n')
+        self.assertEqual(status(), 'VERIFIED')
+
+
+class SkillFrontmatterControlTests(SkillFrontmatterFixture):  # R6
+    def test_confirmed_broken_variants_fail_intended_criteria(self):
+        variants = [('omit', SkillFrontmatterFrameworkEndToEndTests, 'check_skill_subtree_invalidation',
+                     'missing skill frontmatter freshness invalidation: ' + SKILL_FRONTMATTER_DOCS[0]),
+                    ('loose', SkillFrontmatterProfileTests, 'test_unregistered_symlink_refuses', '0 != 2'),
+                    ('empty', SkillFrontmatterFrameworkEndToEndTests, 'test_each_input_and_addition_invalidates',
+                     'skill frontmatter execution count must be one')]
+        self.assertEqual(len(variants), 3)
+        for variant, cls, method, criterion in variants:
+            with self.subTest(variant=variant):
+                case = cls(method)
+                setup = case.setUp
+
+                def mutated_setup():
+                    setup()
+                    path = case.root / '.ai/scripts/assurance_inputs.py'
+                    original = path.read_bytes()
+                    source = original.decode('utf-8')
+                    if variant == 'omit':
+                        catalog = copy.deepcopy(case.module().PROFILES)
+                        profile = next(p for p in catalog if p['id'] == 'python-skill-frontmatter-contract')
+                        profile['inputs'].remove('.claude/skills/**')
+                        del profile['rationale']['.claude/skills/**']
+                        replacement = (source.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
+                                       + '\nLIMITATIONS =' + source.split('\nLIMITATIONS =', 1)[1])
+                    elif variant == 'loose':
+                        old = "p['argv'] == list(argv)"
+                        case.assertEqual(source.count(old), 1)
+                        replacement = source.replace(old, old + " or (p['id'] == 'python-skill-frontmatter-contract' and p['argv'][:2] == list(argv)[:2])")
+                    else:
+                        path = case.root / SKILL_FRONTMATTER_TESTS[0]
+                        original = path.read_bytes()
+                        replacement = 'import sys\nimport unittest\nunittest.main(argv=[sys.argv[0]])\n'
+                    def restore():
+                        path.write_bytes(original)
+                        case.assertEqual(path.read_bytes(), original, 'skill frontmatter restoration mismatch')
+                    case.addCleanup(restore)
+                    changed = replacement.encode()
+                    path.write_bytes(changed)
+                    case.assertNotEqual(original, changed)
+                    case.assertEqual(path.read_bytes(), changed)
+                    if variant == 'omit':
+                        value = case.suggestion()
+                        case.assertNotIn('.claude/skills/**', value['inputs'])
+                        case.assertNotIn('.claude/skills/**', value['rationale'])
+                    if variant == 'empty':
+                        result = case.process(SKILL_FRONTMATTER_COMMAND)
                         case.assertEqual(re.findall(r'Ran (\d+) tests? in ', result.stdout + result.stderr), ['0'])
 
                 case.setUp = mutated_setup

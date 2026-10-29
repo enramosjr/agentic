@@ -225,6 +225,21 @@ PROFILES = [{
         '.claude/skills/spec/SKILL.md': 'Direct whole-document read once for the analyze token, not skill execution.',
         '.claude/skills/review/SKILL.md': 'Direct whole-document read once for converge and Validation Reviewed tokens, not skill execution.',
     },
+}, {
+    'id': 'python-skill-frontmatter-contract',
+    'cwd': '.',
+    'argv': ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+             'RolesAndSkills.test_skills_have_name_matching_directory_and_a_description'],
+    'inputs': ['.ai/scripts/**', '!.ai/scripts/tests/**',
+               '.ai/scripts/tests/test_lifecycle_conformance.py', '.ai/scripts/tests/disk_tmp.py',
+               '.claude/skills/**'],
+    'rationale': {
+        '.ai/scripts/**': 'Conservative production import and lazy-loader/decorator construction scope; includes unused non-test descendants and future supported scripts.',
+        '!.ai/scripts/tests/**': 'Exclude unrelated tests before restoring the selected module and imported helper.',
+        '.ai/scripts/tests/test_lifecycle_conformance.py': 'Selected dynamic skill-frontmatter method checks name substrings and description regex matches within one test; no skill instructions are executed.',
+        '.ai/scripts/tests/disk_tmp.py': 'Imported temporary-storage helper; scratch is within the production-script scope.',
+        '.claude/skills/**': 'Conservative dynamic skill subtree: rglob SKILL.md reads split segment one for parent-name/newline and description checks; covers future supported skills and non-read assets with extra invalidation, without nonempty enforcement.',
+    },
 }]
 LIMITATIONS = [
     'Declared repository input scope; review required when command reads or dependencies change.',
