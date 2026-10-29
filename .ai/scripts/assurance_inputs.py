@@ -191,6 +191,21 @@ PROFILES = [{
         '.ai/scripts/tests/disk_tmp.py': 'Imported temporary-storage helper; scratch is within the production-script scope.',
         '.ai/lifecycle.md': 'Sole direct document, read twice for first regex capture/body substring presence and a separate whole-document row-prefix regex, not assurance semantics or enforcement.',
     },
+}, {
+    'id': 'python-agents-budget-contract',
+    'cwd': '.',
+    'argv': ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+             'AgentsBudget.test_agents_md_stays_below_its_cold_start_budget'],
+    'inputs': ['.ai/scripts/**', '!.ai/scripts/tests/**',
+               '.ai/scripts/tests/test_lifecycle_conformance.py', '.ai/scripts/tests/disk_tmp.py',
+               'AGENTS.md'],
+    'rationale': {
+        '.ai/scripts/**': 'Conservative production import and lazy-loader/decorator construction scope; includes unused non-test descendants and future supported scripts, not a copied-directory boundary.',
+        '!.ai/scripts/tests/**': 'Exclude unrelated tests before restoring the selected module and imported helper.',
+        '.ai/scripts/tests/test_lifecycle_conformance.py': 'Selected method makes one strict encoded-text length assertion within one test; no lifecycle command or historical baseline helper is executed.',
+        '.ai/scripts/tests/disk_tmp.py': 'Imported temporary-storage helper; scratch is within the production-script scope.',
+        'AGENTS.md': 'Sole direct document, read once with default decoding/newline translation then UTF-8 re-encoding for a strict less-than 30000 length assertion, not necessarily raw-file size.',
+    },
 }]
 LIMITATIONS = [
     'Declared repository input scope; review required when command reads or dependencies change.',
