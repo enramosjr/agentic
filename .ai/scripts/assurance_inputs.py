@@ -96,6 +96,22 @@ PROFILES = [{
         '.ai/docs/install-and-upgrade.md': 'Direct text read of five installer-documentation terms.',
         '.ai/VERSION': 'Direct non-Markdown text read checked with the existing numeric-version/newline regex, not semantic-version compatibility.',
     },
+}, {
+    'id': 'python-validation-policy-contract',
+    'cwd': '.',
+    'argv': ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+             'Relocation.test_agents_md_points_to_the_policy_and_the_policy_keeps_its_must_rules'],
+    'inputs': ['.ai/scripts/**', '!.ai/scripts/tests/**',
+               '.ai/scripts/tests/test_lifecycle_conformance.py', '.ai/scripts/tests/disk_tmp.py',
+               'AGENTS.md', '.ai/validation-policy.md'],
+    'rationale': {
+        '.ai/scripts/**': 'Conservative production import and lazy-loader/decorator setup scope; includes unused non-test descendants and future scripts, not a copied-directory boundary.',
+        '!.ai/scripts/tests/**': 'Exclude unrelated tests before restoring the selected module and imported helper.',
+        '.ai/scripts/tests/test_lifecycle_conformance.py': 'Selected validation-policy method checks static text placement; it does not execute policy commands.',
+        '.ai/scripts/tests/disk_tmp.py': 'Imported temporary-storage helper; scratch is within the production-script scope.',
+        'AGENTS.md': 'Direct text read of two required reference/loading tokens and absence of four policy strings; explicit despite general Markdown freshness exemptions.',
+        '.ai/validation-policy.md': 'Direct text read requiring four literal policy strings, not actual policy enforcement.',
+    },
 }]
 LIMITATIONS = [
     'Declared repository input scope; review required when command reads or dependencies change.',

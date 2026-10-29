@@ -1869,5 +1869,472 @@ class InstallerDocControlTests(InstallerDocFixture):  # R6
                 self.assertIn(criterion, '\n'.join(detail for _, detail in result.failures))
 
 
+# Validation policy: specification-5f.md R1-R6. Independent of PROFILES.
+VALIDATION_POLICY_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+                             'Relocation.test_agents_md_points_to_the_policy_and_the_policy_keeps_its_must_rules']
+VALIDATION_POLICY_TESTS = [VALIDATION_POLICY_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
+VALIDATION_POLICY_DOCS = ['AGENTS.md', '.ai/validation-policy.md']
+VALIDATION_POLICY_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**',
+                           *VALIDATION_POLICY_TESTS, *VALIDATION_POLICY_DOCS]
+VALIDATION_POLICY_IMPORTS = ['.ai/scripts/' + name + '.py' for name in
+                            ('scratch', 'lifecycle', 'review_guard', 'ledger', 'brownfield',
+                             'okf', 'learning', 'scan', 'project_context', 'assurance')]
+VALIDATION_POLICY_RULES = (
+    'MUST NOT rerun an unchanged failing check',
+    '`--max` below 300 s is a violation',
+    'MUST be split before work continues',
+    'MUST NOT satisfy §8.1 by adding tests whose only purpose is more evidence',
+)
+
+
+class ValidationPolicyFixture(Fixture):
+    def setUp(self):
+        super().setUp()
+        # Compatibility copies support prior exports, not the selected read oracle.
+        for name in dict.fromkeys([*VALIDATION_POLICY_TESTS, *VALIDATION_POLICY_DOCS,
+                                   *INSTALLER_DOC_TEXT, *REPORT_DOCS, *WIRING_JSON, *ARCH_TESTS[:-1]]):
+            destination = self.root / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(SCRIPTS.parent.parent / name, destination)
+        self.commit()
+
+    def export(self, argv=None, **kwargs):
+        return super().export(argv=VALIDATION_POLICY_COMMAND if argv is None else argv, **kwargs)
+
+    def selected_bytes(self):
+        return {name: (self.root / name).read_bytes()
+                for name in ledger.input_paths(self.root, VALIDATION_POLICY_INPUTS)}
+
+    def assert_inputs_unchanged(self, before):
+        self.assertEqual(self.selected_bytes(), before, 'validation policy execution changed inputs')
+
+    def execution(self, failure=None):
+        before = self.selected_bytes()
+        result = self.process(VALIDATION_POLICY_COMMAND)
+        output = result.stdout + result.stderr
+        counts = re.findall(r'Ran (\d+) tests? in ', output)
+        self.assertEqual(len(counts), 1, 'validation policy execution count missing or ambiguous: ' + output)
+        self.assertEqual(int(counts[0]), 1, 'validation policy execution count must be one: ' + output)
+        if failure is None:
+            self.assertEqual(result.returncode, 0, output)
+            self.assertRegex(output, r'\nOK\s*$')
+        else:
+            self.assertNotEqual(result.returncode, 0, output)
+            self.assertIn('AssertionError', output)
+            self.assertIn(VALIDATION_POLICY_COMMAND[2].split('.')[1], output)
+            self.assertIn(failure, output)
+            self.assertNotIn('ERROR:', output)
+        self.assert_inputs_unchanged(before)
+        return result
+
+    def preflight(self):
+        before = self.selected_bytes()
+        self.execution()
+        return before
+
+    def edit_and_restore(self, name, check):
+        path = self.root / name
+        original = path.read_bytes() if path.exists() else None
+        changed = (original or b'') + b'\n '
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(changed)
+        try:
+            self.assertNotEqual(original, changed)
+            self.assertEqual(path.read_bytes(), changed)
+            if name in VALIDATION_POLICY_DOCS:
+                self.execution()  # Freshness edits must preserve the static assertions.
+            check()
+        finally:
+            if original is None:
+                path.unlink()
+            else:
+                path.write_bytes(original)
+
+    def assert_prior_profiles(self):
+        result = subprocess.run(
+            ['git', 'show', '4b89221b6f1c416303452abd57fb4fb15816b2b3:.ai/scripts/assurance_inputs.py'],
+            cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        import ast
+        baseline = next(ast.literal_eval(n.value) for n in ast.parse(result.stdout).body
+                        if isinstance(n, ast.Assign)
+                        and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in n.targets))
+        identities = ('python-runner-test', 'python-architecture-compatibility', 'python-harness-wiring',
+                      'python-reviewer-report-contract', 'python-installer-doc-contract')
+        self.assertEqual(tuple(p['id'] for p in baseline), identities)
+        actual = self.module().PROFILES
+        for expected in baseline:
+            self.assertEqual(next(p for p in actual if p['id'] == expected['id']), expected)
+            value = self.suggestion(argv=expected['argv'])
+            self.assertEqual((value['profile_id'], value['argv'], value['inputs'], value['rationale']),
+                             (expected['id'], expected['argv'], expected['inputs'], expected['rationale']))
+
+
+class ValidationPolicyProfileTests(ValidationPolicyFixture):  # R1
+    def test_exact_registration_and_prior_profiles(self):
+        value = self.suggestion()
+        self.assertEqual(value['profile_id'], 'python-validation-policy-contract')
+        self.assertEqual(value['argv'], VALIDATION_POLICY_COMMAND)
+        self.assert_prior_profiles()
+        for argv in (VALIDATION_POLICY_COMMAND[:2], VALIDATION_POLICY_COMMAND[:2] + ['Relocation'],
+                     VALIDATION_POLICY_COMMAND[:2] + ['Distribution.test_eval_and_installer_share_one_kit_list'],
+                     VALIDATION_POLICY_COMMAND + ['-v'], [sys.executable, *VALIDATION_POLICY_COMMAND[1:]],
+                     ['python3', './' + VALIDATION_POLICY_COMMAND[1], VALIDATION_POLICY_COMMAND[2]],
+                     ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
+                      '-p', 'test_lifecycle_conformance.py']):
+            self.assertIn('exact command', self.refused(argv=argv)['reason'])
+        self.refused(cwd=self.root / '.ai')
+
+
+class ValidationPolicyExportTests(ValidationPolicyFixture):  # R3
+    def test_readonly_formats_supplements_and_no_semantic_parsing(self):
+        marker = self.root / 'executed'
+        for name in VALIDATION_POLICY_TESTS:
+            self.write(name, f'from pathlib import Path\nPath({str(marker)!r}).touch()\nraise RuntimeError("executed")\n')
+        for name in VALIDATION_POLICY_DOCS:
+            self.write(name, 'nonconforming static document')
+        for name in ('space file.txt', 'second.txt'):
+            self.write(name, 'supplement')
+        before = snapshot(self.root)
+        extra = ('space file.txt', 'second.txt')
+        value = self.suggestion(extra=extra)
+        text = self.export(extra=extra, json_output=False)
+        self.assertEqual(text.returncode, 0, text.stderr)
+        self.assertEqual(value['inputs'], VALIDATION_POLICY_INPUTS + list(extra))
+        self.assertEqual(value['lifecycle_inputs_argv'], ['--inputs', *value['inputs']])
+        for item in (value['profile_id'], value['inputs_line'], json.dumps(VALIDATION_POLICY_COMMAND),
+                     json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
+            self.assertIn(item, text.stdout)
+        raw = ('- POLICY-R1: The check MUST pass.\n  - Verify: `'
+               + ' '.join(VALIDATION_POLICY_COMMAND) + '`\n' + value['inputs_line'] + '\n')
+        parsed = assurance.parse('POLICY-R1', 'capabilities/policy.md', raw, root=self.root)
+        self.assertIsNone(parsed.invalid)
+        self.assertEqual(list(parsed.globs), value['inputs'])
+        self.assertTrue(value['review_required'])
+        self.assertEqual(snapshot(self.root), before)
+        self.assertFalse(marker.exists())
+
+    def test_required_literals_and_unsafe_boundaries_refuse(self):
+        for name in [*VALIDATION_POLICY_TESTS, *VALIDATION_POLICY_DOCS]:
+            path = self.root / name
+            original = path.read_bytes()
+            path.unlink()
+            try:
+                self.refused()
+            finally:
+                path.write_bytes(original)
+        name = VALIDATION_POLICY_DOCS[0]
+        self.git('rm', '--cached', name)
+        self.write('.gitignore', name + '\n')
+        self.refused()
+        self.git('add', '-f', name)
+        path = self.root / name
+        original = path.read_bytes()
+        outside = Path(self.temp.name) / 'outside.md'
+        outside.write_bytes(original)
+        path.unlink()
+        path.symlink_to(outside)
+        try:
+            self.refused()
+        finally:
+            path.unlink()
+            path.write_bytes(original)
+        for extra in ('!README.md', '../x', '/etc/passwd', '', 'x`bad', '--other-option'):
+            self.refused(extra=(extra,))
+
+
+# Fixed expectations for the independently inspected shared eager/called setup.
+VALIDATION_POLICY_SETUP_PINS = {
+    '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
+    '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
+    '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
+    '.ai/scripts/lifecycle.py': '048f391c166ffb58b8ba1d769ca287adc78d5c155a28bebba043e0d93a30e1ca',
+    '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
+    '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
+}
+
+
+class ValidationPolicyDependencyTests(ValidationPolicyFixture):  # R2
+    def test_order_scope_and_independent_oracle(self):
+        value = self.suggestion()
+        actual_setup = {p: report_setup_digest(self.root / p) for p in VALIDATION_POLICY_SETUP_PINS}
+        self.assertEqual(actual_setup, VALIDATION_POLICY_SETUP_PINS,
+                         'review validation policy dependency boundary: ' + repr(actual_setup))
+        self.assertEqual(value['inputs'], VALIDATION_POLICY_INPUTS)
+        self.assertEqual(set(value['rationale']), set(VALIDATION_POLICY_INPUTS))
+        for name, terms in {
+            '.ai/scripts/**': ('conservative', 'import', 'lazy'),
+            '!.ai/scripts/tests/**': ('exclude',),
+            VALIDATION_POLICY_TESTS[0]: ('method', 'static'), VALIDATION_POLICY_TESTS[1]: ('helper',),
+            **{p: ('direct',) for p in VALIDATION_POLICY_DOCS},
+        }.items():
+            for term in terms:
+                self.assertIn(term, value['rationale'][name].lower())
+        included = ['.ai/scripts/future_policy.py', '.ai/scripts/assets/policy.txt']
+        excluded = ['.ai/scripts/tests/unrelated.py', 'unrelated.md',
+                    *INSTALLER_DOC_TEXT, *REPORT_DOCS, *WIRING_JSON, *ARCH_TESTS[:-1]]
+        for name in included + excluded[:2]:
+            self.write(name, '# independent inventory fixture\n')
+        selected = set(ledger.input_paths(self.root, value['inputs']))
+        self.assertTrue(set([*VALIDATION_POLICY_TESTS, *VALIDATION_POLICY_DOCS,
+                             *VALIDATION_POLICY_IMPORTS, *included]).issubset(selected))
+        self.assertFalse(set(excluded) & selected)
+        import ast
+        source = (self.root / VALIDATION_POLICY_TESTS[0]).read_text()
+        cls = next(n for n in ast.parse(source).body if isinstance(n, ast.ClassDef) and n.name == 'Relocation')
+        method = next(n for n in cls.body if isinstance(n, ast.FunctionDef)
+                      and n.name == VALIDATION_POLICY_COMMAND[2].split('.')[1])
+        reviewed = '\n'.join(source.splitlines()[method.lineno - 1:method.end_lineno])
+        self.assertEqual(hashlib.sha256(reviewed.encode()).hexdigest(),
+                         'f3d3bf30e9c12ca4ba15ae57ba4a78de1bc01aa61b8e39b009e0a9a5d1471ed8',
+                         'review validation policy selected method boundary')
+        reads = {n.args[0].value for n in ast.walk(method) if isinstance(n, ast.Call)
+                 and isinstance(n.func, ast.Name) and n.func.id == 'text'
+                 and n.args and isinstance(n.args[0], ast.Constant)}
+        self.assertEqual(reads, set(VALIDATION_POLICY_DOCS))
+
+    def test_reachable_added_dependencies_require_review(self):
+        variants = [(p, ()) for p in VALIDATION_POLICY_SETUP_PINS]
+        variants += [(VALIDATION_POLICY_TESTS[0], ('Relocation', VALIDATION_POLICY_COMMAND[2].split('.')[1])),
+                     (VALIDATION_POLICY_TESTS[0], ('text',)),
+                     ('.ai/scripts/scratch.py', ('require_disk',)),
+                     ('.ai/scripts/lifecycle.py', ('lazy',)),
+                     ('.ai/scripts/review_guard.py', ('protected',)),
+                     ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
+                     (VALIDATION_POLICY_TESTS[0], ('import-helper',))]
+        self.assertEqual(len(variants), 13)
+        for name, body in variants:
+            with self.subTest(name=name, body=body):
+                case = ValidationPolicyDependencyTests('test_order_scope_and_independent_oracle')
+                setup = case.setUp
+
+                def mutated_setup():
+                    setup()
+                    import ast
+                    path = case.root / name
+                    source = path.read_text()
+                    tree = ast.parse(source)
+                    addition = '__import__("pathlib").Path("unrelated.md").read_text()\n'
+                    if body == ('import-helper',):
+                        case.write('.ai/scripts/tests/unreviewed_policy_helper.py', addition)
+                        addition = 'import unreviewed_policy_helper\n'
+                    if body and body != ('import-helper',):
+                        node = tree
+                        for part in body:
+                            node = next(n for n in node.body if isinstance(n, (ast.FunctionDef, ast.ClassDef))
+                                        and n.name == part)
+                        first = node.body[0]
+                        if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) \
+                                and isinstance(first.value.value, str):
+                            after = first.end_lineno
+                        else:
+                            after = min([first.lineno, *[n.lineno for n in
+                                         getattr(first, 'decorator_list', [])]]) - 1
+                        addition = ' ' * first.col_offset + addition
+                    else:
+                        after = max(n.end_lineno for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom)))
+                    lines = source.splitlines(keepends=True)
+                    changed = ''.join(lines[:after]) + addition + ''.join(lines[after:])
+                    path.write_text(changed)
+                    case.assertNotEqual(source, changed)
+                    case.assertEqual(path.read_text(), changed)
+                    case.assertNotIn('unrelated.md', ledger.input_paths(case.root, VALIDATION_POLICY_INPUTS))
+                    missing = case.process(VALIDATION_POLICY_COMMAND)
+                    case.assertNotEqual(missing.returncode, 0)
+                    case.assertIn('FileNotFoundError', missing.stdout + missing.stderr)
+                    case.assertIn('unrelated.md', missing.stdout + missing.stderr)
+                    case.write('unrelated.md', 'new excluded dependency')
+                    case.execution()
+
+                case.setUp = mutated_setup
+                result = unittest.TestResult()
+                case.run(result)
+                self.assertEqual(result.testsRun, 1)
+                self.assertFalse(result.errors, result.errors)
+                self.assertTrue(result.failures, 'unreviewed validation policy dependency survived: ' + repr((name, body)))
+                self.assertIn('review validation policy dependency boundary',
+                              '\n'.join(detail for _, detail in result.failures))
+
+
+class ValidationPolicyCompatibilityTests(ValidationPolicyFixture):  # R4
+    def test_advisory_guide_and_existing_contracts(self):
+        self.assert_prior_profiles()
+        self.assertIsNone(ledger.default_inputs(VALIDATION_POLICY_COMMAND))
+        self.assertEqual(ledger.default_inputs(COMMAND), ('python-tests', ['**']))
+        for argv in (['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests'],
+                     *[['python3', '.ai/scripts/run_tests.py', '-j', str(n)] for n in (1, 8, 32)]):
+            self.refused(argv=argv)
+        value = self.suggestion()
+        self.assertNotIn(EXCLUDE, value['inputs'])
+        self.assertEqual(value['schema_version'], 1)
+        self.assertTrue(value['review_required'])
+        self.assertIn('runtime', ' '.join(value['limitations']).lower())
+        guide = (self.root / ARCH_GUIDE).read_text()
+        for phrase in ('python-validation-policy-contract', ' '.join(VALIDATION_POLICY_COMMAND),
+                       'static', 'conservative', 'explicit', 'manual', 'text placement',
+                       'policy enforcement', *VALIDATION_POLICY_DOCS):
+            self.assertIn(phrase, guide)
+
+
+class ValidationPolicyFrameworkEndToEndTests(ValidationPolicyFixture):  # R5
+    def record(self):
+        value = self.suggestion()
+        before = self.preflight()
+        self.lc('tier', 'L1', '--reason', 'static validation policy framework fixture')
+        self.lc('run', 'validation-policy', *value['lifecycle_inputs_argv'], '--', *VALIDATION_POLICY_COMMAND)
+        self.assert_inputs_unchanged(before)
+        import lifecycle
+        entry = lifecycle.load(self.root)['ledger'][-1]
+        self.assertEqual((entry['argv'], entry['inputs'], entry['exit']),
+                         (VALIDATION_POLICY_COMMAND, value['inputs'], 0))
+        self.assertIn('REUSE', self.lc('reuse', 'validation-policy'))
+
+    def test_each_input_and_addition_invalidates(self):
+        self.record()
+        for name in ('.ai/scripts/tests/unrelated.py', 'unrelated.md'):
+            self.edit_and_restore(name, lambda: self.assertIn('REUSE', self.lc('reuse', 'validation-policy')))
+            self.assertIn('REUSE', self.lc('reuse', 'validation-policy'))
+        for name in [*VALIDATION_POLICY_DOCS, *VALIDATION_POLICY_TESTS,
+                     '.ai/scripts/review_guard.py', '.ai/scripts/new_policy.py']:
+            with self.subTest(name=name):
+                def stale():
+                    result = self.process([sys.executable, '.ai/scripts/lifecycle.py', 'reuse', 'validation-policy'])
+                    self.assertEqual(result.returncode, 1, 'missing validation policy freshness invalidation: ' + name)
+                    self.assertIn('RERUN', result.stdout)
+                self.edit_and_restore(name, stale)
+                self.assertIn('REUSE', self.lc('reuse', 'validation-policy'))
+        self.assertFalse((self.root / 'knowledge').exists())
+
+
+class ValidationPolicyFailureTests(ValidationPolicyFixture):  # R5
+    def test_ten_static_failures_fail_actual_command(self):
+        variants = [(VALIDATION_POLICY_DOCS[0], term, False)
+                    for term in ('.ai/validation-policy.md', 'MUST load it by section')]
+        variants += [(VALIDATION_POLICY_DOCS[1], term, False) for term in VALIDATION_POLICY_RULES]
+        variants += [(VALIDATION_POLICY_DOCS[0], term, True) for term in VALIDATION_POLICY_RULES]
+        self.assertEqual(len(variants), 10)
+        for name, term, insertion in variants:
+            with self.subTest(name=name, term=term, insertion=insertion):
+                path = self.root / name
+                original = path.read_bytes()
+                token = term.encode()
+                if insertion:
+                    self.assertNotIn(token, original)
+                    changed = original + b'\n' + token + b'\n'
+                else:
+                    self.assertIn(token, original)
+                    changed = original.replace(token, b'removed')
+                    self.assertNotIn(token, changed)
+                path.write_bytes(changed)
+                try:
+                    self.assertNotEqual(original, changed)
+                    self.assertEqual(path.read_bytes(), changed)
+                    self.suggestion()
+                    self.execution(failure='unexpectedly found in' if insertion else 'not found in')
+                finally:
+                    path.write_bytes(original)
+
+
+class ValidationPolicyAdopterEndToEndTests(ValidationPolicyFixture):  # R6
+    def test_explicit_adoption_freshness_identity_and_receipt(self):
+        (self.root / '.agentic.json').unlink()
+        self.lc('tier', 'L1', '--reason', 'static validation policy adopter fixture')
+        result = self.process([sys.executable, '.ai/scripts/okf.py', 'init'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.write('knowledge/project/sync-ignore', '*\n')
+        value = self.suggestion()
+        prefix = ('---\ntype: Capability\ntitle: Policy\nnamespace: POLICY\nstatus: draft\n---\n'
+                  '# Policy\n\n## Requirements\n\n- POLICY-R1: The static check MUST pass.\n'
+                  '  - Verify: `' + ' '.join(VALIDATION_POLICY_COMMAND) + '`\n')
+        original = prefix + value['inputs_line'] + '\n'
+        capability = self.write('knowledge/capabilities/policy.md', original)
+        self.commit()
+
+        def status():
+            result = self.process([sys.executable, '.ai/scripts/lifecycle.py', 'assure', '--json'])
+            data = json.loads(result.stdout)
+            state = next(r['status'] for r in data['requirements'] if r['id'] == 'POLICY-R1')
+            self.assertEqual(result.returncode, 0 if state == 'VERIFIED' else 1, result.stdout + result.stderr)
+            return state
+
+        self.assertEqual(status(), 'UNVERIFIED')
+        before = self.preflight()
+        self.lc('assure', '--run', 'POLICY-R1')
+        self.assert_inputs_unchanged(before)
+        self.assertEqual(status(), 'VERIFIED')
+        for name in ('.ai/scripts/tests/unrelated.py', 'unrelated.md'):
+            self.edit_and_restore(name, lambda: self.assertEqual(status(), 'VERIFIED'))
+            self.assertEqual(status(), 'VERIFIED')
+        for name in [*VALIDATION_POLICY_DOCS, *VALIDATION_POLICY_TESTS,
+                     '.ai/scripts/review_guard.py', '.ai/scripts/new_policy.py']:
+            with self.subTest(name=name):
+                self.edit_and_restore(name, lambda: self.assertEqual(status(), 'STALE'))
+                self.assertEqual(status(), 'VERIFIED')
+        reordered = [*value['inputs'][:-2], value['inputs'][-1], value['inputs'][-2]]
+        capability.write_text(prefix + '  - Inputs: ' + ' '.join('`' + p + '`' for p in reordered) + '\n')
+        self.assertEqual(status(), 'UNVERIFIED')
+        capability.write_text(original.replace(VALIDATION_POLICY_COMMAND[2] + '`', VALIDATION_POLICY_COMMAND[2] + ' -v`'))
+        self.assertEqual(status(), 'UNVERIFIED')
+        capability.write_text(original)
+        self.assertEqual(status(), 'VERIFIED')
+        entries = [e for p in (self.root / 'knowledge/history/lifecycle').glob('*.json')
+                   for e in json.loads(p.read_text()).get('ledger', []) if e['label'] == 'req:POLICY-R1']
+        self.assertEqual(entries[-1]['inputs'], VALIDATION_POLICY_INPUTS + [EXCLUDE])
+        self.write('knowledge/history/lifecycle/extra-receipt.json', '{}\n')
+        self.assertEqual(status(), 'VERIFIED')
+
+
+class ValidationPolicyControlTests(ValidationPolicyFixture):  # R6
+    def test_confirmed_broken_variants_fail_intended_criteria(self):
+        method = 'test_each_input_and_addition_invalidates'
+        variants = [(p, ValidationPolicyFrameworkEndToEndTests, method,
+                     'missing validation policy freshness invalidation: ' + p) for p in VALIDATION_POLICY_DOCS]
+        variants += [('loose', ValidationPolicyProfileTests, 'test_exact_registration_and_prior_profiles', '0 != 2'),
+                     ('empty', ValidationPolicyFrameworkEndToEndTests, method, 'validation policy execution count must be one')]
+        self.assertEqual(len(variants), 4)
+        for variant, cls, test, criterion in variants:
+            with self.subTest(variant=variant):
+                case = cls(test)
+                setup = case.setUp
+
+                def mutated_setup():
+                    setup()
+                    path = case.root / '.ai/scripts/assurance_inputs.py'
+                    original = path.read_text()
+                    if variant in VALIDATION_POLICY_DOCS:
+                        catalog = copy.deepcopy(case.module().PROFILES)
+                        profile = next(p for p in catalog if p['id'] == 'python-validation-policy-contract')
+                        profile['inputs'].remove(variant)
+                        del profile['rationale'][variant]
+                        replacement = (original.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
+                                       + '\nLIMITATIONS =' + original.split('\nLIMITATIONS =', 1)[1])
+                    elif variant == 'loose':
+                        old = "p['argv'] == list(argv)"
+                        case.assertEqual(original.count(old), 1)
+                        replacement = original.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                    else:
+                        path = case.root / VALIDATION_POLICY_TESTS[0]
+                        original = path.read_text()
+                        replacement = 'import sys\nimport unittest\nunittest.main(argv=[sys.argv[0]])\n'
+                    path.write_text(replacement)
+                    case.assertNotEqual(original, replacement, 'mutation was not applied')
+                    case.assertEqual(path.read_text(), replacement, 'mutation bytes differ')
+                    if variant in VALIDATION_POLICY_DOCS:
+                        value = case.suggestion()
+                        case.assertNotIn(variant, value['inputs'])
+                        case.assertNotIn(variant, value['rationale'])
+                    if variant == 'empty':
+                        result = case.process(VALIDATION_POLICY_COMMAND)
+                        case.assertRegex(result.stdout + result.stderr, r'Ran 0 tests? in ')
+
+                case.setUp = mutated_setup
+                result = unittest.TestResult()
+                case.run(result)
+                self.assertEqual(result.testsRun, 1)
+                self.assertFalse(result.errors, result.errors)
+                self.assertTrue(result.failures, 'broken validation policy variant survived: ' + variant)
+                self.assertIn(criterion, '\n'.join(detail for _, detail in result.failures))
+
+
 if __name__ == '__main__':
     unittest.main()
