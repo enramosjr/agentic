@@ -4362,5 +4362,538 @@ class TierDocControlTests(TierDocFixture):  # R6
                 self.assertEqual(len(result.failures), 1, 'broken variant survived: ' + variant)
                 self.assertIn(criterion, result.failures[0][1])
 
+ASSURANCE_DOC_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+                         'Assurance.test_assurance_documented']
+ASSURANCE_DOC_TESTS = [ASSURANCE_DOC_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
+ASSURANCE_DOC_DOCS = ['.ai/lifecycle.md']
+ASSURANCE_DOC_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**',
+                        *ASSURANCE_DOC_TESTS, *ASSURANCE_DOC_DOCS]
+
+
+class AssuranceDocFixture(Fixture):
+    def setUp(self):
+        super().setUp()
+        # Previous-profile export fixtures retain their own documents/helpers.
+        for name in dict.fromkeys([*ASSURANCE_DOC_TESTS, *ASSURANCE_DOC_DOCS,
+                                   '.ai/docs/lifecycle.md', *VALIDATION_POLICY_DOCS,
+                                   *INSTALLER_DOC_TEXT, *REPORT_DOCS, *WIRING_JSON, *ARCH_TESTS[:-1]]):
+            destination = self.root / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(SCRIPTS.parent.parent / name, destination)
+        self.commit()
+
+    def export(self, argv=None, **kwargs):
+        return super().export(argv=ASSURANCE_DOC_COMMAND if argv is None else argv, **kwargs)
+
+    def selected_bytes(self):
+        return {name: (self.root / name).read_bytes()
+                for name in ledger.input_paths(self.root, ASSURANCE_DOC_INPUTS)}
+
+    def assert_inputs_unchanged(self, before):
+        self.assertEqual(self.selected_bytes(), before, 'assurance doc execution changed inputs')
+
+    def execution(self, failure=None):
+        before = self.selected_bytes()
+        result = self.process(ASSURANCE_DOC_COMMAND)
+        output = result.stdout + result.stderr
+        counts = re.findall(r'Ran (\d+) tests? in ', output)
+        self.assertEqual(len(counts), 1, 'assurance doc execution count missing or ambiguous: ' + output)
+        self.assertEqual(int(counts[0]), 1, 'assurance doc execution count must be one: ' + output)
+        if failure is None:
+            self.assertEqual(result.returncode, 0, output)
+            self.assertRegex(output, r'\nOK\s*$')
+        else:
+            self.assertNotEqual(result.returncode, 0, output)
+            self.assertIn('AssertionError', output)
+            self.assertIn(ASSURANCE_DOC_COMMAND[2].split('.')[1], output)
+            self.assertIn(failure, output)
+            self.assertNotIn('ERROR:', output)
+        self.assert_inputs_unchanged(before)
+        return result
+
+    def preflight(self):
+        before = self.selected_bytes()
+        self.execution()
+        return before
+
+    def edit_and_restore(self, name, check):
+        path = self.root / name
+        original = path.read_bytes() if path.exists() else None
+        changed = (original or b'') + b'\n '
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(changed)
+        try:
+            self.assertNotEqual(original, changed)
+            self.assertEqual(path.read_bytes(), changed)
+            if name in ASSURANCE_DOC_DOCS:
+                self.execution()
+            check()
+        finally:
+            if original is None:
+                path.unlink()
+                self.assertFalse(path.exists())
+            else:
+                path.write_bytes(original)
+                self.assertEqual(path.read_bytes(), original)
+
+    def assert_prior_profiles(self):
+        result = subprocess.run(
+            ['git', 'show', '22c65521b281fce485ec5d10e45359cded53ec3f:.ai/scripts/assurance_inputs.py'],
+            cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        import ast
+        baseline = next(ast.literal_eval(n.value) for n in ast.parse(result.stdout).body
+                        if isinstance(n, ast.Assign)
+                        and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in n.targets))
+        identities = ('python-runner-test', 'python-architecture-compatibility', 'python-harness-wiring',
+                      'python-reviewer-report-contract', 'python-installer-doc-contract',
+                      'python-validation-policy-contract', 'python-audit-doc-contract',
+                      'python-analysis-convergence-doc-contract', 'python-stage-doc-contract',
+                      'python-tier-doc-contract')
+        self.assertEqual(tuple(p['id'] for p in baseline), identities)
+        actual = self.module().PROFILES
+        self.assertEqual(len(actual), 11)
+        for expected in baseline:
+            self.assertEqual(next(p for p in actual if p['id'] == expected['id']), expected)
+            value = self.suggestion(argv=expected['argv'])
+            self.assertEqual((value['profile_id'], value['argv'], value['inputs'], value['rationale']),
+                             (expected['id'], expected['argv'], expected['inputs'], expected['rationale']))
+
+
+class AssuranceDocProfileTests(AssuranceDocFixture):  # R1
+    def test_exact_registration_and_prior_profiles(self):
+        value = self.suggestion()
+        self.assertEqual(value['profile_id'], 'python-assurance-doc-contract')
+        self.assertEqual(value['argv'], ASSURANCE_DOC_COMMAND)
+        self.assert_prior_profiles()
+        for argv in (ASSURANCE_DOC_COMMAND[:2], ASSURANCE_DOC_COMMAND[:2] + ['Assurance'],
+                     ASSURANCE_DOC_COMMAND[:2] + ['Assurance.test_other'],
+                     ASSURANCE_DOC_COMMAND + ['-v'], [sys.executable, *ASSURANCE_DOC_COMMAND[1:]],
+                     ['python3', './' + ASSURANCE_DOC_COMMAND[1], ASSURANCE_DOC_COMMAND[2]],
+                     ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
+                      '-p', 'test_lifecycle_conformance.py']):
+            self.assertIn('exact command', self.refused(argv=argv)['reason'])
+        self.refused(cwd=self.root / '.ai')
+
+
+class AssuranceDocExportTests(AssuranceDocFixture):  # R3
+    def test_readonly_formats_supplements_and_no_semantic_parsing(self):
+        marker = self.root / 'executed'
+        for name in ASSURANCE_DOC_TESTS:
+            self.write(name, f'from pathlib import Path\nPath({str(marker)!r}).touch()\nraise RuntimeError("executed")\n')
+        self.write(ASSURANCE_DOC_DOCS[0], 'nonconforming static document')
+        for name in ('space file.txt', 'second.txt'):
+            self.write(name, 'supplement')
+        before = snapshot(self.root)
+        extra = ('space file.txt', 'second.txt')
+        value = self.suggestion(extra=extra)
+        text = self.export(extra=extra, json_output=False)
+        self.assertEqual(text.returncode, 0, text.stderr)
+        self.assertEqual(value['inputs'], ASSURANCE_DOC_INPUTS + list(extra))
+        self.assertEqual(value['lifecycle_inputs_argv'], ['--inputs', *value['inputs']])
+        for item in (value['profile_id'], value['inputs_line'], json.dumps(ASSURANCE_DOC_COMMAND),
+                     json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
+            self.assertIn(item, text.stdout)
+        raw = ('- ASSURANCEDOC-R1: The check MUST pass.\n  - Verify: `'
+               + ' '.join(ASSURANCE_DOC_COMMAND) + '`\n' + value['inputs_line'] + '\n')
+        parsed = assurance.parse('ASSURANCEDOC-R1', 'capabilities/assurance-doc.md', raw, root=self.root)
+        self.assertIsNone(parsed.invalid)
+        self.assertEqual(list(parsed.globs), value['inputs'])
+        self.assertTrue(value['review_required'])
+        self.assertEqual(snapshot(self.root), before)
+        self.assertFalse(marker.exists())
+
+    def test_required_literals_and_unsafe_boundaries_refuse(self):
+        for name in [*ASSURANCE_DOC_TESTS, *ASSURANCE_DOC_DOCS]:
+            path = self.root / name
+            original = path.read_bytes()
+            path.unlink()
+            try:
+                self.refused()
+            finally:
+                path.write_bytes(original)
+        self.assertEqual(self.suggestion()['inputs'], ASSURANCE_DOC_INPUTS)
+        name = ASSURANCE_DOC_DOCS[0]
+        self.git('rm', '--cached', name)
+        self.write('.gitignore', name + '\n')
+        self.refused()
+        self.git('add', '-f', name)
+        path = self.root / name
+        original = path.read_bytes()
+        outside = Path(self.temp.name) / 'outside.md'
+        outside.write_bytes(original)
+        path.unlink()
+        path.symlink_to(outside)
+        try:
+            self.refused()
+        finally:
+            path.unlink()
+            path.write_bytes(original)
+        for extra in ('!README.md', '../x', '/etc/passwd', '', 'x`bad', '--other-option'):
+            self.refused(extra=(extra,))
+
+
+# Independent selected-source contract; neither tuple is derived from PROFILES.
+ASSURANCE_DOC_TERMS = (
+    '- Verify:', '- Inputs:', 'VERIFIED', 'STALE', 'FAILED', 'UNVERIFIED',
+    'INVALID', 'MANUAL', 'UNDECLARED', 'lifecycle.py assure', '--run', '--changed', '--strict',
+    'covers only that command on those inputs', 'whole tree', 'squash',
+    'runtime executable changed', 'does not combine with',
+    'python3 .ai/scripts/assurance_demo.py', 'python3 .ai/scripts/assurance_measure.py')
+ASSURANCE_DOC_JUDGMENT_TERMS = (
+    'judgment (attested, not verified):', '## Validation Reviewed', 'Accept-risk:',
+    'risk_acceptance', 'not bound to', '`note:`', 'unauthenticated')
+ASSURANCE_DOC_SECTION = r'(?s)## Assurance status\n(.*?)(?=\n## )'
+ASSURANCE_DOC_ROW = r'(?m)^\| Assurance \| `assure'
+# Reviewed eager setup and called bodies for this selection, not reached producer bodies.
+ASSURANCE_DOC_SETUP_PINS = {
+    '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
+    '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
+    '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
+    '.ai/scripts/lifecycle.py': '048f391c166ffb58b8ba1d769ca287adc78d5c155a28bebba043e0d93a30e1ca',
+    '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
+    '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
+}
+
+
+class AssuranceDocDependencyTests(AssuranceDocFixture):  # R2
+    def test_order_scope_and_independent_oracle(self):
+        value = self.suggestion()
+        actual = {p: report_setup_digest(self.root / p) for p in ASSURANCE_DOC_SETUP_PINS}
+        self.assertEqual(actual, ASSURANCE_DOC_SETUP_PINS,
+                         'review assurance doc dependency boundary: ' + repr(actual))
+        self.assertEqual(value['inputs'], ASSURANCE_DOC_INPUTS)
+        self.assertEqual(set(value['rationale']), set(ASSURANCE_DOC_INPUTS))
+        for name, terms in {
+            '.ai/scripts/**': ('conservative', 'import', 'lazy'),
+            '!.ai/scripts/tests/**': ('exclude',),
+            ASSURANCE_DOC_TESTS[0]: ('method', 'static'),
+            ASSURANCE_DOC_TESTS[1]: ('helper',),
+            ASSURANCE_DOC_DOCS[0]: ('sole', 'direct', 'twice'),
+        }.items():
+            for term in terms:
+                self.assertIn(term, value['rationale'][name].lower())
+        included = ['.ai/scripts/future_assurance.py', '.ai/scripts/assets/assurance.txt']
+        compatibility = ['.ai/docs/lifecycle.md', *VALIDATION_POLICY_DOCS, *INSTALLER_DOC_TEXT,
+                         *REPORT_DOCS, *WIRING_JSON, *ARCH_TESTS[:-1]]
+        excluded = ['.ai/scripts/tests/unrelated.py', 'unrelated.md',
+                    *[p for p in compatibility if p not in ASSURANCE_DOC_DOCS]]
+        for name in included + excluded[:2]:
+            self.write(name, '# independent inventory fixture\n')
+        selected = set(ledger.input_paths(self.root, value['inputs']))
+        imports = ['.ai/scripts/' + n + '.py' for n in
+                   ('scratch', 'lifecycle', 'review_guard', 'ledger', 'brownfield',
+                    'okf', 'learning', 'scan', 'project_context', 'assurance')]
+        self.assertTrue(set([*ASSURANCE_DOC_TESTS, *ASSURANCE_DOC_DOCS, *imports, *included]).issubset(selected))
+        self.assertFalse(set(excluded) & selected)
+        import ast
+        tree = ast.parse((self.root / ASSURANCE_DOC_TESTS[0]).read_text())
+        cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'Assurance')
+        method = next(n for n in cls.body if isinstance(n, ast.FunctionDef)
+                      and n.name == 'test_assurance_documented')
+        self.assertEqual(len(method.body), 6)
+        section, matched, body, terms, judgment, row = method.body
+        expected = [
+            'section = re.search(' + repr(ASSURANCE_DOC_SECTION) + ', text(".ai/lifecycle.md"))',
+            'self.assertIsNotNone(section, ".ai/lifecycle.md needs an \'## Assurance status\' section")',
+            'body = section.group(1)',
+            'for term in ' + repr(ASSURANCE_DOC_TERMS) + ':\n    self.assertIn(term, body, term)',
+            'for term in ' + repr(ASSURANCE_DOC_JUDGMENT_TERMS) + ':\n    self.assertIn(term, body, term)',
+            'self.assertRegex(text(".ai/lifecycle.md"), ' + repr(ASSURANCE_DOC_ROW) + ', "Recording table row")',
+        ]
+        for node, source in zip((section, matched, body, terms, judgment, row), expected):
+            self.assertEqual(ast.dump(node), ast.dump(ast.parse(source).body[0]),
+                             'review assurance doc selected method boundary')
+        self.assertEqual(ast.literal_eval(terms.iter), ASSURANCE_DOC_TERMS)
+        self.assertEqual(ast.literal_eval(judgment.iter), ASSURANCE_DOC_JUDGMENT_TERMS)
+        self.assertEqual((len(terms.iter.elts), len(judgment.iter.elts)), (20, 7))
+        reads = [n for n in ast.walk(method) if isinstance(n, ast.Call)
+                 and isinstance(n.func, ast.Name) and n.func.id == 'text']
+        self.assertEqual([ast.literal_eval(n.args[0]) for n in reads], ASSURANCE_DOC_DOCS * 2)
+        self.assertTrue(re.compile(ASSURANCE_DOC_SECTION).flags & re.S)
+        self.assertTrue(re.compile(ASSURANCE_DOC_ROW).flags & re.M)
+
+    def test_reachable_added_dependencies_require_review(self):
+        variants = [(p, ()) for p in ASSURANCE_DOC_SETUP_PINS]
+        variants += [(ASSURANCE_DOC_TESTS[0], ('Assurance', 'test_assurance_documented')),
+                     (ASSURANCE_DOC_TESTS[0], ('text',)),
+                     ('.ai/scripts/scratch.py', ('require_disk',)),
+                     ('.ai/scripts/lifecycle.py', ('lazy',)),
+                     ('.ai/scripts/review_guard.py', ('protected',)),
+                     ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
+                     (ASSURANCE_DOC_TESTS[0], ('import-helper',))]
+        for name, body in variants:
+            with self.subTest(name=name, body=body):
+                case = AssuranceDocDependencyTests('test_order_scope_and_independent_oracle')
+                setup = case.setUp
+
+                def mutated_setup():
+                    setup()
+                    import ast
+                    path = case.root / name
+                    source = path.read_text()
+                    tree = ast.parse(source)
+                    addition = '__import__("pathlib").Path("unrelated.md").read_text()\n'
+                    if body == ('import-helper',):
+                        helper = '.ai/scripts/tests/unreviewed_assurance_helper.py'
+                        case.write(helper, addition)
+                        case.assertNotIn(helper, ledger.input_paths(case.root, ASSURANCE_DOC_INPUTS))
+                        addition = 'import unreviewed_assurance_helper\n'
+                    if body and body != ('import-helper',):
+                        node = tree
+                        for part in body:
+                            node = next(n for n in node.body if isinstance(n, (ast.FunctionDef, ast.ClassDef))
+                                        and n.name == part)
+                        first = node.body[0]
+                        if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) \
+                                and isinstance(first.value.value, str):
+                            after = first.end_lineno
+                        else:
+                            after = min([first.lineno, *[n.lineno for n in
+                                         getattr(first, 'decorator_list', [])]]) - 1
+                        addition = ' ' * first.col_offset + addition
+                    else:
+                        after = max(n.end_lineno for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom)))
+                    lines = source.splitlines(keepends=True)
+                    changed = ''.join(lines[:after]) + addition + ''.join(lines[after:])
+                    path.write_text(changed)
+                    case.assertNotEqual(source, changed)
+                    case.assertEqual(path.read_text(), changed)
+                    case.assertFalse((case.root / 'unrelated.md').exists())
+                    case.assertNotIn('unrelated.md', ledger.input_paths(case.root, ASSURANCE_DOC_INPUTS))
+                    missing = case.process(ASSURANCE_DOC_COMMAND)
+                    case.assertNotEqual(missing.returncode, 0)
+                    case.assertIn('FileNotFoundError', missing.stdout + missing.stderr)
+                    case.assertIn('unrelated.md', missing.stdout + missing.stderr)
+                    case.write('unrelated.md', 'new excluded dependency')
+                    case.execution()
+
+                case.setUp = mutated_setup
+                result = unittest.TestResult()
+                case.run(result)
+                self.assertEqual(result.testsRun, 1)
+                self.assertFalse(result.errors, result.errors)
+                self.assertEqual(len(result.failures), 1, 'unreviewed dependency survived: ' + repr((name, body)))
+                self.assertIn('review assurance doc dependency boundary', result.failures[0][1])
+
+
+class AssuranceDocCompatibilityTests(AssuranceDocFixture):  # R4
+    def test_advisory_guide_and_existing_contracts(self):
+        self.assert_prior_profiles()
+        self.assertIsNone(ledger.default_inputs(ASSURANCE_DOC_COMMAND))
+        self.assertEqual(ledger.default_inputs(COMMAND), ('python-tests', ['**']))
+        for argv in (['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests'],
+                     *[['python3', '.ai/scripts/run_tests.py', '-j', str(n)] for n in (1, 8, 32)]):
+            self.refused(argv=argv)
+        value = self.suggestion()
+        self.assertNotIn(EXCLUDE, value['inputs'])
+        self.assertEqual(value['schema_version'], 1)
+        self.assertTrue(value['review_required'])
+        self.assertIn('runtime', ' '.join(value['limitations']).lower())
+        guide = (self.root / ARCH_GUIDE).read_text()
+        for phrase in ('python-assurance-doc-contract', ' '.join(ASSURANCE_DOC_COMMAND),
+                       'two literal reads', '20', 'seven', '29 assertions', 'one test',
+                       'DOTALL', 'MULTILINE', 'unanchored', 'first matching capture',
+                       'case-sensitive', 'row-prefix', 'no end anchor', 'semantics',
+                       'conservative', 'explicit', 'manual', 'ten prior profiles',
+                       *ASSURANCE_DOC_INPUTS):
+            self.assertIn(phrase, guide)
+        baseline = subprocess.run(['git', 'show',
+            '22c65521b281fce485ec5d10e45359cded53ec3f:.ai/lifecycle.md'],
+            cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
+        self.assertEqual(baseline.returncode, 0, baseline.stderr)
+        for paragraph in baseline.stdout.split('\n\n'):
+            self.assertIn(paragraph, guide, 'previous guide paragraph changed')
+
+
+class AssuranceDocFrameworkEndToEndTests(AssuranceDocFixture):  # R5
+    def record(self):
+        value = self.suggestion()
+        before = self.preflight()
+        self.lc('tier', 'L1', '--reason', 'static assurance doc framework fixture')
+        self.lc('run', 'assurance-doc', *value['lifecycle_inputs_argv'], '--', *ASSURANCE_DOC_COMMAND)
+        self.assert_inputs_unchanged(before)
+        import lifecycle
+        entry = lifecycle.load(self.root)['ledger'][-1]
+        self.assertEqual((entry['argv'], entry['inputs'], entry['exit']),
+                         (ASSURANCE_DOC_COMMAND, value['inputs'], 0))
+        self.assertIn('REUSE', self.lc('reuse', 'assurance-doc'))
+
+    def test_each_input_and_addition_invalidates(self):
+        self.record()
+        for name in ('.ai/scripts/tests/unrelated.py', 'unrelated.md'):
+            self.edit_and_restore(name, lambda: self.assertIn('REUSE', self.lc('reuse', 'assurance-doc')))
+            self.assertIn('REUSE', self.lc('reuse', 'assurance-doc'))
+        for name in [*ASSURANCE_DOC_DOCS, *ASSURANCE_DOC_TESTS,
+                     '.ai/scripts/review_guard.py', '.ai/scripts/new_assurance.py']:
+            with self.subTest(name=name):
+                def stale():
+                    result = self.process([sys.executable, '.ai/scripts/lifecycle.py', 'reuse', 'assurance-doc'])
+                    self.assertEqual(result.returncode, 1, 'missing assurance doc freshness invalidation: ' + name)
+                    self.assertIn('RERUN', result.stdout)
+                self.edit_and_restore(name, stale)
+                self.assertIn('REUSE', self.lc('reuse', 'assurance-doc'))
+        self.assertFalse((self.root / 'knowledge').exists())
+
+
+class AssuranceDocFailureTests(AssuranceDocFixture):  # R5
+    def test_twenty_nine_assertion_failures_fail_actual_command(self):
+        path = self.root / ASSURANCE_DOC_DOCS[0]
+        original = path.read_bytes()
+        document = original.decode()
+        capture = re.search(ASSURANCE_DOC_SECTION, document)
+        self.assertIsNotNone(capture)
+        tokens = (*ASSURANCE_DOC_TERMS, *ASSURANCE_DOC_JUDGMENT_TERMS)
+        self.assertEqual((len(ASSURANCE_DOC_TERMS), len(ASSURANCE_DOC_JUDGMENT_TERMS)), (20, 7))
+        self.assertEqual(len(set(tokens)), 27)
+        self.execution()
+        variants = [('section', None), *[('token', t) for t in tokens], ('row', None)]
+        self.assertEqual(len(variants), 29)
+        for kind, term in variants:
+            with self.subTest(kind=kind, term=term):
+                if kind == 'section':
+                    self.assertIn('## Assurance status\n', document)
+                    changed = document.replace('## Assurance status\n', '## Removed assurance section\n')
+                    self.assertIsNone(re.search(ASSURANCE_DOC_SECTION, changed))
+                    criterion = "needs an '## Assurance status' section"
+                    assertion = 'self.assertIsNotNone(section,'
+                elif kind == 'token':
+                    body = capture.group(1)
+                    self.assertIn(term, body)
+                    changed_body = body.replace(term, '[removed]')
+                    self.assertNotIn(term, changed_body)
+                    for earlier in tokens[:tokens.index(term)]:
+                        self.assertIn(earlier, changed_body)
+                    changed = document[:capture.start(1)] + changed_body + document[capture.end(1):]
+                    after = re.search(ASSURANCE_DOC_SECTION, changed)
+                    self.assertIsNotNone(after)
+                    self.assertEqual(after.start(1), capture.start(1))
+                    self.assertEqual(after.group(1), changed_body)
+                    self.assertEqual(changed[after.end(1):], document[capture.end(1):])
+                    criterion = 'AssertionError: ' + repr(term) + ' not found in'
+                    assertion = 'self.assertIn(term, body, term)'
+                else:
+                    self.assertRegex(document, ASSURANCE_DOC_ROW)
+                    changed = re.sub(ASSURANCE_DOC_ROW, '| Removed recording | `assure', document)
+                    self.assertNotRegex(changed, ASSURANCE_DOC_ROW)
+                    self.assertEqual(re.search(ASSURANCE_DOC_SECTION, changed).group(1), capture.group(1))
+                    criterion = 'Recording table row'
+                    assertion = 'self.assertRegex(text('
+                path.write_bytes(changed.encode())
+                try:
+                    self.assertNotEqual(original, path.read_bytes())
+                    self.assertEqual(path.read_bytes(), changed.encode())
+                    self.suggestion()
+                    result = self.execution(failure=criterion)
+                    self.assertIn(assertion, result.stdout + result.stderr)
+                finally:
+                    path.write_bytes(original)
+                    self.assertEqual(path.read_bytes(), original)
+
+
+class AssuranceDocAdopterEndToEndTests(AssuranceDocFixture):  # R6
+    def test_explicit_adoption_freshness_identity_and_receipt(self):
+        (self.root / '.agentic.json').unlink()
+        self.lc('tier', 'L1', '--reason', 'static assurance doc adopter fixture')
+        result = self.process([sys.executable, '.ai/scripts/okf.py', 'init'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.write('knowledge/project/sync-ignore', '*\n')
+        value = self.suggestion()
+        prefix = ('---\ntype: Capability\ntitle: Assurance documentation\nnamespace: ASSURANCEDOC\nstatus: draft\n---\n'
+                  '# Assurance documentation\n\n## Requirements\n\n- ASSURANCEDOC-R1: The static check MUST pass.\n'
+                  '  - Verify: `' + ' '.join(ASSURANCE_DOC_COMMAND) + '`\n')
+        original = prefix + value['inputs_line'] + '\n'
+        capability = self.write('knowledge/capabilities/assurance-doc.md', original)
+        self.commit()
+
+        def status():
+            result = self.process([sys.executable, '.ai/scripts/lifecycle.py', 'assure', '--json'])
+            data = json.loads(result.stdout)
+            state = next(r['status'] for r in data['requirements'] if r['id'] == 'ASSURANCEDOC-R1')
+            self.assertEqual(result.returncode, 0 if state == 'VERIFIED' else 1, result.stdout + result.stderr)
+            return state
+
+        self.assertEqual(status(), 'UNVERIFIED')
+        before = self.preflight()
+        self.lc('assure', '--run', 'ASSURANCEDOC-R1')
+        self.assert_inputs_unchanged(before)
+        self.assertEqual(status(), 'VERIFIED')
+        for name in ('.ai/scripts/tests/unrelated.py', 'unrelated.md'):
+            self.edit_and_restore(name, lambda: self.assertEqual(status(), 'VERIFIED'))
+            self.assertEqual(status(), 'VERIFIED')
+        for name in [*ASSURANCE_DOC_DOCS, *ASSURANCE_DOC_TESTS,
+                     '.ai/scripts/review_guard.py', '.ai/scripts/new_assurance.py']:
+            with self.subTest(name=name):
+                self.edit_and_restore(name, lambda: self.assertEqual(status(), 'STALE'))
+                self.assertEqual(status(), 'VERIFIED')
+        reordered = [*value['inputs'][:-2], value['inputs'][-1], value['inputs'][-2]]
+        capability.write_text(prefix + '  - Inputs: ' + ' '.join('`' + p + '`' for p in reordered) + '\n')
+        self.assertEqual(status(), 'UNVERIFIED')
+        capability.write_text(original.replace(ASSURANCE_DOC_COMMAND[2] + '`',
+                                               ASSURANCE_DOC_COMMAND[2] + ' -v`'))
+        self.assertEqual(status(), 'UNVERIFIED')
+        capability.write_text(original)
+        self.assertEqual(status(), 'VERIFIED')
+        entries = [e for p in (self.root / 'knowledge/history/lifecycle').glob('*.json')
+                   for e in json.loads(p.read_text()).get('ledger', []) if e['label'] == 'req:ASSURANCEDOC-R1']
+        self.assertEqual((entries[-1]['argv'], entries[-1]['inputs'], entries[-1]['exit']),
+                         (ASSURANCE_DOC_COMMAND, ASSURANCE_DOC_INPUTS + [EXCLUDE], 0))
+        self.write('knowledge/history/lifecycle/extra-receipt.json', '{}\n')
+        self.assertEqual(status(), 'VERIFIED')
+
+
+class AssuranceDocControlTests(AssuranceDocFixture):  # R6
+    def test_confirmed_broken_variants_fail_intended_criteria(self):
+        method = 'test_each_input_and_addition_invalidates'
+        variants = [(ASSURANCE_DOC_DOCS[0], AssuranceDocFrameworkEndToEndTests, method,
+                     'missing assurance doc freshness invalidation: ' + ASSURANCE_DOC_DOCS[0]),
+                    ('loose', AssuranceDocProfileTests, 'test_exact_registration_and_prior_profiles', '0 != 2'),
+                    ('empty', AssuranceDocFrameworkEndToEndTests, method,
+                     'assurance doc execution count must be one')]
+        self.assertEqual(len(variants), 3)
+        for variant, cls, test, criterion in variants:
+            with self.subTest(variant=variant):
+                case = cls(test)
+                setup = case.setUp
+
+                def mutated_setup():
+                    setup()
+                    path = case.root / '.ai/scripts/assurance_inputs.py'
+                    original = path.read_text()
+                    if variant in ASSURANCE_DOC_DOCS:
+                        catalog = copy.deepcopy(case.module().PROFILES)
+                        profile = next(p for p in catalog if p['id'] == 'python-assurance-doc-contract')
+                        profile['inputs'].remove(variant)
+                        del profile['rationale'][variant]
+                        replacement = (original.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
+                                       + '\nLIMITATIONS =' + original.split('\nLIMITATIONS =', 1)[1])
+                    elif variant == 'loose':
+                        old = "p['argv'] == list(argv)"
+                        case.assertEqual(original.count(old), 1)
+                        replacement = original.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                    else:
+                        path = case.root / ASSURANCE_DOC_TESTS[0]
+                        original = path.read_text()
+                        replacement = 'import sys\nimport unittest\nunittest.main(argv=[sys.argv[0]])\n'
+                    path.write_text(replacement)
+                    case.assertNotEqual(original, replacement, 'mutation was not applied')
+                    case.assertEqual(path.read_text(), replacement, 'mutation bytes differ')
+                    if variant in ASSURANCE_DOC_DOCS:
+                        value = case.suggestion()
+                        case.assertNotIn(variant, value['inputs'])
+                        case.assertNotIn(variant, value['rationale'])
+                    if variant == 'empty':
+                        result = case.process(ASSURANCE_DOC_COMMAND)
+                        case.assertRegex(result.stdout + result.stderr, r'Ran 0 tests? in ')
+
+                case.setUp = mutated_setup
+                result = unittest.TestResult()
+                case.run(result)
+                self.assertEqual(result.testsRun, 1)
+                self.assertFalse(result.errors, result.errors)
+                self.assertEqual(len(result.failures), 1, 'broken variant survived: ' + variant)
+                self.assertIn(criterion, result.failures[0][1])
+
+
 if __name__ == '__main__':
     unittest.main()

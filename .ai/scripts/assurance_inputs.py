@@ -176,6 +176,21 @@ PROFILES = [{
         'AGENTS.md': 'Direct text read repeated per observed runtime tier, requiring its bold substring; explicit despite general Markdown freshness exemptions.',
         '.ai/lifecycle.md': 'Direct text read repeated per observed runtime tier, requiring its unescaped interpolated pipe/space regex match, not table semantics or actual enforcement.',
     },
+}, {
+    'id': 'python-assurance-doc-contract',
+    'cwd': '.',
+    'argv': ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+             'Assurance.test_assurance_documented'],
+    'inputs': ['.ai/scripts/**', '!.ai/scripts/tests/**',
+               '.ai/scripts/tests/test_lifecycle_conformance.py', '.ai/scripts/tests/disk_tmp.py',
+               '.ai/lifecycle.md'],
+    'rationale': {
+        '.ai/scripts/**': 'Conservative production import and lazy-loader/decorator construction scope; includes unused non-test descendants and future supported scripts, not a copied-directory boundary.',
+        '!.ai/scripts/tests/**': 'Exclude unrelated tests before restoring the selected module and imported helper.',
+        '.ai/scripts/tests/test_lifecycle_conformance.py': 'Selected method checks static assurance-section extraction, two body-token loops and a separate recording-row prefix within one test; no lifecycle command is executed.',
+        '.ai/scripts/tests/disk_tmp.py': 'Imported temporary-storage helper; scratch is within the production-script scope.',
+        '.ai/lifecycle.md': 'Sole direct document, read twice for first regex capture/body substring presence and a separate whole-document row-prefix regex, not assurance semantics or enforcement.',
+    },
 }]
 LIMITATIONS = [
     'Declared repository input scope; review required when command reads or dependencies change.',
