@@ -145,6 +145,21 @@ PROFILES = [{
         '.ai/docs/lifecycle.md': 'Direct text read requiring the same two command tokens in the lifecycle guide, not command validity.',
         '.ai/validation-policy.md': 'Direct text read of both command tokens through the loop and the convergence-evidence phrase through a separate literal call, not evidence matching or reuse behavior.',
     },
+}, {
+    'id': 'python-stage-doc-contract',
+    'cwd': '.',
+    'argv': ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+             'Tiers.test_every_stage_the_script_gates_is_described_in_the_lifecycle'],
+    'inputs': ['.ai/scripts/**', '!.ai/scripts/tests/**',
+               '.ai/scripts/tests/test_lifecycle_conformance.py', '.ai/scripts/tests/disk_tmp.py',
+               '.ai/lifecycle.md'],
+    'rationale': {
+        '.ai/scripts/**': 'Conservative production import, runtime STAGES and lazy-loader/decorator construction scope; includes unused non-test descendants and future supported scripts, not a copied-directory boundary.',
+        '!.ai/scripts/tests/**': 'Exclude unrelated tests before restoring the selected module and imported helper.',
+        '.ai/scripts/tests/test_lifecycle_conformance.py': 'Selected method checks five static heading substrings and runtime lifecycle.STAGES set equality within one test; no lifecycle command is executed.',
+        '.ai/scripts/tests/disk_tmp.py': 'Imported temporary-storage helper; scratch is within the production-script scope.',
+        '.ai/lifecycle.md': 'Sole direct document read requiring five exact heading substrings, not section contents, order or actual stage enforcement.',
+    },
 }]
 LIMITATIONS = [
     'Declared repository input scope; review required when command reads or dependencies change.',
