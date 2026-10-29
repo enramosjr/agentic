@@ -206,6 +206,25 @@ PROFILES = [{
         '.ai/scripts/tests/disk_tmp.py': 'Imported temporary-storage helper; scratch is within the production-script scope.',
         'AGENTS.md': 'Sole direct document, read once with default decoding/newline translation then UTF-8 re-encoding for a strict less-than 30000 length assertion, not necessarily raw-file size.',
     },
+}, {
+    'id': 'python-semantic-lens-doc-contract',
+    'cwd': '.',
+    'argv': ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+             'RolesAndSkills.test_semantic_lens_in_analyst_reviewer_and_skills'],
+    'inputs': ['.ai/scripts/**', '!.ai/scripts/tests/**',
+               '.ai/scripts/tests/test_lifecycle_conformance.py', '.ai/scripts/tests/disk_tmp.py',
+               '.ai/agents/analyst.md', '.ai/agents/reviewer.md',
+               '.claude/skills/spec/SKILL.md', '.claude/skills/review/SKILL.md'],
+    'rationale': {
+        '.ai/scripts/**': 'Conservative production import and lazy-loader/decorator construction scope; includes unused non-test descendants and future supported scripts, not a copied-directory boundary.',
+        '!.ai/scripts/tests/**': 'Exclude unrelated tests before restoring the selected module and imported helper.',
+        '.ai/scripts/tests/test_lifecycle_conformance.py': 'Selected semantic-lens method checks fourteen case-sensitive presence assertions within one test; no lifecycle command is executed.',
+        '.ai/scripts/tests/disk_tmp.py': 'Imported temporary-storage helper; scratch is within the production-script scope.',
+        '.ai/agents/analyst.md': 'Direct whole-document read once for four terms and the analyze token, not actual semantic analysis.',
+        '.ai/agents/reviewer.md': 'Direct read once for four whole-document terms and two tokens in the first literal Passes split capture, not review effectiveness.',
+        '.claude/skills/spec/SKILL.md': 'Direct whole-document read once for the analyze token, not skill execution.',
+        '.claude/skills/review/SKILL.md': 'Direct whole-document read once for converge and Validation Reviewed tokens, not skill execution.',
+    },
 }]
 LIMITATIONS = [
     'Declared repository input scope; review required when command reads or dependencies change.',

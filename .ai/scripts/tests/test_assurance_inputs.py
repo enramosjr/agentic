@@ -4452,7 +4452,7 @@ class AssuranceDocFixture(Fixture):
                       'python-tier-doc-contract')
         self.assertEqual(tuple(p['id'] for p in baseline), identities)
         actual = self.module().PROFILES
-        self.assertEqual(len(actual), 12)
+        self.assertEqual(len(actual), 13)
         for expected in baseline:
             self.assertEqual(next(p for p in actual if p['id'] == expected['id']), expected)
             value = self.suggestion(argv=expected['argv'])
@@ -4988,7 +4988,7 @@ class AgentsBudgetFixture(Fixture):
                       'python-tier-doc-contract', 'python-assurance-doc-contract')
         self.assertEqual(tuple(p['id'] for p in baseline), identities)
         actual = self.module().PROFILES
-        self.assertEqual(len(actual), 12)
+        self.assertEqual(len(actual), 13)
         for expected in baseline:
             self.assertEqual(next(p for p in actual if p['id'] == expected['id']), expected)
             value = self.suggestion(argv=expected['argv'])
@@ -5385,6 +5385,549 @@ class AgentsBudgetControlTests(AgentsBudgetFixture):  # R6
                     if variant == 'empty':
                         result = case.process(AGENTS_BUDGET_COMMAND)
                         case.assertRegex(result.stdout + result.stderr, r'Ran 0 tests? in ')
+
+                case.setUp = mutated_setup
+                result = unittest.TestResult()
+                case.run(result)
+                self.assertEqual(result.testsRun, 1)
+                self.assertFalse(result.errors, result.errors)
+                self.assertEqual(len(result.failures), 1, 'broken variant survived: ' + variant)
+                self.assertIn(criterion, result.failures[0][1])
+
+
+# Semantic lens: specification-5m.md R1-R6. Independent reviewed declarations.
+SEMANTIC_LENS_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+                         'RolesAndSkills.test_semantic_lens_in_analyst_reviewer_and_skills']
+SEMANTIC_LENS_TESTS = [SEMANTIC_LENS_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
+SEMANTIC_LENS_DOCS = ['.ai/agents/analyst.md', '.ai/agents/reviewer.md',
+                      '.claude/skills/spec/SKILL.md', '.claude/skills/review/SKILL.md']
+SEMANTIC_LENS_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**',
+                        *SEMANTIC_LENS_TESTS, *SEMANTIC_LENS_DOCS]
+SEMANTIC_LENS_HEAD = 'e702aa9a2be85992d0590d14d691e74adcfcec3d'
+
+
+class SemanticLensFixture(AgentsBudgetFixture):
+    def setUp(self):
+        # Reuse predecessor compatibility data, not its assertion or read oracle.
+        super().setUp()
+        for name in SEMANTIC_LENS_DOCS:
+            destination = self.root / name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(SCRIPTS.parent.parent / name, destination)
+        self.commit()
+
+    def export(self, argv=None, **kwargs):
+        return Fixture.export(self, argv=SEMANTIC_LENS_COMMAND if argv is None else argv, **kwargs)
+
+    def selected_bytes(self):
+        return {name: (self.root / name).read_bytes()
+                for name in ledger.input_paths(self.root, SEMANTIC_LENS_INPUTS)}
+
+    def assert_inputs_unchanged(self, before):
+        self.assertEqual(self.selected_bytes(), before, 'semantic lens execution changed inputs')
+
+    def execution(self):
+        before = self.selected_bytes()
+        result = self.process(SEMANTIC_LENS_COMMAND)
+        output = result.stdout + result.stderr
+        counts = re.findall(r'Ran (\d+) tests? in ', output)
+        self.assertEqual(len(counts), 1, 'semantic lens execution count missing or ambiguous: ' + output)
+        self.assertEqual(int(counts[0]), 1, 'semantic lens execution count must be one: ' + output)
+        self.assertEqual(result.returncode, 0, output)
+        self.assertRegex(output, r'\nOK\s*$')
+        self.assert_inputs_unchanged(before)
+        return result
+
+    def edit_and_restore(self, name, check):
+        path = self.root / name
+        original = path.read_bytes() if path.exists() else None
+        changed = (original or b'') + b'\n '
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(changed)
+        try:
+            self.assertNotEqual(original, changed)
+            self.assertEqual(path.read_bytes(), changed)
+            if name in SEMANTIC_LENS_DOCS:
+                self.execution()
+            check()
+        finally:
+            if original is None:
+                path.unlink()
+                self.assertFalse(path.exists())
+            else:
+                path.write_bytes(original)
+                self.assertEqual(path.read_bytes(), original)
+
+    def assert_prior_profiles(self):
+        result = subprocess.run(['git', 'show', SEMANTIC_LENS_HEAD + ':.ai/scripts/assurance_inputs.py'],
+                                cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        import ast
+        baseline = next(ast.literal_eval(n.value) for n in ast.parse(result.stdout).body
+                        if isinstance(n, ast.Assign)
+                        and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in n.targets))
+        identities = ('python-runner-test', 'python-architecture-compatibility', 'python-harness-wiring',
+                      'python-reviewer-report-contract', 'python-installer-doc-contract',
+                      'python-validation-policy-contract', 'python-audit-doc-contract',
+                      'python-analysis-convergence-doc-contract', 'python-stage-doc-contract',
+                      'python-tier-doc-contract', 'python-assurance-doc-contract',
+                      'python-agents-budget-contract')
+        self.assertEqual(tuple(p['id'] for p in baseline), identities)
+        actual = self.module().PROFILES
+        self.assertEqual(len(actual), 13)
+        for expected in baseline:
+            self.assertEqual(next(p for p in actual if p['id'] == expected['id']), expected)
+            value = self.suggestion(argv=expected['argv'])
+            self.assertEqual((value['profile_id'], value['argv'], value['inputs'], value['rationale']),
+                             (expected['id'], expected['argv'], expected['inputs'], expected['rationale']))
+
+
+class SemanticLensProfileTests(SemanticLensFixture):  # R1
+    def test_exact_registration_and_prior_profiles(self):
+        value = self.suggestion()
+        self.assertEqual(value['profile_id'], 'python-semantic-lens-doc-contract')
+        self.assertEqual(value['argv'], SEMANTIC_LENS_COMMAND)
+        self.assert_prior_profiles()
+        for argv in (SEMANTIC_LENS_COMMAND[:2], SEMANTIC_LENS_COMMAND[:2] + ['RolesAndSkills'],
+                     SEMANTIC_LENS_COMMAND[:2] + ['RolesAndSkills.test_skills_have_name_matching_directory_and_a_description'],
+                     SEMANTIC_LENS_COMMAND + ['-v'], [sys.executable, *SEMANTIC_LENS_COMMAND[1:]],
+                     ['python3', './' + SEMANTIC_LENS_COMMAND[1], SEMANTIC_LENS_COMMAND[2]],
+                     ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
+                      '-p', 'test_lifecycle_conformance.py']):
+            self.assertIn('exact command', self.refused(argv=argv)['reason'])
+        self.refused(cwd=self.root / '.ai')
+
+
+class SemanticLensExportTests(SemanticLensFixture):  # R3
+    def test_readonly_formats_supplements_and_no_execution(self):
+        marker = self.root / 'executed'
+        for name in SEMANTIC_LENS_TESTS:
+            self.write(name, f'from pathlib import Path\nPath({str(marker)!r}).touch()\nraise RuntimeError("executed")\n')
+        for name in SEMANTIC_LENS_DOCS:
+            self.write(name, 'assertion-failing existing document\n')
+        for name in ('space file.txt', 'second.txt'):
+            self.write(name, 'supplement')
+        before = snapshot(self.root)
+        value = self.suggestion(extra=('space file.txt', 'second.txt'))
+        text = self.export(extra=('space file.txt', 'second.txt'), json_output=False)
+        self.assertEqual(text.returncode, 0, text.stderr)
+        self.assertEqual(value['inputs'], SEMANTIC_LENS_INPUTS + ['space file.txt', 'second.txt'])
+        self.assertEqual(value['lifecycle_inputs_argv'], ['--inputs', *value['inputs']])
+        for item in (value['profile_id'], value['inputs_line'], json.dumps(SEMANTIC_LENS_COMMAND),
+                     json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
+            self.assertIn(item, text.stdout)
+        raw = ('- SEMANTICLENS-R1: The check MUST pass.\n  - Verify: `'
+               + ' '.join(SEMANTIC_LENS_COMMAND) + '`\n' + value['inputs_line'] + '\n')
+        parsed = assurance.parse('SEMANTICLENS-R1', 'capabilities/semantic-lens.md', raw, root=self.root)
+        self.assertIsNone(parsed.invalid)
+        self.assertEqual(list(parsed.globs), value['inputs'])
+        self.assertTrue(value['review_required'])
+        self.assertEqual(snapshot(self.root), before)
+        self.assertFalse(marker.exists())
+
+    def test_required_literals_and_unsafe_boundaries_refuse(self):
+        for name in [*SEMANTIC_LENS_TESTS, *SEMANTIC_LENS_DOCS]:
+            path = self.root / name
+            original = path.read_bytes()
+            path.unlink()
+            try:
+                self.refused()
+            finally:
+                path.write_bytes(original)
+        self.assertEqual(self.suggestion()['inputs'], SEMANTIC_LENS_INPUTS)
+        name = SEMANTIC_LENS_DOCS[0]
+        self.git('rm', '--cached', name)
+        self.write('.gitignore', name + '\n')
+        self.refused()
+        self.git('add', '-f', name)
+        path = self.root / name
+        original = path.read_bytes()
+        outside = Path(self.temp.name) / 'outside.md'
+        outside.write_bytes(original)
+        path.unlink()
+        path.symlink_to(outside)
+        try:
+            self.refused()
+        finally:
+            path.unlink()
+            path.write_bytes(original)
+        for extra in ('!README.md', '../x', '/etc/passwd', '', 'x`bad', '--other-option'):
+            self.refused(extra=(extra,))
+
+
+SEMANTIC_LENS_SETUP_PINS = {
+    '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
+    '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
+    '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
+    '.ai/scripts/lifecycle.py': '048f391c166ffb58b8ba1d769ca287adc78d5c155a28bebba043e0d93a30e1ca',
+    '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
+    '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
+}
+
+
+class SemanticLensDependencyTests(SemanticLensFixture):  # R2
+    def test_order_scope_and_independent_oracle(self):
+        value = self.suggestion()
+        actual = {p: report_setup_digest(self.root / p) for p in SEMANTIC_LENS_SETUP_PINS}
+        self.assertEqual(actual, SEMANTIC_LENS_SETUP_PINS,
+                         'review semantic lens dependency boundary: ' + repr(actual))
+        self.assertEqual(value['inputs'], SEMANTIC_LENS_INPUTS)
+        self.assertEqual(set(value['rationale']), set(SEMANTIC_LENS_INPUTS))
+        for name, terms in {
+            '.ai/scripts/**': ('conservative', 'import', 'lazy'),
+            '!.ai/scripts/tests/**': ('exclude',),
+            SEMANTIC_LENS_TESTS[0]: ('method', 'fourteen', 'one test'),
+            SEMANTIC_LENS_TESTS[1]: ('helper',),
+            SEMANTIC_LENS_DOCS[0]: ('direct', 'whole-document', 'once', 'analyze'),
+            SEMANTIC_LENS_DOCS[1]: ('direct', 'once', 'split', 'capture'),
+            SEMANTIC_LENS_DOCS[2]: ('direct', 'whole-document', 'once', 'analyze'),
+            SEMANTIC_LENS_DOCS[3]: ('direct', 'whole-document', 'once', 'converge'),
+        }.items():
+            for term in terms:
+                self.assertIn(term, value['rationale'][name].lower())
+        included = ['.ai/scripts/future_semantic.py', '.ai/scripts/assets/semantic.txt']
+        compatibility = ['AGENTS.md', '.ai/lifecycle.md', '.ai/docs/lifecycle.md',
+                         *VALIDATION_POLICY_DOCS, *INSTALLER_DOC_TEXT, *REPORT_DOCS,
+                         *WIRING_JSON, *ARCH_TESTS[:-1]]
+        excluded = ['.ai/scripts/tests/unrelated.py', 'unrelated.md',
+                    *[p for p in compatibility if p not in SEMANTIC_LENS_DOCS]]
+        for name in included + excluded[:2]:
+            self.write(name, '# independent inventory fixture\n')
+        selected = set(ledger.input_paths(self.root, value['inputs']))
+        self.assertTrue(set([*SEMANTIC_LENS_TESTS, *SEMANTIC_LENS_DOCS,
+                             *REPORT_IMPORTS, *included]).issubset(selected))
+        self.assertFalse(set(excluded) & selected)
+        import ast
+        tree = ast.parse((self.root / SEMANTIC_LENS_TESTS[0]).read_text())
+        cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'RolesAndSkills')
+        method = next(n for n in cls.body if isinstance(n, ast.FunctionDef)
+                      and n.name == 'test_semantic_lens_in_analyst_reviewer_and_skills')
+        # Literal expected bindings, split/index semantics and assertions, not catalog-derived.
+        expected = ast.parse('''analyst, reviewer = text(".ai/agents/analyst.md"), text(".ai/agents/reviewer.md")
+for term in ("missing scenarios", "error paths", "contradictions", "terminology drift"):
+    self.assertIn(term, analyst, term)
+    self.assertIn(term, reviewer, term)
+self.assertIn("lifecycle.py analyze", analyst)
+self.assertIn("lifecycle.py analyze", text(".claude/skills/spec/SKILL.md"))
+passes = reviewer.split("## Passes", 1)[1].split("\\n## ", 1)[0]
+for path, body in ((".ai/agents/reviewer.md#Passes", passes), (".claude/skills/review/SKILL.md", text(".claude/skills/review/SKILL.md"))):
+    self.assertIn("lifecycle.py converge", body, path)
+    self.assertIn("## Validation Reviewed", body, path)
+''').body
+        self.assertEqual(len(method.body), 6)
+        self.assertEqual([ast.dump(n) for n in method.body], [ast.dump(n) for n in expected],
+                         'review semantic lens selected method boundary')
+        reads = [n for n in ast.walk(method) if isinstance(n, ast.Call)
+                 and isinstance(n.func, ast.Name) and n.func.id == 'text']
+        self.assertEqual(len(reads), 4)
+        self.assertCountEqual([ast.literal_eval(n.args[0]) for n in reads], SEMANTIC_LENS_DOCS)
+        for call in reads:
+            self.assertEqual((len(call.args), call.keywords), (1, []))
+
+    def test_reachable_added_dependencies_require_review(self):
+        # Fresh proof for this selector; uncalled baseline/flat/producer bodies are pins only.
+        variants = [(p, ()) for p in SEMANTIC_LENS_SETUP_PINS]
+        variants += [(SEMANTIC_LENS_TESTS[0], ('RolesAndSkills',)),
+                     (SEMANTIC_LENS_TESTS[0], ('RolesAndSkills', 'test_semantic_lens_in_analyst_reviewer_and_skills')),
+                     (SEMANTIC_LENS_TESTS[0], ('text',)),
+                     ('.ai/scripts/scratch.py', ('require_disk',)),
+                     ('.ai/scripts/lifecycle.py', ('lazy',)),
+                     ('.ai/scripts/review_guard.py', ('protected',)),
+                     ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
+                     (SEMANTIC_LENS_TESTS[0], ('import-helper',))]
+        self.assertEqual(len(variants), 14)
+        for name, body in variants:
+            with self.subTest(name=name, body=body):
+                case = SemanticLensDependencyTests('test_order_scope_and_independent_oracle')
+                setup = case.setUp
+
+                def mutated_setup():
+                    setup()
+                    import ast
+                    path = case.root / name
+                    original = path.read_bytes()
+                    def restore():
+                        path.write_bytes(original)
+                        case.assertEqual(path.read_bytes(), original, 'semantic lens restoration mismatch')
+                    case.addCleanup(restore)
+                    source = original.decode('utf-8')
+                    tree = ast.parse(source)
+                    addition = '__import__("pathlib").Path("unrelated.md").read_text()\n'
+                    if body == ('import-helper',):
+                        helper = '.ai/scripts/tests/unreviewed_semantic_helper.py'
+                        case.write(helper, addition)
+                        case.assertEqual((case.root / helper).read_bytes(), addition.encode('utf-8'))
+                        case.assertNotIn(helper, ledger.input_paths(case.root, SEMANTIC_LENS_INPUTS))
+                        addition = 'import unreviewed_semantic_helper\n'
+                    if body and body != ('import-helper',):
+                        node = tree
+                        for part in body:
+                            node = next(n for n in node.body if isinstance(n, (ast.FunctionDef, ast.ClassDef))
+                                        and n.name == part)
+                        first = node.body[0]
+                        if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) \
+                                and isinstance(first.value.value, str):
+                            after = first.end_lineno
+                        else:
+                            after = min([first.lineno, *[n.lineno for n in
+                                         getattr(first, 'decorator_list', [])]]) - 1
+                        addition = ' ' * first.col_offset + addition
+                    else:
+                        after = max(n.end_lineno for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom)))
+                    lines = source.splitlines(keepends=True)
+                    changed = (''.join(lines[:after]) + addition + ''.join(lines[after:])).encode('utf-8')
+                    path.write_bytes(changed)
+                    case.assertNotEqual(original, changed)
+                    case.assertEqual(path.read_bytes(), changed)
+                    case.assertFalse((case.root / 'unrelated.md').exists())
+                    case.assertNotIn('unrelated.md', ledger.input_paths(case.root, SEMANTIC_LENS_INPUTS))
+                    missing = case.process(SEMANTIC_LENS_COMMAND)
+                    case.assertNotEqual(missing.returncode, 0)
+                    case.assertIn('FileNotFoundError', missing.stdout + missing.stderr)
+                    case.assertIn('unrelated.md', missing.stdout + missing.stderr)
+                    case.write('unrelated.md', 'new excluded dependency')
+                    case.execution()
+
+                case.setUp = mutated_setup
+                result = unittest.TestResult()
+                case.run(result)
+                self.assertEqual(result.testsRun, 1)
+                self.assertFalse(result.errors, result.errors)
+                self.assertEqual(len(result.failures), 1, 'unreviewed dependency survived: ' + repr((name, body)))
+                self.assertIn('review semantic lens dependency boundary', result.failures[0][1])
+
+
+class SemanticLensCompatibilityTests(SemanticLensFixture):  # R4
+    def test_advisory_guide_and_existing_contracts(self):
+        self.assert_prior_profiles()
+        self.assertIsNone(ledger.default_inputs(SEMANTIC_LENS_COMMAND))
+        self.assertEqual(ledger.default_inputs(COMMAND), ('python-tests', ['**']))
+        for argv in (['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests'],
+                     *[['python3', '.ai/scripts/run_tests.py', '-j', str(n)] for n in (1, 8, 32)]):
+            self.refused(argv=argv)
+        value = self.suggestion()
+        self.assertNotIn(EXCLUDE, value['inputs'])
+        self.assertEqual(value['schema_version'], 1)
+        self.assertTrue(value['review_required'])
+        self.assertIn('runtime', ' '.join(value['limitations']).lower())
+        guide = (self.root / ARCH_GUIDE).read_text()
+        for phrase in ('python-semantic-lens-doc-contract', ' '.join(SEMANTIC_LENS_COMMAND),
+                       'four literal reads', 'fourteen case-sensitive', 'one test',
+                       'first literal', 'IndexError', 'inline', 'semantic-lens effectiveness',
+                       'conservative', 'explicit', 'manual', 'twelve prior profiles',
+                       *SEMANTIC_LENS_INPUTS):
+            self.assertIn(phrase, guide)
+        baseline = subprocess.run(['git', 'show', SEMANTIC_LENS_HEAD + ':.ai/lifecycle.md'],
+                                  cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
+        self.assertEqual(baseline.returncode, 0, baseline.stderr)
+        for paragraph in baseline.stdout.split('\n\n'):
+            self.assertIn(paragraph, guide, 'previous guide paragraph changed')
+
+
+class SemanticLensFrameworkEndToEndTests(SemanticLensFixture):  # R5
+    def record(self):
+        value = self.suggestion()
+        before = self.preflight()
+        self.lc('tier', 'L1', '--reason', 'semantic lens framework fixture')
+        self.lc('run', 'semantic-lens', *value['lifecycle_inputs_argv'], '--', *SEMANTIC_LENS_COMMAND)
+        self.assert_inputs_unchanged(before)
+        import lifecycle
+        entry = lifecycle.load(self.root)['ledger'][-1]
+        self.assertEqual((entry['argv'], entry['inputs'], entry['exit']),
+                         (SEMANTIC_LENS_COMMAND, value['inputs'], 0))
+        self.assertIn('REUSE', self.lc('reuse', 'semantic-lens'))
+
+    def test_each_input_and_addition_invalidates(self):
+        self.record()
+        for name in ('.ai/scripts/tests/unrelated.py', 'unrelated.md'):
+            self.edit_and_restore(name, lambda: self.assertIn('REUSE', self.lc('reuse', 'semantic-lens')))
+            self.assertIn('REUSE', self.lc('reuse', 'semantic-lens'))
+        for name in [*SEMANTIC_LENS_DOCS, *SEMANTIC_LENS_TESTS,
+                     '.ai/scripts/review_guard.py', '.ai/scripts/new_semantic.py']:
+            with self.subTest(name=name):
+                def stale():
+                    result = self.process([sys.executable, '.ai/scripts/lifecycle.py', 'reuse', 'semantic-lens'])
+                    self.assertEqual(result.returncode, 1, 'missing semantic lens freshness invalidation: ' + name)
+                    self.assertIn('RERUN', result.stdout)
+                self.edit_and_restore(name, stale)
+                self.assertIn('REUSE', self.lc('reuse', 'semantic-lens'))
+        self.assertFalse((self.root / 'knowledge').exists())
+
+
+class SemanticLensFailureTests(SemanticLensFixture):  # R5
+    def test_fourteen_intended_assertion_failures(self):
+        terms = ('missing scenarios', 'error paths', 'contradictions', 'terminology drift')
+        analyst, reviewer, spec_skill, review_skill = SEMANTIC_LENS_DOCS
+        # Ordered exactly as the selected method executes, with literal expected source sites.
+        cases = [(name, 'whole', term, 'self.assertIn(term, ' + binding + ', term)', term)
+                 for term in terms for name, binding in ((analyst, 'analyst'), (reviewer, 'reviewer'))]
+        cases += [(analyst, 'whole', 'lifecycle.py analyze',
+                   'self.assertIn("lifecycle.py analyze", analyst)', None),
+                  (spec_skill, 'whole', 'lifecycle.py analyze',
+                   'self.assertIn("lifecycle.py analyze", text(".claude/skills/spec/SKILL.md"))', None)]
+        cases += [(name, scope, token, 'self.assertIn("' + token + '", body, path)', diagnostic)
+                  for name, scope, diagnostic in ((reviewer, 'passes', reviewer + '#Passes'),
+                                                   (review_skill, 'whole', review_skill))
+                  for token in ('lifecycle.py converge', '## Validation Reviewed')]
+        self.assertEqual(len(cases), 14)
+        originals = {name: (self.root / name).read_bytes() for name in SEMANTIC_LENS_DOCS}
+
+        def bounds(body, scope):
+            if scope == 'whole':
+                return 0, len(body)
+            # Independent index-based capture, not the selected chained split.
+            start = body.index('## Passes') + len('## Passes')
+            end = body.find('\n## ', start)
+            return start, len(body) if end == -1 else end
+
+        def predicates(documents):
+            return [token in documents[name][slice(*bounds(documents[name], scope))]
+                    for name, scope, token, _, _ in cases]
+
+        documents = {name: raw.decode('utf-8') for name, raw in originals.items()}
+        self.assertEqual(predicates(documents), [True] * 14)
+        self.execution()
+        for index, (name, scope, token, source, diagnostic) in enumerate(cases):
+            with self.subTest(index=index, document=name, scope=scope, token=token):
+                path = self.root / name
+                body = documents[name]
+                start, end = bounds(body, scope)
+                capture = body[start:end]
+                self.assertGreater(capture.count(token), 0)
+                changed_body = body[:start] + capture.replace(token, 'REMOVED_SEMANTIC_TOKEN') + body[end:]
+                changed = changed_body.encode('utf-8')
+                path.write_bytes(changed)
+                try:
+                    self.assertNotEqual(originals[name], changed)
+                    self.assertEqual(path.read_bytes(), changed)
+                    if scope == 'passes':
+                        self.assertEqual(changed_body[:start], body[:start])
+                        self.assertEqual(changed_body[bounds(changed_body, scope)[1]:], body[end:])
+                    altered = {**documents, name: changed_body}
+                    expected = [True] * 14
+                    expected[index] = False
+                    self.assertEqual(predicates(altered), expected, 'mutation changed another predicate')
+                    self.assertEqual(self.suggestion()['inputs'], SEMANTIC_LENS_INPUTS)
+                    before = self.selected_bytes()
+                    result = self.process(SEMANTIC_LENS_COMMAND)
+                    output = result.stdout + result.stderr
+                    self.assertEqual(re.findall(r'Ran (\d+) tests? in ', output), ['1'], output)
+                    self.assertNotEqual(result.returncode, 0, output)
+                    self.assertRegex(output, r'FAILED \(failures=1\)')
+                    self.assertEqual(len(re.findall(r'^FAIL:', output, re.M)), 1, output)
+                    self.assertFalse(re.search(r'^ERROR:', output, re.M), output)
+                    self.assertIn('AssertionError: ' + repr(token) + ' not found', output)
+                    self.assertIn(source, output)
+                    self.assertIn(SEMANTIC_LENS_COMMAND[2].split('.')[1], output)
+                    if diagnostic is not None:
+                        self.assertIn(' : ' + diagnostic, output)
+                    self.assert_inputs_unchanged(before)
+                finally:
+                    path.write_bytes(originals[name])
+                    self.assertEqual(path.read_bytes(), originals[name])
+        self.assertEqual({name: (self.root / name).read_bytes() for name in SEMANTIC_LENS_DOCS}, originals)
+
+
+class SemanticLensAdopterEndToEndTests(SemanticLensFixture):  # R6
+    def test_explicit_adoption_freshness_identity_and_receipt(self):
+        (self.root / '.agentic.json').unlink()
+        self.lc('tier', 'L1', '--reason', 'semantic lens adopter fixture')
+        result = self.process([sys.executable, '.ai/scripts/okf.py', 'init'])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.write('knowledge/project/sync-ignore', '*\n')
+        value = self.suggestion()
+        prefix = ('---\ntype: Capability\ntitle: Semantic lens\nnamespace: SEMANTICLENS\nstatus: draft\n---\n'
+                  '# Semantic lens\n\n## Requirements\n\n- SEMANTICLENS-R1: The documentation check MUST pass.\n'
+                  '  - Verify: `' + ' '.join(SEMANTIC_LENS_COMMAND) + '`\n')
+        original = prefix + value['inputs_line'] + '\n'
+        capability = self.write('knowledge/capabilities/semantic-lens.md', original)
+        self.commit()
+
+        def status():
+            result = self.process([sys.executable, '.ai/scripts/lifecycle.py', 'assure', '--json'])
+            data = json.loads(result.stdout)
+            state = next(r['status'] for r in data['requirements'] if r['id'] == 'SEMANTICLENS-R1')
+            self.assertEqual(result.returncode, 0 if state == 'VERIFIED' else 1, result.stdout + result.stderr)
+            return state
+
+        self.assertEqual(status(), 'UNVERIFIED')
+        before = self.preflight()
+        self.lc('assure', '--run', 'SEMANTICLENS-R1')
+        self.assert_inputs_unchanged(before)
+        self.assertEqual(status(), 'VERIFIED')
+        for name in ('.ai/scripts/tests/unrelated.py', 'unrelated.md'):
+            self.edit_and_restore(name, lambda: self.assertEqual(status(), 'VERIFIED'))
+            self.assertEqual(status(), 'VERIFIED')
+        for name in [*SEMANTIC_LENS_DOCS, *SEMANTIC_LENS_TESTS,
+                     '.ai/scripts/review_guard.py', '.ai/scripts/new_semantic.py']:
+            with self.subTest(name=name):
+                self.edit_and_restore(name, lambda: self.assertEqual(status(), 'STALE'))
+                self.assertEqual(status(), 'VERIFIED')
+        reordered = [*value['inputs'][:-2], value['inputs'][-1], value['inputs'][-2]]
+        capability.write_text(prefix + '  - Inputs: ' + ' '.join('`' + p + '`' for p in reordered) + '\n')
+        self.assertEqual(status(), 'UNVERIFIED')
+        capability.write_text(original.replace(SEMANTIC_LENS_COMMAND[2] + '`',
+                                               SEMANTIC_LENS_COMMAND[2] + ' -v`'))
+        self.assertEqual(status(), 'UNVERIFIED')
+        capability.write_text(original)
+        self.assertEqual(status(), 'VERIFIED')
+        entries = [e for p in (self.root / 'knowledge/history/lifecycle').glob('*.json')
+                   for e in json.loads(p.read_text()).get('ledger', []) if e['label'] == 'req:SEMANTICLENS-R1']
+        self.assertEqual((entries[-1]['argv'], entries[-1]['inputs'], entries[-1]['exit']),
+                         (SEMANTIC_LENS_COMMAND, SEMANTIC_LENS_INPUTS + [EXCLUDE], 0))
+        self.write('knowledge/history/lifecycle/extra-receipt.json', '{}\n')
+        self.assertEqual(status(), 'VERIFIED')
+
+
+class SemanticLensControlTests(SemanticLensFixture):  # R6
+    def test_confirmed_broken_variants_fail_intended_criteria(self):
+        method = 'test_each_input_and_addition_invalidates'
+        variants = [(name, SemanticLensFrameworkEndToEndTests, method,
+                     'missing semantic lens freshness invalidation: ' + name) for name in SEMANTIC_LENS_DOCS]
+        variants += [('loose', SemanticLensProfileTests, 'test_exact_registration_and_prior_profiles', '0 != 2'),
+                     ('empty', SemanticLensFrameworkEndToEndTests, method,
+                      'semantic lens execution count must be one')]
+        self.assertEqual(len(variants), 6)
+        for variant, cls, test, criterion in variants:
+            with self.subTest(variant=variant):
+                case = cls(test)
+                setup = case.setUp
+
+                def mutated_setup():
+                    setup()
+                    path = case.root / '.ai/scripts/assurance_inputs.py'
+                    original = path.read_bytes()
+                    source = original.decode('utf-8')
+                    if variant in SEMANTIC_LENS_DOCS:
+                        catalog = copy.deepcopy(case.module().PROFILES)
+                        profile = next(p for p in catalog if p['id'] == 'python-semantic-lens-doc-contract')
+                        profile['inputs'].remove(variant)
+                        del profile['rationale'][variant]
+                        replacement = (source.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
+                                       + '\nLIMITATIONS =' + source.split('\nLIMITATIONS =', 1)[1])
+                    elif variant == 'loose':
+                        old = "p['argv'] == list(argv)"
+                        case.assertEqual(source.count(old), 1)
+                        replacement = source.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                    else:
+                        path = case.root / SEMANTIC_LENS_TESTS[0]
+                        original = path.read_bytes()
+                        replacement = 'import sys\nimport unittest\nunittest.main(argv=[sys.argv[0]])\n'
+                    def restore():
+                        path.write_bytes(original)
+                        case.assertEqual(path.read_bytes(), original, 'semantic lens restoration mismatch')
+                    case.addCleanup(restore)
+                    changed = replacement.encode('utf-8')
+                    path.write_bytes(changed)
+                    case.assertNotEqual(original, changed, 'mutation was not applied')
+                    case.assertEqual(path.read_bytes(), changed, 'mutation bytes differ')
+                    if variant in SEMANTIC_LENS_DOCS:
+                        value = case.suggestion()
+                        case.assertNotIn(variant, value['inputs'])
+                        case.assertNotIn(variant, value['rationale'])
+                    if variant == 'empty':
+                        result = case.process(SEMANTIC_LENS_COMMAND)
+                        case.assertEqual(re.findall(r'Ran (\d+) tests? in ', result.stdout + result.stderr), ['0'])
 
                 case.setUp = mutated_setup
                 result = unittest.TestResult()
