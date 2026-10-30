@@ -1,2 +1,0 @@
-run assurance-2-measure-integration: exit=1 tree=a491524
-    mutation target count != 1

@@ -1,6 +1,0 @@
-..
-----------------------------------------------------------------------
-Ran 2 tests in 0.385s
-
-OK
-timing: {"elapsed_seconds": 0.514, "exit_code": 0, "finished_at": "2026-10-28T22:49:50.169410+00:00", "label": "artifact-acceptance", "outcome": "PASS", "started_at": "2026-10-28T22:49:49.655418+00:00"}

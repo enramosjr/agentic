@@ -1,9 +1,0 @@
-{
-  "after": "44b342b407666c006c0854b3ebc7580b336ba2b0da6d257e6add355d977234e0",
-  "before": "f9f409cc1e791f00ca0de5825b1ed565d80b3f6eaab96bab59111c7d25fa4944",
-  "id": "N07",
-  "new": "return True, f\"{name} declared no --inputs and the working tree changed since it ran (declare --inputs to reuse across edits)\"",
-  "old": "return False, f\"{name} declared no --inputs and the working tree changed since it ran (declare --inputs to reuse across edits)\"",
-  "path": ".ai/scripts/ledger.py",
-  "restored": false
-}

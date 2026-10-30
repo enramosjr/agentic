@@ -1,9 +1,0 @@
-{
-  "after": "2330d388957dd148bf1db172fde9b931a000b11fd8538ccf624f75197854181c",
-  "before": "f59b7187ca81fa1ce99fb98a1886c3afaefae71f414114b1f8252a69a201cab8",
-  "id": "N08",
-  "new": "chosen = True",
-  "old": "chosen = not negative",
-  "path": ".ai/scripts/assurance.py",
-  "restored": false
-}

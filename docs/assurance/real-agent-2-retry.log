@@ -1,6 +1,0 @@
-run assurance-2-real-agent: exit=1 tree=a491524
-    FAIL feature-l2 repeat 1
-      - Approved review artifact is not bound to the observed reviewer result
-    FAIL control-delta repeat 1
-      - Approved review artifact is not bound to the observed reviewer result
-    0/2 passed

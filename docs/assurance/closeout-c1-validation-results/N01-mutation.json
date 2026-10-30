@@ -1,9 +1,0 @@
-{
-  "after": "d4231188acf65f75fff96a4aa816e49c442269c9bf6105fdb9972046eaa74ea5",
-  "before": "f59b7187ca81fa1ce99fb98a1886c3afaefae71f414114b1f8252a69a201cab8",
-  "id": "N01",
-  "new": "if kind in found and kind != 'Verify':",
-  "old": "if kind in found:",
-  "path": ".ai/scripts/assurance.py",
-  "restored": false
-}

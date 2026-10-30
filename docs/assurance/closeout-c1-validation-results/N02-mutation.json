@@ -1,9 +1,0 @@
-{
-  "after": "ca93e3468012da301c2757b3c956fc248532202c38fbca3bec163c80bde1b765",
-  "before": "f59b7187ca81fa1ce99fb98a1886c3afaefae71f414114b1f8252a69a201cab8",
-  "id": "N02",
-  "new": "return result(obligation, 'UNVERIFIED', 'no Verify: line')",
-  "old": "return result(obligation, 'UNDECLARED', 'no Verify: line')",
-  "path": ".ai/scripts/assurance.py",
-  "restored": false
-}
