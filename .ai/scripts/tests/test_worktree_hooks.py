@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -169,6 +170,153 @@ class WorktreeHookTests(unittest.TestCase):
         self.assertEqual(json.loads(self.hook(cursor, CLAUDE_PROJECT_DIR=str(self.outer)))['permission'], 'allow')
         cursor['cwd'] = str(self.outer)
         self.assertEqual(json.loads(self.hook(cursor, CLAUDE_PROJECT_DIR=str(self.target)))['permission'], 'deny')
+
+    def test_pr_prefix_uses_target_lifecycle(self) -> None:
+        self.ready(self.target)
+        for tool in ('Bash', 'Shell'):
+            for verb in ('create', 'ready'):
+                data = self.payload(f'cd {shlex.quote(str(self.target))} && gh pr {verb}')
+                data['tool_name'] = tool
+                self.decision(data, False, CLAUDE_PROJECT_DIR=str(self.outer))
+        self.ready(self.outer)
+        self.git(self.target, 'switch', '-qc', 'unready-pr-target')
+        output = self.decision(self.payload(f'cd {self.target} && gh pr create'), True)
+        self.assertIn(str(self.target), output)
+
+    def test_quoted_pr_examples_are_not_shipping_commands(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import review_guard
+        commands = [
+            "python3 .ai/scripts/repo.py grep 'gh pr create' source.py",
+            "printf '%s %s %s' 'gh' 'pr' 'create'",
+            "printf '%s' 'cd nowhere && gh pr ready'",
+            "printf '%s' 'gh pr create; gh pr ready'",
+        ]
+        for command in commands:
+            with self.subTest(command=command):
+                self.decision(self.payload(command), False)
+                self.assertFalse(review_guard.command_mutates(command))
+        self.decision(self.payload("gh pr create --title 'gh pr ready'"), True)
+
+    def test_pr_literal_paths_match_cli_execution_directory(self) -> None:
+        self.ready(self.target)
+        spaced = self.base / 'target with spaces'
+        self.git(self.outer, 'worktree', 'move', str(self.target), str(spaced))
+        executable = self.base / 'bin' / 'gh'
+        executable.parent.mkdir()
+        executable.write_text('#!' + sys.executable + '\nimport os\nfrom pathlib import Path\n'
+                              'Path(os.environ["PR_PROBE"]).write_text(os.getcwd())\n')
+        executable.chmod(0o755)
+        result_path = self.base / 'execution-directory'
+        env = {**self.env, 'PATH': str(executable.parent) + os.pathsep + self.env['PATH'],
+               'PR_PROBE': str(result_path)}
+        for directory, workdir in [(str(spaced), None), ('../target with spaces', None),
+                                   ('../target with spaces', str(self.outer)), ('.', str(spaced))]:
+            with self.subTest(directory=directory, workdir=workdir):
+                command = f'cd {shlex.quote(directory)} && gh pr create --title "literal ; && text"'
+                payload = self.payload(command, **({'workdir': workdir} if workdir else {}))
+                self.decision(payload, False)
+                subprocess.run(command, shell=True, cwd=workdir or self.outer, env=env,
+                               capture_output=True, check=True, timeout=10)
+                self.assertEqual(result_path.read_text(), str(spaced))
+        self.decision(self.payload('gh pr ready', workdir=str(spaced)), False)
+
+    def test_pr_invalid_routing_denies_without_record_changes(self) -> None:
+        self.ready(self.outer)
+        plain = self.base / 'not-git'
+        plain.mkdir()
+        commands = [f'cd {directory} && gh pr create' for directory in
+                    ("''", str(self.base / 'missing'), str(self.outer / 'app.py'), str(plain),
+                     '"$HOME"', '$(pwd)', '`pwd`')]
+        commands += [f'cd {self.outer} {operator} gh pr create' for operator in (';', '||', '|', '&', '\n')]
+        commands += [f'cd {self.outer} && gh pr create && true',
+                     f'true && cd {self.outer} && gh pr ready',
+                     f'cd {self.outer} && cd . && gh pr create',
+                     f'cd {self.outer} && gh pr create > output']
+        before = self.git(self.outer, 'status', '--porcelain')
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertIn('routing', self.decision(self.payload(command), True))
+        self.assertEqual(self.git(self.outer, 'status', '--porcelain'), before)
+
+    def test_pr_review_checks_use_selected_target(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import lifecycle
+        import review_guard as guard
+        self.ready(self.target)
+        self.ready(self.outer)
+        command = f'cd {self.target} && gh pr create'
+        data = self.payload(command)
+        for root in (self.outer, self.target):
+            guard.observe_session(root, 'claude', {'session_id': 'parent', 'cwd': str(root),
+                                                  'hook_event_name': 'SessionStart'})
+            guard.enable(root, 'fixture', 'claude', 'parent', 'docs/review.md')
+            guard.start(root, 'fixture', 'claude', 'parent', 'child', 'reviewer', {}, [])
+            before = guard.read(root)
+            output = self.decision(data, root == self.target)
+            if root == self.target:
+                self.assertIn('active review', output)
+            self.assertEqual(guard.read(root), before)
+            with guard.transaction(root) as value:
+                value['interval']['phase'] = 'abandoned'
+                value['request']['phase'] = 'abandoned'
+        # Required-but-missing native evidence must not borrow legacy readiness.
+        state = lifecycle.load(self.target)
+        state['mechanical_review'] = {'required': True}
+        with guard.producer(self.target):
+            lifecycle.save(self.target, state)
+        before = lifecycle.load(self.target)
+        self.decision(data, True)
+        self.assertEqual(lifecycle.load(self.target), before)
+        self.decision(self.payload('gh pr create', workdir=str(self.outer)), False)
+
+    def test_pr_directory_owns_physical_guard_namespace(self) -> None:
+        from unittest import mock
+        sys.path.insert(0, str(SCRIPTS))
+        import review_guard as guard
+        data = self.payload(f'cd {self.target} && gh pr create')
+        with mock.patch.dict(os.environ, {'GIT_DIR': str(self.outer / '.git'),
+                                         'GIT_WORK_TREE': str(self.outer)}):
+            self.assertEqual(guard.operation_roots(data), [self.target])
+
+    def test_pr_ambiguous_shell_directories_deny(self) -> None:
+        self.ready(self.target)
+        nested = self.target / 'nested'
+        nested.mkdir()
+        link = self.outer / 'link'
+        link.symlink_to(nested, target_is_directory=True)
+        directory = str(link / '..')
+        result = subprocess.run(f'cd {shlex.quote(directory)} && pwd -P', shell=True,
+                                cwd=self.outer, env=self.env, capture_output=True,
+                                text=True, check=True, timeout=10)
+        self.assertEqual(result.stdout.strip(), str(self.outer))
+        with self.subTest(ambiguity='symlink-parent'):
+            self.assertIn('routing', self.decision(self.payload(f'cd {directory} && gh pr create'), True))
+
+        selected = self.outer / 'selected'
+        selected.symlink_to(self.target, target_is_directory=True)
+        search = self.base / 'cdpath'
+        alternate = search / 'selected'
+        alternate.mkdir(parents=True)
+        self.git(alternate, 'init', '-q')
+        environment = {**self.env, 'CDPATH': str(search)}
+        result = subprocess.run('cd selected && pwd -P', shell=True, cwd=self.outer,
+                                env=environment, capture_output=True, text=True,
+                                check=True, timeout=10)
+        self.assertEqual(result.stdout.splitlines()[-1], str(alternate))
+        with self.subTest(ambiguity='CDPATH'):
+            self.assertIn('routing', self.decision(self.payload('cd selected && gh pr ready'),
+                                                  True, CDPATH=str(search)))
+        # Tool-specific environment must not escape the same routing check.
+        with self.subTest(ambiguity='tool-CDPATH'):
+            self.assertIn('routing', self.decision(self.payload('cd selected && gh pr ready',
+                                                  env={'CDPATH': str(search)}), True))
+        # A valid inherited logical PWD can also change the meaning of '..'.
+        alias = nested / 'logical-outer'
+        alias.symlink_to(self.outer, target_is_directory=True)
+        with self.subTest(ambiguity='logical-PWD'):
+            self.assertIn('routing', self.decision(self.payload('cd .. && gh pr create'),
+                                                  True, PWD=str(alias)))
 
 
 if __name__ == '__main__':

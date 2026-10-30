@@ -23,7 +23,7 @@ sys.dont_write_bytecode = True  # Bytecode beside the scripts would dirty the wo
 
 KEYS = ("label", "argv", "exit", "tree", "head", "duration", "at", "inputs", "inputs_sha256")
 OPTIONAL_KEYS = ('input_files', 'context_sha256', 'profile', 'runtime_sha256')
-SESSION_KEYS = {'CODEX_THREAD_ID', 'SHLVL', '_'}
+SESSION_KEYS = {'CODEX_THREAD_ID', 'SHLVL', '_', '_AGENTIC_REVIEW_PRODUCER'}
 OUTPUT_KEYS = ("tail", "output", "stdout", "stderr")
 MAX_ENTRIES = 100
 RUN_HINT = "python3 .ai/scripts/lifecycle.py run LABEL -- CMD"

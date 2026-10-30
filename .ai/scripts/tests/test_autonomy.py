@@ -990,7 +990,18 @@ class DriverTests(AutonomyTestCase):
                 time.sleep(.01)
         self.assertEqual(json.loads((directory / "documentation-audit.json").read_text())["state"], "CANCELLED")
         proc = Path("/proc") / pid_file.read_text() / "stat"
-        self.assertTrue(not proc.exists() or proc.read_text().split()[2] == "Z")
+        # Waiting for the direct parent does not order the grandchild's terminal
+        # transition. Still require actual termination well before its 60s lifetime.
+        deadline = time.monotonic() + 3
+        while True:
+            try:
+                status = proc.read_text()
+            except FileNotFoundError:
+                break
+            if status.split()[2] == 'Z':
+                break
+            self.assertLess(time.monotonic(), deadline, f'audit child still live: {proc}: {status}')
+            time.sleep(.01)
 
     def test_conflict_brief_requalifies_integrated_batches_and_preserves_milestone_gate(self) -> None:
         brief = autonomy_driver.conflict_brief([pr_sync.Result(7, "milestone/m2", "main", "conflicts")])
@@ -1446,7 +1457,7 @@ class DriverTests(AutonomyTestCase):
         # Copied into a repository that does not ignore __pycache__, as when the toolkit is adopted elsewhere.
         scripts = self.repo / ".ai" / "scripts"
         scripts.mkdir(parents=True)
-        for name in ("okf.py", "learning.py", "autonomy_driver.py", "autonomy_hook.py", "pr_sync.py", "timed_check.py", "autonomy_progress.py", "autonomy_validation.py", "scratch.py"):
+        for name in ("okf.py", "learning.py", "autonomy_driver.py", "autonomy_hook.py", "pr_sync.py", "timed_check.py", "autonomy_progress.py", "autonomy_validation.py", "scratch.py", "review_guard.py", "ledger.py"):
             shutil.copy(SCRIPTS / name, scripts / name)
         self.commit_all("add toolkit")
         environment = {k: v for k, v in os.environ.items() if not k.startswith(("OKF_", "PYTHONDONTWRITEBYTECODE"))}

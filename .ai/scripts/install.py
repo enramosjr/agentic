@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+from contextlib import nullcontext
 import difflib
 import hashlib
 import json
@@ -15,6 +16,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import review_guard
 
 KIT = ("AGENTS.md", "CLAUDE.md", ".ai/", ".claude/agents/", ".claude/skills/",
        ".claude/settings.json", ".codex/agents/", ".codex/hooks.json",
@@ -147,7 +149,8 @@ def agents_content(current, body):
 
 
 def git(target, *args):
-    result = subprocess.run(["git", "-C", str(target), *args], capture_output=True, timeout=30)
+    runner = review_guard.run_owned if args[:1] == ('init',) else subprocess.run
+    result = runner(["git", "-C", str(target), *args], capture_output=True, timeout=30)
     if result.returncode:
         raise Refusal("TARGET: choose the top level of a Git work tree")
     return result.stdout
@@ -384,7 +387,7 @@ def install(target, template, check=False, force=False, no_knowledge=False):
             bundle = Path(scratch) / "knowledge"
             if (target / "knowledge").exists():
                 shutil.copytree(target / "knowledge", bundle, symlinks=False)
-            result = subprocess.run([sys.executable, str(template / ".ai/scripts/okf.py"), "--bundle", str(bundle), "init"], capture_output=True, timeout=60)
+            result = review_guard.run_owned([sys.executable, str(template / ".ai/scripts/okf.py"), "--bundle", str(bundle), "init"], capture_output=True, timeout=60)
             if result.returncode:
                 raise Refusal("knowledge: repair the bundle before initialization")
             for path in bundle.rglob("*"):
@@ -404,35 +407,39 @@ def install(target, template, check=False, force=False, no_knowledge=False):
         for dirty in dirty_paths(target):
             if any(dirty == n or dirty.startswith(n + "/") or n.startswith(dirty + "/") for n in changing):
                 raise Refusal(f"{dirty}: commit or stash changing paths, or use --force")
-    if initialize_git:
-        target.mkdir(parents=True, exist_ok=True)
-        git(target, "init", "--quiet")
-    for name, (data, file_mode) in writes.items():
-        if name == MANIFEST:
-            continue
-        if name in HOOK_FILES:
-            before = (target / name).read_text() if (target / name).exists() else ""
-            print("".join(difflib.unified_diff(before.splitlines(True), data.decode().splitlines(True), fromfile=name, tofile=name)), end="")
-        atomic_write(target / name, data, file_mode)
-    for name in removals:
-        (target / name).unlink()
-    if make_link:
-        link.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            os.symlink("../.claude/skills", link)
-        except OSError:
-            for name in skill_names:
-                dest = name.replace(".claude/skills/", ".agents/skills/", 1)
-                data = (template / name).read_bytes()
-                atomic_write(target / dest, data, stat.S_IMODE((template / name).stat().st_mode))
-                manifest["files"][dest] = digest(data)
-            manifest["skills_link"] = "copy"
-    if initialize:
-        result = subprocess.run([sys.executable, str(target / ".ai/scripts/okf.py"), "init"], cwd=target, capture_output=True, timeout=60)
-        if result.returncode:
-            raise OSError("installed okf.py init failed: " + result.stderr.decode(errors="replace"))
-    if changing:
-        atomic_write(target / MANIFEST, encoded(manifest, True))
+    # Validation/planning above is read-only for TARGET. Register before its first effect,
+    # so refused inputs do not create or touch the containing repository's journal.
+    ownership = review_guard.target_producer(target) if changing or initialize_git or initialize else nullcontext()
+    with ownership:
+        if initialize_git:
+            target.mkdir(parents=True, exist_ok=True)
+            git(target, "init", "--quiet")
+        for name, (data, file_mode) in writes.items():
+            if name == MANIFEST:
+                continue
+            if name in HOOK_FILES:
+                before = (target / name).read_text() if (target / name).exists() else ""
+                print("".join(difflib.unified_diff(before.splitlines(True), data.decode().splitlines(True), fromfile=name, tofile=name)), end="")
+            atomic_write(target / name, data, file_mode)
+        for name in removals:
+            (target / name).unlink()
+        if make_link:
+            link.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                os.symlink("../.claude/skills", link)
+            except OSError:
+                for name in skill_names:
+                    dest = name.replace(".claude/skills/", ".agents/skills/", 1)
+                    data = (template / name).read_bytes()
+                    atomic_write(target / dest, data, stat.S_IMODE((template / name).stat().st_mode))
+                    manifest["files"][dest] = digest(data)
+                manifest["skills_link"] = "copy"
+        if initialize:
+            result = review_guard.run_owned([sys.executable, str(target / ".ai/scripts/okf.py"), "init"], cwd=target, capture_output=True, timeout=60)
+            if result.returncode:
+                raise OSError("installed okf.py init failed: " + result.stderr.decode(errors="replace"))
+        if changing:
+            atomic_write(target / MANIFEST, encoded(manifest, True))
     for name in conflicts:
         print(f"conflict: {name} (kept adopter copy)")
     print("installed" if changing else "up to date")
@@ -448,7 +455,7 @@ def main(argv=None, template=ROOT):
     args = parser.parse_args(argv)
     try:
         return install(args.target, template, args.check, args.force, args.no_knowledge)
-    except Refusal as error:
+    except (Refusal, review_guard.ReviewError) as error:
         print(f"install: {error}", file=sys.stderr)
         return 2
     except (OSError, subprocess.TimeoutExpired) as error:

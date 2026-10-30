@@ -33,6 +33,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,6 +42,8 @@ sys.dont_write_bytecode = True  # Bytecode beside the scripts would dirty the wo
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import scratch  # noqa: E402
+import review_guard  # noqa: E402
+import pr_hook  # noqa: E402
 
 
 def lazy(name: str):
@@ -79,7 +82,6 @@ EDIT_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "NotebookEdit", "apply_pat
 SPEC_SECTIONS = ("requirements", "acceptance", "non-goals", "open questions")
 REQ_LINE = re.compile(r"^\s*[-*]\s*`?(R\d+)`?\s*[:.)–—-]\s*(.+?)\s*$")
 HOOK_COMMIT = re.compile(r"\bgit\s+(?:-\S+\s+(?:\S+\s+)?)*commit(?![-\w])")
-HOOK_PR = re.compile(r"\bgh\s+pr\s+(?:create|ready)\b")
 HOOK_WIP = re.compile(r"""(?:-[a-zA-Z]*m|--message)[ =]*["']?wip:""")  # Only a message that starts with `wip:` is exempt.
 HOOK_ADD = re.compile(r"\bgit\s+add\b([^;&|]*)")
 RECORD_DIR = "knowledge/history/lifecycle"
@@ -247,6 +249,7 @@ def write_atomic(path: Path, data: dict) -> None:
 
 def save(root: Path, state: dict, publish: bool = True) -> None:
     """Write the working state and, above L0, the committed audit record."""
+    review_guard.assert_owned(root)
     if state["tier"] != "L0" and publish:
         if not state.get("task"):
             state["task"] = new_task_id(root)  # A record started before the audit trail existed.
@@ -259,7 +262,7 @@ def save(root: Path, state: dict, publish: bool = True) -> None:
         write_atomic(record_path(root, state), public(state, root))
         if first and (root / "knowledge/index.md").is_file():  # The new directory needs its index once, or `okf.py records` fails.
             try:
-                result = subprocess.run([sys.executable, str(root / ".ai/scripts/okf.py"), "reindex"], cwd=root, capture_output=True, text=True, timeout=60)
+                result = review_guard.run(root, [sys.executable, str(root / ".ai/scripts/okf.py"), "reindex"], cwd=root, capture_output=True, text=True, timeout=60)
                 failed = result.returncode != 0
             except (OSError, subprocess.TimeoutExpired):
                 failed = True
@@ -646,12 +649,17 @@ def require_state(root: Path) -> dict:
 
 def cmd_stage(args: argparse.Namespace) -> int:
     root = repo_root()
+    review_guard.assert_owned(root)
     state = require_state(root)
     tier, stage = state["tier"], args.stage
     if tier == "L0":
         raise LifecycleError("L0 has no stages; edit, run a focused check, and `okf.py affected`")
     if stage in ("review", "verify", "ship"):
         problem = gate_problem(state, stage)
+        if problem:
+            raise LifecycleError(problem)
+        import review_native
+        problem = review_native.problem(root, state, root / args.ref if stage == 'review' and args.ref else None)
         if problem:
             raise LifecycleError(problem)
     if stage == "plan" and not complete(state, "intent"):
@@ -719,6 +727,9 @@ def cmd_stage(args: argparse.Namespace) -> int:
             verdict = read_verdict(ref)
             if not verdict.lower().startswith("approved"):
                 raise LifecycleError(f"review verdict is not Approved: {verdict or 'no ## Verdict section'}")
+            if (review_guard.read(root).get('request') or {}).get('task') == state['task']:
+                import review_native
+                record['native_review'] = review_native.identity(root)
     elif stage == "verify":
         if not args.note and not high:
             raise LifecycleError("verify needs --note naming the commands run and their outcomes (AGENTS.md Gate 4)")
@@ -733,6 +744,10 @@ def cmd_stage(args: argparse.Namespace) -> int:
             raise LifecycleError(problem)
         if high:  # Evidence comes from the ledger, not from the agent's words; `LIFECYCLE_GUARD` and `OKF_AUTONOMOUS` are not read here.
             entries, tree = state.get("ledger") or [], tree_hash(root)
+            if project_context.kind(root) != 'framework' and (root / 'knowledge/index.md').is_file():
+                problem = assurance.gate_problem(root, state, record_path(root, state).parent, tree)
+                if problem:
+                    raise LifecycleError(problem)
             problem = ledger.verify_problem(root, entries, tree)
             if problem:
                 raise LifecycleError(problem)
@@ -864,6 +879,11 @@ def cmd_retire(args: argparse.Namespace) -> int:
 def cmd_gate(args: argparse.Namespace) -> int:
     state = require_state(repo_root())
     problem = gate_problem(state, args.target)
+    if not problem and args.target in ('verify', 'ship', 'commit'):
+        import review_native
+        problem = review_native.problem(repo_root(), state)
+        if not problem and args.target == 'commit':
+            problem = review_native.index_problem(repo_root(), state)
     if problem:
         print(f"BLOCKED: {problem}")
         return 1
@@ -881,6 +901,11 @@ def cmd_status(_: argparse.Namespace) -> int:
     todo = [s for s in REQUIRED[state["tier"]] if s not in done]
     print(f"tier {state['tier']} kind={state.get('kind', '-')} user_set={state.get('user_set', False)}")
     print(f"complete: {', '.join(done) or 'none'}; still required: {', '.join(todo) or 'none'}")
+    import review_native
+    issue = review_native.problem(root, state)
+    if issue:
+        print('mechanical review: BLOCKED: ' + issue)
+        return 1
     if state.get("kind") in TEST_FIRST_KINDS:
         print(f"red/green: {'recorded' if redgreen_ok(state) else 'missing'}")
     return 0
@@ -931,7 +956,7 @@ def cmd_redgreen(args: argparse.Namespace) -> int:
     if not command:
         raise LifecycleError("give the test command after `--`")
     text = " ".join(command)
-    result = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=args.timeout)
+    result = review_guard.run(root, command, cwd=root, capture_output=True, text=True, timeout=args.timeout)
     tail = "\n".join((result.stdout + result.stderr).strip().splitlines()[-12:])
     entry = next((e for e in state["redgreen"] if e["cmd"] == text and "green" not in e), None)
     if args.phase == "red":
@@ -983,6 +1008,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     return execute_check(root, state, args.label, command, globs, args.timeout, profile=profile)
 
 
+@review_guard.protected(lambda root, *args, **kwargs: root)
 def execute_check(root: Path, state: dict, label: str, command: list[str], globs: list[str], timeout: float,
                   profile: tuple | None = None, runtime: bool = False) -> int:
     """Run COMMAND once in scratch and append its ledger entry; `run` and `assure --run` share this path."""
@@ -1001,7 +1027,7 @@ def execute_check(root: Path, state: dict, label: str, command: list[str], globs
         raise LifecycleError(f"run refused, nothing was run: {error}") from error
     started, code, output = time.monotonic(), None, ""
     try:
-        result = subprocess.run(command, cwd=root, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace", timeout=timeout)
+        result = review_guard.run(root, command, cwd=root, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace", timeout=timeout)
         code, output = result.returncode, result.stdout + result.stderr
     except subprocess.TimeoutExpired as error:
         output = decoded(error.stdout) + decoded(error.stderr) + "\ntimeout"
@@ -1009,7 +1035,8 @@ def execute_check(root: Path, state: dict, label: str, command: list[str], globs
         output = f"cannot run: {error}"
     entry = ledger.make_entry(label, command, code, before_tree if globs else tree_hash(root),
                               before_head if globs else head_sha(root), time.monotonic() - started,
-                              now(), globs, before_digest)
+                              datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+                              if label.startswith('req:') else now(), globs, before_digest)
     if profile:
         entry.update(profile=profile[0], input_files=before_files, context_sha256=before_context)
     elif before_files is not None:
@@ -1018,8 +1045,7 @@ def execute_check(root: Path, state: dict, label: str, command: list[str], globs
         entry["runtime_sha256"] = before_runtime
     with state_lock(root):
         state = evidence_state(root, state)
-        ledger.append(state, entry)
-        save(root, state)
+        review_guard.append_evidence(root, state, [entry], lambda current: save(root, current))
     print(f"run {label}: exit={code if code is not None else 'none'} tree={entry['tree'][:7]}")
     if code != 0:
         for line in output.strip().splitlines()[-12:]:
@@ -1181,6 +1207,7 @@ def decoded(output: object) -> str:
     return output.decode(errors="replace") if isinstance(output, bytes) else str(output or "")
 
 
+@review_guard.protected(lambda args: repo_root())
 def cmd_converge(args: argparse.Namespace) -> int:
     root = repo_root()
     with state_lock(root):
@@ -1200,6 +1227,9 @@ def cmd_converge(args: argparse.Namespace) -> int:
     model = spec_model(root / spec)
     results: list[dict] = []
     durations: dict[str, float] = {}
+    obligations = {op['id']: assurance.parse(op['id'], model['target'], op['replacement'], root=root)
+                   for op in model.get('operations', []) if op['replacement']}
+    requirement_entries: dict[str, dict] = {}
     for rid in model["requirements"]:
         match = BACKTICK.search(model["acceptance"].get(rid, ""))
         if match is None:
@@ -1208,14 +1238,24 @@ def cmd_converge(args: argparse.Namespace) -> int:
             continue
         entry: dict = {"id": rid, "cmd": match.group(1), "status": "FAIL", "exit": None}
         started = time.monotonic()
+        snapshot = None
         try:
             argv = shlex.split(entry["cmd"])
             if not argv:
                 raise ValueError("empty command")
-            result = subprocess.run(argv, cwd=root, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace", timeout=args.timeout)
+            obligation = obligations.get(rid)
+            if (obligation and obligation.declared and not obligation.invalid
+                    and obligation.manual is None and list(obligation.argv) == argv):
+                globs = obligation.evidence_globs
+                snapshot = ledger.make_entry('req:' + rid, argv, None, tree_hash(root), head_sha(root),
+                                             0, now(), globs, ledger.inputs_digest(root, globs))
+                if globs:
+                    snapshot['input_files'] = ledger.inputs_snapshot(root, globs)
+                snapshot['runtime_sha256'] = ledger.runtime_digest(argv)
+            result = review_guard.run(root, argv, cwd=root, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace", timeout=args.timeout)
         except subprocess.TimeoutExpired as error:
             entry["error"], output = "timeout", decoded(error.stdout) + decoded(error.stderr)
-        except (ValueError, OSError) as error:
+        except (ValueError, OSError, subprocess.CalledProcessError) as error:
             entry["error"], output = "cannot run", str(error)
         else:
             entry["exit"], output = result.returncode, result.stdout + result.stderr
@@ -1229,14 +1269,26 @@ def cmd_converge(args: argparse.Namespace) -> int:
                 print(f"    {line}")
         results.append(entry)
         durations[rid] = time.monotonic() - started
+        if snapshot is not None:
+            snapshot.update(exit=entry['exit'], duration=round(durations[rid], 3),
+                            at=datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z"))
+            requirement_entries[rid] = snapshot
     tree = tree_hash(root)
     with state_lock(root):
         state = evidence_state(root, state)
+        additions = []
         for entry in results:  # MANUAL checks ran nothing.
             if entry["cmd"] is not None:
-                ledger.append(state, ledger.make_entry(f"converge:{entry['id']}", words(entry["cmd"]), entry["exit"], tree, head_sha(root), durations[entry["id"]], now(), [], None))
+                additions.append(ledger.make_entry(f"converge:{entry['id']}", words(entry["cmd"]), entry["exit"], tree, head_sha(root), durations[entry["id"]], now(), [], None))
+                if entry['id'] in requirement_entries:
+                    additions.append(requirement_entries[entry['id']])
         state["converge"] = {"spec": spec, "spec_sha256": ref_hash(root / spec), "tree": tree, "at": now(), "results": results}
-        save(root, state)
+        if (review_guard.read(root).get('request') or {}).get('task') == state['task']:
+            state['converge']['review_execution'] = uuid.uuid4().hex
+        if additions:
+            review_guard.append_evidence(root, state, additions, lambda current: save(root, current))
+        else:
+            save(root, state)
     counts = {status: sum(r["status"] == status for r in results) for status in ("PASS", "FAIL", "MANUAL")}
     print(f"converge: {counts['PASS']} PASS, {counts['FAIL']} FAIL, {counts['MANUAL']} MANUAL")
     return 1 if counts["FAIL"] else 0
@@ -1268,6 +1320,7 @@ def merge_problem(root: Path, state: dict) -> str | None:
         return 'merge validation failed: ' + str(error)
 
 
+@review_guard.protected(lambda args: repo_root(), when=lambda args: not args.dry_run)
 def cmd_merge(args: argparse.Namespace) -> int:
     root = repo_root()
     spec = (root / args.spec).resolve()
@@ -1498,6 +1551,10 @@ def git_commit_directory(command: str) -> tuple[list[str], str] | None:
 
 def operation_directory(data: dict, git_directories: list[str]) -> tuple[Path, Path]:
     """Select the operation directory; invalid explicit targets fail closed."""
+    if data.get('tool_name') in ('Bash', 'Shell'):
+        invocation = pr_hook.recognize((data.get('tool_input') or {}).get('command') or '')
+        if invocation:
+            return pr_hook.operation(data, invocation)
     roots = data.get("workspace_roots") or []
     directory = Path(data.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or (roots[0] if roots else "") or os.getcwd())
     tool_input = data.get("tool_input") or {}
@@ -1570,10 +1627,16 @@ def hook_problem(data: dict, root: Path, directory: Path | None = None) -> str |
     command = (data.get("tool_input") or {}).get("command")
     if tool in ("Bash", "Shell") and isinstance(command, str):
         committing = bool(HOOK_COMMIT.search(command)) and not HOOK_WIP.search(command)
-        if committing or HOOK_PR.search(command):
+        if committing or pr_hook.recognize(command):
             if not active:
                 return NO_TIER
             problem = gate_problem(state, "commit")
+            if problem is None:
+                import review_native
+                problem = review_native.problem(root, state)
+                if not problem and committing:
+                    problem = review_native.index_problem(root, state, command,
+                        {**os.environ, **((data.get('tool_input') or {}).get('env') or {})})
             if problem is None and committing and state["tier"] != "L0":
                 problem = record_problem(root, state, command)
             return problem
@@ -1684,6 +1747,51 @@ def cmd_hook(args: argparse.Namespace) -> int:
     if not isinstance(data, dict):
         return 0
     event = data.get("hook_event_name") or ""
+    if event == 'beforeShellExecution':
+        data = {**data, 'tool_name': 'Shell', 'tool_input': {
+            **(data.get('tool_input') or {}), 'command': data.get('command')}}
+    command = (data.get('tool_input') or {}).get('command')
+    try:
+        invocation = (pr_hook.recognize(command) if data.get('tool_name') in ('Bash', 'Shell')
+                      and isinstance(command, str) else None)
+    except pr_hook.RoutingError as error:
+        emit(data, 'PreToolUse', str(error))
+        return 0
+    # The task's opt-in freeze precedes legacy lifecycle bypass flags and Markdown exemptions.
+    if event.lower() != 'sessionstart' and review_guard.tool_mutates(data):
+        try:
+            for protected_root in review_guard.operation_roots(data):
+                problem = review_guard.active_problem(review_guard.read(protected_root))
+                if problem:
+                    emit(data, 'PreToolUse', problem)
+                    return 0
+        except (LifecycleError, review_guard.ReviewError, learning.LearningError, pr_hook.RoutingError) as error:
+            emit(data, 'PreToolUse', str(error))
+            return 0
+    command = (data.get('tool_input') or {}).get('command')
+    if isinstance(command, str) and (HOOK_COMMIT.search(command) or invocation):
+        try:
+            targets = review_guard.operation_roots(data)
+            for target in targets:
+                state = load(target)
+                if not is_active(state, target):
+                    continue
+                expected_native = (state.get('mechanical_review') or
+                    state.get('stages', {}).get('review', {}).get('native_review'))
+                if (not expected_native and
+                        (review_guard.read(target).get('request') or {}).get('task') != state.get('task')):
+                    continue
+                import review_native
+                problem = gate_problem(state, 'commit') or review_native.problem(target, state)
+                if not problem and HOOK_COMMIT.search(command):
+                    problem = review_native.index_problem(target, state, command,
+                        {**os.environ, **((data.get('tool_input') or {}).get('env') or {})})
+                if problem:
+                    emit(data, 'PreToolUse', problem)
+                    return 0
+        except (LifecycleError, review_guard.ReviewError, learning.LearningError, pr_hook.RoutingError) as error:
+            emit(data, 'PreToolUse', str(error))
+            return 0
     if event.lower() != "sessionstart":
         request = driver_request()
         if request:
@@ -1692,8 +1800,6 @@ def cmd_hook(args: argparse.Namespace) -> int:
     bypass = os.environ.get("LIFECYCLE_GUARD") == "off" or os.environ.get("OKF_AUTONOMOUS") == "1"
     if bypass and event.lower() != 'sessionstart':
         return 0
-    if event == "beforeShellExecution":  # Cursor's shell event carries the command at the top level.
-        data = {**data, "tool_name": "Shell", "tool_input": {**(data.get("tool_input") or {}), "command": data.get("command")}}
     try:
         start = session_directory(data)
         # Cursor also runs .claude/settings.json hooks; its own .cursor/hooks.json entry makes the same decision.
@@ -1705,7 +1811,7 @@ def cmd_hook(args: argparse.Namespace) -> int:
             data = {**data, "tool_input": {**data["tool_input"], "command": git_commit[1]}}
             command = git_commit[1]
         if (data.get("tool_name") in ("Bash", "Shell") and isinstance(command, str)
-                and not HOOK_COMMIT.search(command) and not HOOK_PR.search(command)):
+                and not HOOK_COMMIT.search(command) and not invocation):
             emit(data, "PreToolUse", None)
             return 0
         if event.lower() == "sessionstart":
@@ -1719,7 +1825,7 @@ def cmd_hook(args: argparse.Namespace) -> int:
             directory, root = operation_directory(data, git_commit[0] if git_commit else [])
             problem = hook_problem(data, root, directory)
             emit(data, "PreToolUse", f"worktree {root}: {problem}" if problem else None)
-    except LifecycleError as error:
+    except (LifecycleError, pr_hook.RoutingError) as error:
         if event.lower() != 'sessionstart':
             emit(data, 'PreToolUse', str(error))
     except learning.LearningError as error:
@@ -1771,6 +1877,21 @@ def parser() -> argparse.ArgumentParser:
     p = sub.add_parser("gate", help="exit 1 unless the next step may start")
     p.add_argument("target", choices=("implement", "review", "verify", "ship", "commit"))
     p.set_defaults(func=cmd_gate)
+    p = sub.add_parser('review', help='request, capture and preserve mechanically bound native review')
+    actions = p.add_subparsers(dest='action', required=True)
+    for action in ('enable', 'restart', 'status', 'save-report', 'abandon', 'recover'):
+        child = actions.add_parser(action)
+        if action in ('enable', 'restart'):
+            child.add_argument('--report', required=True)
+        if action == 'enable':
+            child.add_argument('--adapter', choices=('claude', 'codex'), required=True)
+            child.add_argument('--session', required=True)
+        if action == 'restart':
+            child.add_argument('--adapter', choices=('claude', 'codex'))
+            child.add_argument('--session')
+        if action == 'abandon':
+            child.add_argument('--reason', required=True)
+        child.set_defaults(func=cmd_review)
     p = sub.add_parser("status", help="show the active tier and stages")
     p.set_defaults(func=cmd_status)
     p = sub.add_parser("redgreen", help="run a test command and record red (must fail) or green (must pass after a change)")
@@ -1840,6 +1961,11 @@ def cmd_finish(args):
     return completion.finish(args)
 
 
+def cmd_review(args):
+    import review_native
+    return review_native.command(args)
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     command: list[str] = []
@@ -1851,14 +1977,18 @@ def main(argv: list[str] | None = None) -> int:
         args.run_command = command
     try:
         verb = args.func.__name__.removeprefix('cmd_')
+        if verb == 'assure' and args.run is not None and (args.changed or args.base or args.strict or args.json):
+            return args.func(args)  # Pure option refusal; no execution or publication is admitted.
         if verb in MUTATING_COMMANDS and not ((verb == 'merge' and args.dry_run) or (verb == 'finish' and not args.apply)
                                               or (verb == 'assure' and args.run is None)):
             roots = run_roots()
             if roots and str(repo_root().resolve()) in roots:
                 raise LifecycleError('invoke lifecycle mutations directly, outside lifecycle.py run; ancestor run owns this repository evidence')
-            if verb not in {'run', 'converge', 'assure'}:
-                with state_lock(repo_root()):
-                    return args.func(args)
+            with review_guard.producer(repo_root()):
+                if verb not in {'run', 'converge', 'assure'}:
+                    with state_lock(repo_root()):
+                        return args.func(args)
+                return args.func(args)
         return args.func(args)
     except LifecycleError as error:
         print(f"lifecycle: {error}", file=sys.stderr)

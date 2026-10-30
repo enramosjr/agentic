@@ -20,6 +20,7 @@ import re
 import shlex
 import subprocess
 import sys
+from urllib.parse import unquote
 
 sys.dont_write_bytecode = True  # Bytecode beside the scripts would dirty the work tree.
 
@@ -34,6 +35,10 @@ STATUSES = ('VERIFIED', *FAILING, 'MANUAL', 'UNDECLARED')
 VERIFY = re.compile(r'^\s+[-*] Verify:(.*)$')
 INPUTS = re.compile(r'^\s+[-*] Inputs:(.*)$')
 RISK = re.compile(r'^\s+[-*] Accept-risk:(.*)$')
+GOVERNED = re.compile(r'^\s+[-*] Governed-by:(.*)$')
+LINK = re.compile(r'\[((?:[^\]\\]|\\.)+)\]\(\s*(?:<([^<>\s]+)>|([^()\s<>]+))'
+                  r'''(?:\s+(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^()\r\n]*\)))?\s*\)''')
+SCHEME = re.compile(r'^[a-zA-Z][a-zA-Z0-9+.-]*:')
 SCENARIO = re.compile(r'^\s+[-*] Scenario [^:\r\n]+:')
 COMMAND = re.compile(r'^`([^`]*)`$')
 MANUAL = re.compile(r'^manual(?![\w-])\s*[-–—:]?\s*(.*)$')
@@ -52,6 +57,7 @@ class Obligation:
     declared: bool = True
     risk: tuple = ()  # (until, by, reason) of a valid Accept-risk: line
     block_sha256: str = ''
+    governed_by: dict | None = None
 
     @property
     def evidence_globs(self) -> list[str]:
@@ -77,7 +83,7 @@ def parse_risk(value: str) -> tuple | str:
     return until, by[1], reason[1].strip()
 
 
-def parse(rid: str, capability: str, raw: str) -> Obligation:
+def _parse(rid: str, capability: str, raw: str) -> Obligation:
     """The obligation a requirement block declares, or why it is INVALID."""
     found: dict[str, str] = {}
     scenario = False
@@ -132,6 +138,46 @@ def parse(rid: str, capability: str, raw: str) -> Obligation:
     return Obligation(rid, capability, argv=argv, globs=globs, risk=risk)
 
 
+def parse(rid: str, capability: str, raw: str, *, root: Path | None = None) -> Obligation:
+    """Attach declared governance to every obligation outcome without changing its evidence scope."""
+    obligation = _parse(rid, capability, raw)
+    values = []
+    late = False
+    scenario = False
+    for line in raw.splitlines()[1:]:
+        scenario = scenario or bool(SCENARIO.match(line))
+        match = GOVERNED.match(line)
+        if match:
+            values.append(match[1].strip())
+            late = late or scenario
+    if not values:
+        return obligation
+    metadata = {'basis': 'declared', 'reference': values[0]}
+    try:
+        if len(values) != 1 or late:
+            raise ValueError('must appear once, before the first scenario')
+        link = LINK.fullmatch(values[0])
+        if not link or not link[1].strip():
+            raise ValueError('must contain exactly one Markdown link with a nonempty label and target')
+        if root is None:
+            raise ValueError('must have repository context to resolve the decision document')
+        root = root.resolve()
+        bundle = root / 'knowledge'
+        value = unquote((link[2] or link[3]).split('#', 1)[0].split('?', 1)[0])
+        if not value or SCHEME.match(value) or value.startswith('//'):
+            raise ValueError('must link to a local Markdown document within the knowledge bundle')
+        source = bundle / capability.lstrip('/') if capability.startswith('/') else root / capability
+        target = (bundle / value.lstrip('/') if value.startswith('/') else source.parent / value).resolve()
+        if not target.is_relative_to(bundle.resolve()) or not target.is_relative_to(root):
+            raise ValueError('must resolve within the knowledge bundle')
+        if target.suffix != '.md' or not target.is_file():
+            raise ValueError('must resolve to an existing Markdown file')
+        metadata['document'] = target.relative_to(root).as_posix()
+    except (OSError, RuntimeError, ValueError) as error:
+        return dataclasses.replace(obligation, governed_by=metadata, invalid=f'Governed-by: {error}')
+    return dataclasses.replace(obligation, governed_by=metadata)
+
+
 def requirements(root: Path) -> tuple[list[Obligation], list[str]]:
     """Obligations of every structured capability; prose capabilities have none. Diagnostics name unreadable files."""
     directory = root / 'knowledge/capabilities'
@@ -152,7 +198,7 @@ def requirements(root: Path) -> tuple[list[Obligation], list[str]]:
         except (OSError, UnicodeError, ValueError) as error:
             diagnostics.append(f'{relative}: capability cannot be parsed ({error})')
             continue
-        found.extend(dataclasses.replace(parse(rid, relative, block.raw), block_sha256=brownfield.sha(block.raw))
+        found.extend(dataclasses.replace(parse(rid, relative, block.raw, root=root), block_sha256=brownfield.sha(block.raw))
                      for rid, block in blocks.items())
     return found, diagnostics
 
@@ -162,11 +208,6 @@ class Evidence:
     record: str
     index: int
     entry: dict
-
-    @property
-    def order(self) -> tuple:
-        return (str(self.entry.get('at') or ''), self.record, self.index)
-
 
 def evidence(records_dir: Path, state: dict | None) -> tuple[list[Evidence], list[str]]:
     """`req:` ledger entries from committed records and the active state; malformed records contribute nothing."""
@@ -311,8 +352,27 @@ def result(obligation: Obligation, status: str, reason: str, basis: str = 'none'
     if found is not None:
         record = {'record': found.record, 'head': found.entry.get('head'),
                   'at': found.entry.get('at'), 'exit': found.entry.get('exit')}
-    return {'id': obligation.id, 'capability': obligation.capability, 'status': status,
+    item = {'id': obligation.id, 'capability': obligation.capability, 'status': status,
             'basis': basis, 'evidence': record, 'reason': reason}
+    if obligation.governed_by is not None:
+        item['governed_by'] = obligation.governed_by
+    return item
+
+
+def _completion_interval(value: object) -> tuple[int, int]:
+    """UTC completion precision as a half-open integer-microsecond interval."""
+    match = re.fullmatch(
+        r'([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})'
+        r'(?:\.([0-9]{1,6}))?Z', value) if isinstance(value, str) else None
+    if match is None:
+        raise ValueError('unsupported completion timestamp')
+    parts = match.groups()
+    instant = datetime.datetime(*(int(part) for part in parts[:6]))
+    fraction = parts[6] or ''
+    lower = ((instant.toordinal() * 86400 + instant.hour * 3600
+              + instant.minute * 60 + instant.second) * 1000000
+             + int(fraction.ljust(6, '0')))
+    return lower, lower + 10 ** (6 - len(fraction))
 
 
 def evaluate(root: Path, obligation: Obligation, items: list[Evidence], tree: str) -> dict:
@@ -332,7 +392,23 @@ def evaluate(root: Path, obligation: Obligation, items: list[Evidence], tree: st
         if mine:
             return result(obligation, 'UNVERIFIED', f'evidence is for a different command or inputs; {hint}')
         return result(obligation, 'UNVERIFIED', f'no evidence; {hint}')
-    newest = max(matching, key=lambda item: item.order)
+    intervals, invalid = [], []
+    for item in matching:
+        try:
+            lower, upper = _completion_interval(item.entry.get('at'))
+        except ValueError:
+            invalid.append(f'{item.record}#{item.index}')
+        else:
+            intervals.append((item, lower, upper))
+    if invalid:
+        return result(obligation, 'UNVERIFIED', 'reconcile mechanical evidence ordering metadata in '
+                      + ', '.join(sorted(invalid)) + '; a rerun alone cannot order unknown completion time')
+    latest = max(range(len(intervals)), key=lambda index: intervals[index][1])
+    newest, lower, _ = intervals[latest]
+    if any(index != latest and lower < upper for index, (_, _, upper) in enumerate(intervals)):
+        identities = ', '.join(sorted(f'{item.record}#{item.index}' for item in matching))
+        return result(obligation, 'UNVERIFIED', f'mechanical evidence ordering is ambiguous: {identities}; '
+                      f'{hint} after the overlapping completion intervals')
     if newest.entry.get('exit') != 0:
         return result(obligation, 'FAILED', f"newest run exited {newest.entry.get('exit')}", 'mechanical', newest)
     current, text = ledger._entry_verdict(root, newest.entry, tree)
@@ -354,8 +430,8 @@ def selected(globs: list[str], path: str) -> bool:
     return chosen
 
 
-def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(['git', '-C', str(root), *args], capture_output=True, text=True, timeout=60)
+def _git(root: Path, *args: str, binary: bool = False) -> subprocess.CompletedProcess:
+    return subprocess.run(['git', '-C', str(root), *args], capture_output=True, text=not binary, timeout=60)
 
 
 def changed(root: Path, base: str, obligations: list[Obligation]) -> list[tuple[Obligation, str]]:
@@ -385,6 +461,70 @@ def changed(root: Path, base: str, obligations: list[Obligation]) -> list[tuple[
     return listed
 
 
+def touched(root: Path, base: str, obligations: list[Obligation], operated: tuple = ()) -> list[Obligation]:
+    """Gate scope from task-start BASE, including requirement edits; unlike changed(), fail closed."""
+    def git(*args: str) -> str:
+        result = _git(root, *args, binary=True)
+        if result.returncode:
+            raise ValueError('assurance selection failed: ' + decoded_git(result.stderr).strip())
+        return decoded_git(result.stdout)
+
+    def decoded_git(value: bytes | str) -> str:
+        # Preserve blob CRLF and NUL-delimited path bytes; text-mode universal newlines alter both.
+        return value.decode('utf-8') if isinstance(value, bytes) else value
+
+    if not base or base.startswith('-'):
+        raise ValueError('assurance baseline is missing or invalid')
+    try:
+        resolved = git('rev-parse', '--verify', '--quiet', base + '^{commit}').strip()
+    except ValueError as error:
+        raise ValueError(f'assurance baseline {base!r} is not a resolvable commit') from error
+    files = set(git('diff', '--no-renames', '--name-only', '-z', resolved, '--').split('\0'))
+    files.update(git('ls-files', '--others', '--exclude-standard', '-z').split('\0'))
+    files.discard('')
+    baseline = {}
+    paths = git('ls-tree', '-r', '--name-only', '-z', resolved, '--', 'knowledge/capabilities').split('\0')
+    for name in paths:
+        if not name.endswith('.md') or Path(name).name in ('index.md', 'log.md'):
+            continue
+        text = git('show', f'{resolved}:{name}')
+        meta, spans = brownfield.document(text)
+        if meta.get('namespace') and 'requirements' in spans:
+            for rid, block in brownfield.blocks(text, spans['requirements']).items():
+                baseline[name, rid] = brownfield.sha(block.raw)
+    ids = [o.id for o in obligations]
+    if len(ids) != len(set(ids)):
+        raise ValueError('assurance capabilities contain duplicate requirement IDs')
+    return [o for o in obligations if o.id in operated or o.invalid
+            or baseline.get((o.capability, o.id)) != o.block_sha256
+            or (o.declared and (not o.globs or any(selected(o.evidence_globs, name) for name in files)))]
+
+
+def gate_problem(root: Path, state: dict, records_dir: Path, tree: str) -> str | None:
+    """Read-only Verify check; risk and attested annotations do not waive mechanical failures."""
+    try:
+        obligations, diagnostics = requirements(root)
+        if diagnostics:
+            raise ValueError('; '.join(diagnostics))
+        if not obligations:
+            return None
+        operated = tuple(op['id'] for op in (state.get('merge') or {}).get('operations', []))
+        chosen = touched(root, state.get('head'), obligations, operated)
+        items, diagnostics = evidence(records_dir, state)
+        if diagnostics:
+            raise ValueError('; '.join(diagnostics))
+        results = [evaluate(root, o, items, tree) for o in chosen]
+    except (OSError, ValueError, UnicodeError, subprocess.SubprocessError) as error:
+        return f'assurance gate refused: {error}; repair selection/evidence and retry Verify'
+    failing = [item for item in results if item['status'] in FAILING]
+    if failing:
+        return 'assurance gate refused:\n' + '\n'.join(
+            f"  {item['id']} {item['status']}: {item['reason']}; repair invalid declarations if needed, "
+            f"then run `python3 .ai/scripts/lifecycle.py assure --run {item['id']}` and retry Verify"
+            for item in failing)
+    return None
+
+
 def exit_code(results: list[dict], strict: bool, broken: bool) -> int:
     failing = FAILING + (('UNDECLARED',) if strict else ())
     return 1 if broken or any(item['status'] in failing for item in results) else 0
@@ -400,6 +540,8 @@ def render(results: list[dict], diagnostics: list[str], notes: list[str] | tuple
         evidence = item['evidence']
         where = f" head={str(evidence['head'] or '?')[:7]} at={evidence['at']}" if evidence else ''
         lines.append(f"{item['status']:<10} {item['id']} {item['capability']}{where} - {item['reason']}")
+        if 'governed_by' in item:
+            lines.append('    governance (declared, not verified): ' + item['governed_by']['reference'])
         if 'attested' in item:
             att = item['attested']
             lines.append(f"    judgment (attested, not verified): approved review {att['review']} "

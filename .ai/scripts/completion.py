@@ -10,11 +10,13 @@ import sys
 
 import ledger
 import project_context
+import review_guard
 
 
 def okf(root, *args):
-    return subprocess.run([sys.executable, str(root / '.ai/scripts/okf.py'), *args],
-                          cwd=root, capture_output=True, text=True, timeout=60)
+    runner = review_guard.run_owned if args[:1] in (('stamp',), ('log',)) else subprocess.run
+    return runner([sys.executable, str(root / '.ai/scripts/okf.py'), *args],
+                  cwd=root, capture_output=True, text=True, timeout=60)
 
 
 def diagnostic(root, *args):
@@ -32,6 +34,10 @@ def report(root, state, tests):
     if state is None:
         blockers.append('no active lifecycle task')
         return data
+    import review_native
+    issue = review_native.problem(root, state)
+    if issue:
+        blockers.append('mechanical review: ' + issue)
     for stage in ('intent', 'plan', 'review'):
         if stage in lifecycle.REQUIRED[state['tier']] and not lifecycle.complete(state, stage):
             blockers.append(f'missing stage: {stage}')
@@ -97,6 +103,7 @@ def report(root, state, tests):
     return data
 
 
+@review_guard.protected(lambda root, *args, **kwargs: root)
 def apply_bindings(root, state, bindings):
     """Validate the whole request first; never choose a check or rewrite body prose."""
     import lifecycle
@@ -162,6 +169,7 @@ def apply_bindings(root, state, bindings):
     return [f'verified metadata: {doc} from {label}' for doc, label, _ in prepared]
 
 
+@review_guard.protected(lambda args: Path.cwd(), when=lambda args: args.apply)
 def finish(args):
     import lifecycle
     root, state = lifecycle.repo_root(), lifecycle.load(lifecycle.repo_root())

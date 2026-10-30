@@ -81,9 +81,13 @@ class DeltaCase(unittest.TestCase):
     def analyze(self, code=0):
         return self.lc('analyze', str(self.spec), code=code)
 
-    def snapshot(self):
-        return {str(p.relative_to(self.root)): (p.read_bytes(), p.stat().st_mtime_ns)
-                for p in self.root.rglob('*') if p.is_file() and not p.is_symlink()}
+    def snapshot(self, *, protected=False):
+        files = {str(p.relative_to(self.root)): (p.read_bytes(), p.stat().st_mtime_ns)
+                 for p in self.root.rglob('*') if p.is_file() and not p.is_symlink()}
+        if protected:
+            from review_test_support import closed_coordination_snapshot
+            return closed_coordination_snapshot(self.root, files)
+        return files
 
     def approve(self):
         self.lc('tier', 'L2', '--new', '--reason', 'fixture', '--kind', 'feature')
@@ -194,9 +198,9 @@ class MergeCliTests(DeltaCase):  # R5
         log = self.root / 'knowledge/log.md'
         log.unlink()
         log.mkdir()
-        before = self.snapshot()
+        before = self.snapshot(protected=True)
         self.lc('merge', str(self.spec), code=1)
-        self.assertEqual(before, self.snapshot())
+        self.assertEqual(before, self.snapshot(protected=True))
 
     def test_preview_then_approved_apply_and_noop(self):
         before = self.snapshot()
@@ -214,17 +218,19 @@ class MergeCliTests(DeltaCase):  # R5
         self.assertLess(text.index('EXPORT-R9'), text.index('EXPORT-R3'))
         self.assertIn('Keep this prose.', text)
         self.assertTrue(text.endswith('## Notes\n\nKeep these notes.\n'))
-        after = self.snapshot()
+        after = self.snapshot(protected=True)
         self.assertIn('up to date', self.lc('merge', str(self.spec)).stdout)
-        self.assertEqual(after, self.snapshot())
+        self.assertEqual(after, self.snapshot(protected=True))
+        strict = self.snapshot()
         self.assertIn('up to date', self.lc('merge', str(self.spec), '--dry-run').stdout)
+        self.assertEqual(strict, self.snapshot())
 
     def test_apply_edited_spec_refused(self):
         self.approve()
         self.spec.write_text(self.spec.read_text().replace('UTF-16', 'UTF-32'))
-        before = self.snapshot()
+        before = self.snapshot(protected=True)
         self.lc('merge', str(self.spec), code=1)
-        self.assertEqual(before, self.snapshot())
+        self.assertEqual(before, self.snapshot(protected=True))
 
     def test_crlf_unrelated_bytes_preserved(self):
         original = self.cap.read_bytes().replace(b'\n', b'\r\n')
@@ -357,9 +363,9 @@ class ReceiptRecoveryTests(DeltaCase):  # R7
     def test_third_state_refused(self):
         self.interrupted('okf.append_log')
         self.cap.write_text(self.cap.read_text().replace('UTF-16', 'UTF-64'))
-        before = self.snapshot()
+        before = self.snapshot(protected=True)
         self.lc('merge', str(self.spec), code=1)
-        self.assertEqual(before, self.snapshot())
+        self.assertEqual(before, self.snapshot(protected=True))
 
 
 class LifecycleIntegrationTests(DeltaCase):  # R9

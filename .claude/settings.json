@@ -32,11 +32,20 @@
         ]
       },
       {
-        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Delete",
         "hooks": [
           {
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/lifecycle.py\" hook --skip-in-cursor",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\" hook --adapter claude",
             "timeout": 10
           }
         ]
@@ -54,6 +63,11 @@
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/lifecycle.py\" hook --skip-in-cursor",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\" hook --adapter claude",
+            "timeout": 10
           }
         ]
       }
@@ -65,6 +79,50 @@
             "type": "command",
             "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/autonomy_hook.py\"",
             "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\" hook --adapter claude",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\" hook --adapter claude",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\" hook --adapter claude",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\" hook --adapter claude",
+            "timeout": 10
           }
         ]
       }

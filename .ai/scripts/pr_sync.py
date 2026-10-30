@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import okf  # noqa: E402
 import scratch  # noqa: E402
+import review_guard  # noqa: E402
 
 
 class SyncError(Exception):
@@ -58,7 +59,10 @@ class Result:
 
 def _run(command: list[str], cwd: Path, *, check: bool = True) -> subprocess.CompletedProcess[str]:
     try:
-        result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False)
+        mutating = (len(command) > 1 and command[1] in {'fetch', 'worktree', 'merge', 'reset', 'push'}
+                    or command[1:3] in (['pr', 'ready'], ['pr', 'comment']))
+        runner = review_guard.run_owned if mutating else subprocess.run
+        result = runner(command, cwd=cwd, capture_output=True, text=True, check=False)
     except FileNotFoundError as error:
         raise SyncError(f"{command[0]} not found ({error})") from error
     if check and result.returncode != 0:
@@ -101,6 +105,7 @@ def _merge_base_into(worktree: Path, remote: str, base: str, branch: str, number
     return conflicted
 
 
+@review_guard.protected(lambda repo, *args, **kwargs: repo)
 def sync_pr(repo: Path, remote: str, pr: dict[str, object], current: str, dry_run: bool) -> Result:
     number, branch, base = int(pr["number"]), str(pr["headRefName"]), str(pr["baseRefName"])
     if _git(repo, "merge-base", "--is-ancestor", f"{remote}/{base}", f"{remote}/{branch}", check=False).returncode == 0:
@@ -138,6 +143,7 @@ def sync_pr(repo: Path, remote: str, pr: dict[str, object], current: str, dry_ru
             shutil.rmtree(cleanup, ignore_errors=True)
 
 
+@review_guard.protected(lambda bundle, *args, **kwargs: bundle.parent)
 def sync(bundle: Path, remote: str = "origin", *, dry_run: bool = False,
          only_branch: str | None = None) -> list[Result]:
     repo = bundle.parent
@@ -165,7 +171,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         results = sync(okf.find_bundle(args.bundle), args.remote, dry_run=args.dry_run)
-    except (SyncError, okf.OkfError) as error:
+    except (SyncError, okf.OkfError, review_guard.ReviewError) as error:
         print(f"pr_sync: error: {error}", file=sys.stderr)
         return 2
     for result in results:

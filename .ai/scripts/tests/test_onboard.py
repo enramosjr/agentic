@@ -22,6 +22,8 @@ class OnboardE2ETests(unittest.TestCase):
         scripts.mkdir(parents=True)
         shutil.copy2(SCRIPTS / 'okf.py', scripts / 'okf.py')
         shutil.copy2(SCRIPTS / 'learning.py', scripts / 'learning.py')
+        for name in ('review_guard.py', 'scratch.py', 'ledger.py'):
+            shutil.copy2(SCRIPTS / name, scripts / name)
         self.command = [sys.executable, str(scripts / 'okf.py')]
         self.git('init', '-q')
         self.write('alpha/main.py', 'open("SENTINEL", "w").write("bad")\n')
@@ -53,9 +55,13 @@ class OnboardE2ETests(unittest.TestCase):
         self.assertEqual(result.returncode, code, result.stdout + result.stderr)
         return result
 
-    def snapshot(self):
-        return {str(p.relative_to(self.root)): (p.read_bytes(), p.stat().st_mtime_ns)
-                for p in self.root.rglob('*') if p.is_file() and not p.is_symlink()}
+    def snapshot(self, *, protected=False):
+        files = {str(p.relative_to(self.root)): (p.read_bytes(), p.stat().st_mtime_ns)
+                 for p in self.root.rglob('*') if p.is_file() and not p.is_symlink()}
+        if protected:
+            from review_test_support import closed_coordination_snapshot
+            return closed_coordination_snapshot(self.root, files)
+        return files
 
     def test_cited_drafts_validate_and_second_run_is_noop(self):
         self.cli('onboard')
@@ -75,9 +81,9 @@ class OnboardE2ETests(unittest.TestCase):
                 self.assertTrue((doc.path.parent / source['resource']).is_file())
         self.assertFalse((self.root / 'SENTINEL').exists())
         self.cli('validate')
-        before = self.snapshot()
+        before = self.snapshot(protected=True)
         self.cli('onboard')
-        self.assertEqual(before, self.snapshot())
+        self.assertEqual(before, self.snapshot(protected=True))
 
     def test_existing_one_document_kept_byte_equal(self):
         existing = b'---\ntype: Architecture\n---\n# Ours\n'
@@ -88,16 +94,16 @@ class OnboardE2ETests(unittest.TestCase):
 
     def test_preflight_refusal_before_initialization(self):
         (self.root / 'knowledge/capabilities/repository-inventory.md').mkdir(parents=True)
-        before = self.snapshot()
+        before = self.snapshot(protected=True)
         self.cli('onboard', code=1)
-        self.assertEqual(before, self.snapshot())
+        self.assertEqual(before, self.snapshot(protected=True))
         self.assertFalse((self.root / 'knowledge/index.md').exists())
 
     def test_reserved_index_directory_refused_without_initialization(self):
         (self.root / 'knowledge/index.md').mkdir(parents=True)
-        before = self.snapshot()
+        before = self.snapshot(protected=True)
         self.cli('onboard', code=1)
-        self.assertEqual(before, self.snapshot())
+        self.assertEqual(before, self.snapshot(protected=True))
         self.assertFalse((self.root / 'knowledge/log.md').exists())
 
     def test_empty_categories_are_not_inferred(self):
