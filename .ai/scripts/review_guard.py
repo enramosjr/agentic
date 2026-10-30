@@ -822,6 +822,12 @@ def lifecycle_root_help(command: str) -> bool:
 
 
 def command_mutates(command: str) -> bool:
+    import pr_hook
+    try:
+        if pr_hook.recognize(command):
+            return True
+    except pr_hook.RoutingError:
+        return True  # operation_roots turns unsupported PR routing into denial.
     if lifecycle_root_help(command):
         return False
     try:
@@ -863,8 +869,6 @@ def command_mutates(command: str) -> bool:
             return True
         if name == 'artifacts.py' and remaining[:1] != ['verify']:
             return True
-        if name == 'gh' and remaining[:2] in (['pr', 'create'], ['pr', 'ready']):
-            return True
     return False
 
 
@@ -877,7 +881,15 @@ def tool_mutates(data: dict) -> bool:
 
 def operation_roots(data: dict) -> list[Path]:
     """Resolve recognized explicit targets; Git metadata/non-Git scratch is separate."""
+    import pr_hook
     values = data.get('tool_input') or {}
+    if data.get('tool_name') not in EDIT_TOOLS:
+        try:
+            invocation = pr_hook.recognize(values.get('command') or data.get('command') or '')
+            if invocation:
+                return [pr_hook.operation(data, invocation)[1]]
+        except pr_hook.RoutingError as error:
+            raise ReviewError(str(error)) from error
     base = Path(data.get('cwd') or os.getcwd()).expanduser()
     if 'workdir' in values:
         workdir = values['workdir']

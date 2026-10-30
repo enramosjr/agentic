@@ -43,6 +43,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import scratch  # noqa: E402
 import review_guard  # noqa: E402
+import pr_hook  # noqa: E402
 
 
 def lazy(name: str):
@@ -81,7 +82,6 @@ EDIT_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "NotebookEdit", "apply_pat
 SPEC_SECTIONS = ("requirements", "acceptance", "non-goals", "open questions")
 REQ_LINE = re.compile(r"^\s*[-*]\s*`?(R\d+)`?\s*[:.)–—-]\s*(.+?)\s*$")
 HOOK_COMMIT = re.compile(r"\bgit\s+(?:-\S+\s+(?:\S+\s+)?)*commit(?![-\w])")
-HOOK_PR = re.compile(r"\bgh\s+pr\s+(?:create|ready)\b")
 HOOK_WIP = re.compile(r"""(?:-[a-zA-Z]*m|--message)[ =]*["']?wip:""")  # Only a message that starts with `wip:` is exempt.
 HOOK_ADD = re.compile(r"\bgit\s+add\b([^;&|]*)")
 RECORD_DIR = "knowledge/history/lifecycle"
@@ -1551,6 +1551,10 @@ def git_commit_directory(command: str) -> tuple[list[str], str] | None:
 
 def operation_directory(data: dict, git_directories: list[str]) -> tuple[Path, Path]:
     """Select the operation directory; invalid explicit targets fail closed."""
+    if data.get('tool_name') in ('Bash', 'Shell'):
+        invocation = pr_hook.recognize((data.get('tool_input') or {}).get('command') or '')
+        if invocation:
+            return pr_hook.operation(data, invocation)
     roots = data.get("workspace_roots") or []
     directory = Path(data.get("cwd") or os.environ.get("CLAUDE_PROJECT_DIR") or (roots[0] if roots else "") or os.getcwd())
     tool_input = data.get("tool_input") or {}
@@ -1623,7 +1627,7 @@ def hook_problem(data: dict, root: Path, directory: Path | None = None) -> str |
     command = (data.get("tool_input") or {}).get("command")
     if tool in ("Bash", "Shell") and isinstance(command, str):
         committing = bool(HOOK_COMMIT.search(command)) and not HOOK_WIP.search(command)
-        if committing or HOOK_PR.search(command):
+        if committing or pr_hook.recognize(command):
             if not active:
                 return NO_TIER
             problem = gate_problem(state, "commit")
@@ -1746,6 +1750,13 @@ def cmd_hook(args: argparse.Namespace) -> int:
     if event == 'beforeShellExecution':
         data = {**data, 'tool_name': 'Shell', 'tool_input': {
             **(data.get('tool_input') or {}), 'command': data.get('command')}}
+    command = (data.get('tool_input') or {}).get('command')
+    try:
+        invocation = (pr_hook.recognize(command) if data.get('tool_name') in ('Bash', 'Shell')
+                      and isinstance(command, str) else None)
+    except pr_hook.RoutingError as error:
+        emit(data, 'PreToolUse', str(error))
+        return 0
     # The task's opt-in freeze precedes legacy lifecycle bypass flags and Markdown exemptions.
     if event.lower() != 'sessionstart' and review_guard.tool_mutates(data):
         try:
@@ -1754,11 +1765,11 @@ def cmd_hook(args: argparse.Namespace) -> int:
                 if problem:
                     emit(data, 'PreToolUse', problem)
                     return 0
-        except (LifecycleError, review_guard.ReviewError, learning.LearningError) as error:
+        except (LifecycleError, review_guard.ReviewError, learning.LearningError, pr_hook.RoutingError) as error:
             emit(data, 'PreToolUse', str(error))
             return 0
     command = (data.get('tool_input') or {}).get('command')
-    if isinstance(command, str) and (HOOK_COMMIT.search(command) or HOOK_PR.search(command)):
+    if isinstance(command, str) and (HOOK_COMMIT.search(command) or invocation):
         try:
             targets = review_guard.operation_roots(data)
             for target in targets:
@@ -1778,7 +1789,7 @@ def cmd_hook(args: argparse.Namespace) -> int:
                 if problem:
                     emit(data, 'PreToolUse', problem)
                     return 0
-        except (LifecycleError, review_guard.ReviewError, learning.LearningError) as error:
+        except (LifecycleError, review_guard.ReviewError, learning.LearningError, pr_hook.RoutingError) as error:
             emit(data, 'PreToolUse', str(error))
             return 0
     if event.lower() != "sessionstart":
@@ -1800,7 +1811,7 @@ def cmd_hook(args: argparse.Namespace) -> int:
             data = {**data, "tool_input": {**data["tool_input"], "command": git_commit[1]}}
             command = git_commit[1]
         if (data.get("tool_name") in ("Bash", "Shell") and isinstance(command, str)
-                and not HOOK_COMMIT.search(command) and not HOOK_PR.search(command)):
+                and not HOOK_COMMIT.search(command) and not invocation):
             emit(data, "PreToolUse", None)
             return 0
         if event.lower() == "sessionstart":
@@ -1814,7 +1825,7 @@ def cmd_hook(args: argparse.Namespace) -> int:
             directory, root = operation_directory(data, git_commit[0] if git_commit else [])
             problem = hook_problem(data, root, directory)
             emit(data, "PreToolUse", f"worktree {root}: {problem}" if problem else None)
-    except LifecycleError as error:
+    except (LifecycleError, pr_hook.RoutingError) as error:
         if event.lower() != 'sessionstart':
             emit(data, 'PreToolUse', str(error))
     except learning.LearningError as error:

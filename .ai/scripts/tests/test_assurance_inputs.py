@@ -627,7 +627,7 @@ WIRING_JSON = ['.claude/settings.json', '.codex/hooks.json', '.cursor/hooks.json
 WIRING_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**', *WIRING_TESTS, *WIRING_JSON]
 WIRING_IMPORTS = ['.ai/scripts/' + name + '.py' for name in
                   ('scratch', 'lifecycle', 'review_guard', 'ledger', 'brownfield', 'okf',
-                   'learning', 'scan', 'project_context', 'assurance')]
+                   'learning', 'scan', 'project_context', 'assurance', 'pr_hook')]
 
 
 class HarnessWiringFixture(Fixture):
@@ -979,12 +979,13 @@ REPORT_DOCS = ['.claude/agents/reviewer.md', '.codex/agents/reviewer.toml',
 REPORT_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**', *REPORT_TESTS, *REPORT_DOCS]
 REPORT_IMPORTS = ['.ai/scripts/' + name + '.py' for name in
                   ('scratch', 'lifecycle', 'review_guard', 'ledger', 'brownfield', 'okf',
-                   'learning', 'scan', 'project_context', 'assurance')]
+                   'learning', 'scan', 'project_context', 'assurance', 'pr_hook')]
 REPORT_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
     '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
     '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '048f391c166ffb58b8ba1d769ca287adc78d5c155a28bebba043e0d93a30e1ca',
+    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
+    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
     '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
 }
@@ -1109,7 +1110,7 @@ class ReviewerReportDependencyTests(ReviewerReportFixture):  # R2
         for name, addition in [(REPORT_TESTS[0], '\nimport unreviewed_report_helper\n'),
                                (REPORT_TESTS[0], 'text-body'),
                                *[(p, '\nfrom pathlib import Path as AddedPath\nAddedPath("unrelated.md").read_text()\n')
-                                 for p in [*REPORT_TESTS, *REPORT_IMPORTS[:4]]]]:
+                                 for p in [*REPORT_TESTS, *REPORT_IMPORTS[:4], '.ai/scripts/pr_hook.py']]]:
             with self.subTest(name=name, addition=addition):
                 case = ReviewerReportDependencyTests('test_order_scope_and_independent_oracle')
                 setup = case.setUp
@@ -1148,7 +1149,7 @@ class ReviewerReportDependencyTests(ReviewerReportFixture):  # R2
     def test_order_scope_and_independent_oracle(self):
         value = self.suggestion()
         actual_setup = {p: report_setup_digest(self.root / p)
-                        for p in [*REPORT_TESTS, *REPORT_IMPORTS[:4]]}
+                        for p in [*REPORT_TESTS, *REPORT_IMPORTS[:4], '.ai/scripts/pr_hook.py']}
         self.assertEqual(actual_setup, REPORT_SETUP_PINS,
                          'review report import-time boundary: ' + repr(actual_setup))
         self.assertEqual(value['inputs'], REPORT_INPUTS)
@@ -1588,7 +1589,8 @@ INSTALLER_DOC_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
     '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
     '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '048f391c166ffb58b8ba1d769ca287adc78d5c155a28bebba043e0d93a30e1ca',
+    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
+    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
     '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
 }
@@ -1642,7 +1644,7 @@ class InstallerDocDependencyTests(InstallerDocFixture):  # R2
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (INSTALLER_DOC_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 13)
+        self.assertEqual(len(variants), 14)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = InstallerDocDependencyTests('test_order_scope_and_independent_oracle')
@@ -2048,7 +2050,8 @@ VALIDATION_POLICY_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
     '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
     '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '048f391c166ffb58b8ba1d769ca287adc78d5c155a28bebba043e0d93a30e1ca',
+    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
+    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
     '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
 }
@@ -2102,7 +2105,7 @@ class ValidationPolicyDependencyTests(ValidationPolicyFixture):  # R2
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (VALIDATION_POLICY_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 13)
+        self.assertEqual(len(variants), 14)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = ValidationPolicyDependencyTests('test_order_scope_and_independent_oracle')
@@ -2511,7 +2514,8 @@ AUDIT_DOC_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
     '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
     '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '048f391c166ffb58b8ba1d769ca287adc78d5c155a28bebba043e0d93a30e1ca',
+    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
+    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
     '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
 }
@@ -2576,7 +2580,7 @@ class AuditDocDependencyTests(AuditDocFixture):  # R2
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (AUDIT_DOC_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 13)
+        self.assertEqual(len(variants), 14)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = AuditDocDependencyTests('test_order_scope_and_independent_oracle')
@@ -2987,7 +2991,8 @@ ANALYSIS_CONVERGENCE_DOC_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
     '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
     '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '048f391c166ffb58b8ba1d769ca287adc78d5c155a28bebba043e0d93a30e1ca',
+    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
+    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
     '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
 }
@@ -3066,7 +3071,7 @@ class AnalysisConvergenceDocDependencyTests(AnalysisConvergenceDocFixture):  # R
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (ANALYSIS_CONVERGENCE_DOC_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 13)
+        self.assertEqual(len(variants), 14)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = AnalysisConvergenceDocDependencyTests('test_order_scope_and_independent_oracle')
@@ -3482,7 +3487,8 @@ STAGE_DOC_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
     '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
     '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '048f391c166ffb58b8ba1d769ca287adc78d5c155a28bebba043e0d93a30e1ca',
+    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
+    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
     '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
 }
@@ -3561,7 +3567,7 @@ class StageDocDependencyTests(StageDocFixture):  # R2
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (STAGE_DOC_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 13)
+        self.assertEqual(len(variants), 14)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = StageDocDependencyTests('test_order_scope_and_independent_oracle')
@@ -4018,7 +4024,8 @@ TIER_DOC_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
     '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
     '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '048f391c166ffb58b8ba1d769ca287adc78d5c155a28bebba043e0d93a30e1ca',
+    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
+    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
     '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
 }
@@ -4550,7 +4557,8 @@ ASSURANCE_DOC_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
     '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
     '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '048f391c166ffb58b8ba1d769ca287adc78d5c155a28bebba043e0d93a30e1ca',
+    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
+    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
     '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
 }
@@ -5071,7 +5079,8 @@ AGENTS_BUDGET_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
     '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
     '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '048f391c166ffb58b8ba1d769ca287adc78d5c155a28bebba043e0d93a30e1ca',
+    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
+    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
     '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
 }
@@ -5559,7 +5568,8 @@ SEMANTIC_LENS_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
     '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
     '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '048f391c166ffb58b8ba1d769ca287adc78d5c155a28bebba043e0d93a30e1ca',
+    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
+    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
     '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
 }
@@ -5635,7 +5645,7 @@ for path, body in ((".ai/agents/reviewer.md#Passes", passes), (".claude/skills/r
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (SEMANTIC_LENS_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 14)
+        self.assertEqual(len(variants), 15)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = SemanticLensDependencyTests('test_order_scope_and_independent_oracle')
@@ -6170,7 +6180,8 @@ SKILL_FRONTMATTER_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
     '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
     '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '048f391c166ffb58b8ba1d769ca287adc78d5c155a28bebba043e0d93a30e1ca',
+    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
+    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
     '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
 }
@@ -6228,7 +6239,7 @@ class SkillFrontmatterDependencyTests(SkillFrontmatterFixture):  # R2
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (SKILL_FRONTMATTER_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 14)
+        self.assertEqual(len(variants), 15)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = SkillFrontmatterDependencyTests('test_order_scope_and_independent_oracle')

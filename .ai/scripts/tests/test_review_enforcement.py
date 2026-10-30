@@ -569,6 +569,30 @@ class CompatibilityTests(NativeCase):  # R8
 
 
 class ReadOnlyTests(NativeCase):  # R3
+    def test_pr_prefix_native_callback_uses_target_freeze(self):
+        from unittest import mock
+        self.prepare_native('codex')
+        other = self.root.parent / 'pr-target'
+        other.mkdir()
+        subprocess.run(['git', 'init', '-q', str(other)], check=True)
+        with guard.transaction(other) as value:
+            value['interval'] = {'phase': 'active', 'task': 'other'}
+        before = guard.read(other)
+        tool = {'tool_name': 'Bash', 'tool_input': {
+                    'command': f'cd {other} && gh pr create'}, 'tool_use_id': 'pr-target'}
+
+        def assert_target_denied():
+            with self.assertRaisesRegex(guard.ReviewError, 'active review'):
+                self.event('PreToolUse', **tool)
+
+        assert_target_denied()
+        self.assertEqual(guard.read(other), before)
+        # A deliberately broken resolver must fail the same acceptance oracle.
+        with mock.patch.object(guard, 'operation_roots', return_value=[self.root]):
+            with self.assertRaises(AssertionError):
+                assert_target_denied()
+            self.event('PostToolUseFailure', **tool)
+
     def test_root_help_is_read_only_through_active_hooks_and_actual_cli(self):
         import lifecycle
         self.prepare_native('codex')
