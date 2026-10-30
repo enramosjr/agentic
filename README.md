@@ -4,9 +4,9 @@
 
 **Agent Governance, Execution, Navigation, Tooling, Integration, and Coordination**
 
-A vendor-neutral framework for governing, orchestrating, and standardizing autonomous AI software engineering workflows.
+A vendor-neutral framework for governing AI software engineering, from a bounded change to a multi-session autonomous milestone.
 
-*Right-sized process for your coding agent, enforced by the repository instead of requested in a prompt.*
+*Right-sized process, living requirements, and verification evidence that stays tied to the code.*
 
 </div>
 
@@ -20,6 +20,8 @@ Most agent workflows are a set of instructions the agent is asked to follow. A l
 - **Process is right-sized.** A typo does not get a spec and a feature does not get a one-line note. Four tiers (L0 to L3) scale the ceremony, and the agent must escalate the moment it finds a contract, schema, security, or dependency effect.
 - **Claims need evidence.** A bug fix starts from a failing test and records red, then green. "Done" requires an end-to-end check that fails if the success criteria are unmet. Stubs, vacuous tests, and inflated verification notes are prohibited.
 - **The repository is the memory.** An Open Knowledge Format bundle in `knowledge/` is the context the next agent or contributor starts from, and changes cannot be called complete until it is synchronized and logged.
+- **Verification stays current.** Living requirements can declare checks and their inputs. Assurance reports distinguish current passing evidence from stale, failed, missing, or invalid evidence, and L2/L3 adopter verification blocks on affected mechanical obligations that are not satisfied.
+- **Learning carries forward.** Task retrospectives preserve observations with evidence and surface relevant lessons in later sessions. Turning an observation into a binding project rule requires human approval.
 - **It scales to unattended work.** A work queue, recovery checkpoints, and a supervised driver run multi-session milestones against frozen acceptance criteria, one pull request per milestone.
 
 ## How it works
@@ -49,7 +51,7 @@ If it tries to skip a stage, the hook says no and names the missing one. Approva
 | Add or change behavior or a contract | **L2** | Approved spec, full plan, isolated branch, independent review, slice E2E, then the full gate once. |
 | Run queued or autonomous work | **L3** | The queue is the artifact set: frozen acceptance criteria, a batch plan, and a reviewer who gates DONE. |
 
-The agent picks the lowest tier whose conditions hold, and it cannot lower a tier you set. Tiers scale the spec, plan, review, and gate breadth. They never relax the evidence rules.
+The agent picks the lowest tier whose conditions hold, and it cannot lower a tier you set. Tiers scale the spec, plan, review, and gate breadth. They never relax the evidence rules. Test-first applies to logic and bug fixes; documentation-only changes use focused document checks.
 
 ## Quick start
 
@@ -116,6 +118,44 @@ Invoke state-mutating lifecycle commands directly. Wrapping them in
 and ledger evidence; read-only inspection and independent fixture repositories
 remain supported. See the [distributed lifecycle guide](.ai/docs/lifecycle.md).
 
+## Capabilities beyond the task checklist
+
+### Living requirements and safe changes
+
+Structured capabilities use stable requirement IDs and named scenarios. Changes to an existing capability are expressed as an approved delta: additions, modifications, and removals pinned to the requirement blocks being changed. `lifecycle.py merge SPEC --dry-run` previews the result; applying it checks the approved baseline, preserves unrelated requirements, and records a recoverable merge receipt. Existing prose capabilities remain supported and are not converted automatically. See [brownfield deltas](.ai/lifecycle.md#brownfield-deltas).
+
+`lifecycle.py analyze SPEC` checks a specification before approval. After implementation, `lifecycle.py converge SPEC` executes its acceptance commands, records each outcome, and supplies the convergence evidence required for L2+ review and verification. A manual acceptance item needs reviewed evidence; it does not become an automated PASS.
+
+### Requirement assurance and architecture checks
+
+A capability requirement can declare a `Verify:` command and `Inputs:` globs. From an adopting project's root:
+
+```sh
+python3 .ai/scripts/lifecycle.py assure
+python3 .ai/scripts/lifecycle.py assure --changed --base HEAD
+python3 .ai/scripts/lifecycle.py assure --run EXPORT-R1
+```
+
+Use an actual requirement ID in place of `EXPORT-R1`. The first two commands report without running checks; the last explicitly executes the selected obligation and records evidence in an active task. Reports distinguish **VERIFIED**, **STALE**, **FAILED**, **UNVERIFIED**, **INVALID**, **MANUAL**, and **UNDECLARED**. L2/L3 adopter Verify blocks affected requirements with stale, failed, missing, or invalid mechanical evidence. Manual judgments and recorded risk acceptance remain visible and cannot waive those failures.
+
+`Governed-by:` links a requirement to an architecture decision or other knowledge document. Pair it with a real checker to enforce a dependency boundary or another architectural constraint, and include the decision in `Inputs:` if its edits should invalidate evidence. The link declares provenance; the check and its declared inputs determine what was verified. See [assurance status](.ai/lifecycle.md#assurance-status) and [governed architecture constraints](.ai/lifecycle.md#governed-architecture-constraints).
+
+### Reusable evidence and qualified artifacts
+
+`lifecycle.py run` records command results with input and runtime fingerprints. `reuse` tells the agent whether a passing result still covers the candidate. Supported Python and Cargo checks have conservative inferred scopes; explicit `--inputs` and reviewed [Python input profiles](.ai/lifecycle.md#python-validation-input-profiles) support narrower declarations. Unknown commands retain a conservative whole-tree fallback. Evidence only covers the captured inputs and runtime identity.
+
+For checks against a specific built artifact, `artifacts.py freeze` seals declared files in a separate bundle. `artifacts.py run` verifies their pinned hashes before and after execution; `variant` creates a separate, unqualified copy for mutation checks. See [qualified artifacts](.ai/docs/lifecycle.md#qualified-artifacts).
+
+### Review provenance and completion
+
+Ordinary independent review is part of L2+. An additional, opt-in [mechanically bound review mode](.ai/lifecycle.md#mechanically-bound-review-opt-in) supports Claude and Codex native capture: it pins the candidate, approved artifacts, convergence, evidence, and reviewer identity, and blocks recognized writers during review. Missing or mismatched capture refuses advancement. This mode requires supported native hooks and an identifiable Linux launcher; scripted adapter tests alone do not qualify native delivery. It is an operational integrity boundary, not an OS sandbox.
+
+`lifecycle.py finish --json` consolidates completion blockers. `finish --apply` can perform supported bookkeeping and record Verify from existing passing evidence through the normal gates. It does not run application tests or supply a missing review. See [completion](.ai/docs/lifecycle.md#one-completion-operation).
+
+### Retrospectives and approved project rules
+
+At L1–L3, the agent closes a retrospective before Verify, selecting evidence-backed lessons or recording why there are none. `learn` captures observations; `observations --query TEXT` retrieves relevant ones for later work. Only human-approved `promote` and `retire` operations change binding project rules. See the [learning contract](.ai/docs/learning-loop.md) and [workflow](.ai/docs/learning-loop-playbook.md).
+
 ## Autonomous execution
 
 For milestone-sized work that outlives a single conversation:
@@ -142,10 +182,13 @@ Read the [autonomous execution protocol](.ai/autonomous-execution.md), especiall
 
 | Script | Purpose |
 | --- | --- |
-| `lifecycle.py` | Declare tiers, record and gate stages; `run` and `reuse` keep scoped evidence, `finish` consolidates completion blockers and explicit evidence-backed bookkeeping |
+| `lifecycle.py` | Gate stages; analyze, converge and merge specs; report requirement assurance; record scoped evidence, reviews, retrospectives and completion |
 | `okf.py` | Read, search, validate, and update the knowledge bundle; `sync-check` and `stamp verified --run` make Gate 3 mechanical; queue, checkpoint, and handoff |
 | `repo.py` | Bounded file tools plus read-only `context`, actual command help and Markdown heading discovery |
 | `artifacts.py` | Seal declared artifacts, verify hash-pinned acceptance inputs and create separate unqualified mutation copies |
+| `assurance_inputs.py` | Export reviewed input declarations for supported Python checks without executing them or changing evidence |
+| `assurance_demo.py` / `assurance_architecture_demo.py` | Exercise evidence freshness and a forbidden dependency in disposable fixture repositories |
+| `validation_select.py` | Select focused validation from changed paths |
 | `shell_guard.py` | Rejects shell patterns that waste tokens or bypass the structured tools |
 | `autonomy_driver.py` and friends | Supervised multi-session execution and out-of-session validation |
 | `lifecycle_eval.py` | Scenario evals (L0 to L3) you can run against a real agent |
@@ -163,14 +206,15 @@ Read the [autonomous execution protocol](.ai/autonomous-execution.md), especiall
 
 ## Validating AGENTIC itself
 
-Changes under `.ai/scripts/` run the regression suite, which also checks lifecycle documents, registrations, skills, hooks, and scripted-agent evals. Its workflow tests need fixtures outside system temporary storage, because the scratch policy rejects `/tmp`:
+Changes under `.ai/scripts/` run the regression suite, which also checks lifecycle documents, registrations, skills, hooks, and scripted-agent evals. The parallel runner uses disk-backed scratch for workflow fixtures:
 
 ```sh
-mkdir -p .git/okf-test-tmp
-PYTHONDONTWRITEBYTECODE=1 TMPDIR="$PWD/.git/okf-test-tmp" python3 -m unittest discover -s .ai/scripts/tests
+python3 .ai/scripts/lifecycle.py run governance-suite -- python3 .ai/scripts/run_tests.py -j 4
 ```
 
 In a project that uses AGENTIC, `python3 .ai/scripts/okf.py records` checks that project's knowledge bundle. The suite above covers the framework only. It does not establish the correctness of your application, which keeps its own build, lint, and end-to-end commands.
+
+Scripted-agent evaluations exercise harness mechanics. They do not establish a real model's qualification for unattended work; the real-model baseline remains on hold pending explicit qualification and supervision requirements. Installation does not authorize or launch that work.
 
 ## Attribution
 
