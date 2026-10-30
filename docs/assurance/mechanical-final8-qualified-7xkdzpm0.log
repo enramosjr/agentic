@@ -1,0 +1,16 @@
+test_driver_filename_operands_keep_the_native_mutation_lease (test_review_enforcement.ReadOnlyTests.test_driver_filename_operands_keep_the_native_mutation_lease) ... FAIL
+
+======================================================================
+FAIL: test_driver_filename_operands_keep_the_native_mutation_lease (test_review_enforcement.ReadOnlyTests.test_driver_filename_operands_keep_the_native_mutation_lease)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-7xkdzpm0/.ai/scripts/tests/test_review_enforcement.py", line 644, in test_driver_filename_operands_keep_the_native_mutation_lease
+    self.assertTrue(guard.read(self.root)['writers'])
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {} is not true
+
+----------------------------------------------------------------------
+Ran 1 test in 1.203s
+
+FAILED (failures=1)
+timing: {"elapsed_seconds": 1.315, "exit_code": 1, "finished_at": "2026-10-28T22:24:46.449184+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T22:24:45.134241+00:00"}

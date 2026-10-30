@@ -1,0 +1,11 @@
+run assurance-2-framework: exit=1 tree=d17338e
+    ======================================================================
+    FAIL: test_assurance_measure.ReportOnlyTests.test_protected_files_unchanged
+    ----------------------------------------------------------------------
+    Traceback (most recent call last):
+      File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_assurance_measure.py", line 273, in test_protected_files_unchanged
+        self.assertEqual((SCRIPTS / name).read_bytes(), original, name)
+        ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    AssertionError: b'#!/[17373 chars]: str, binary: bool = False) -> subprocess.Com[7796 chars]ta\n' != b'#!/[17373 chars]: str) -> subprocess.CompletedProcess:\n    re[4086 chars]ta\n' : assurance.py
+    
+    Ran 737 tests in 61.3s with 8 workers: FAILED (failures=1)

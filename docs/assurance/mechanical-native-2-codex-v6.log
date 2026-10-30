@@ -1,0 +1,7 @@
+run assurance-2-real-agent: exit=1 tree=5d42a15
+    ERROR control-delta repeat 1
+      - agent failed: command exit 2
+    0/1 passed
+    lifecycle_eval: unqualified real-agent provenance or execution errors
+    lifecycle_eval: report explicitly unqualified
+    lifecycle_eval: attempt identity disagrees with pinned model/effort/CLI

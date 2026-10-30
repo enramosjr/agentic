@@ -1,0 +1,1690 @@
+[
+  {
+    "id": 1,
+    "result": {
+      "userAgent": "Codex Desktop/0.162.1 (CachyOS Linux Rolling Release; x86_64) dumb (assurance_scope_readonly; 1)",
+      "codexHome": "/home/enramosjr/.codex",
+      "platformFamily": "unix",
+      "platformOs": "linux"
+    }
+  },
+  {
+    "method": "remoteControl/status/changed",
+    "params": {
+      "status": "disabled",
+      "serverName": "white-power",
+      "installationId": "16d9c774-f741-4733-bb83-800049fe44d8",
+      "environmentId": null
+    },
+    "emittedAtMs": 1793204297467
+  },
+  {
+    "id": 2,
+    "result": {
+      "data": [
+        {
+          "cwd": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/codex-capability-scope-2/fixture",
+          "hooks": [
+            {
+              "key": "/home/enramosjr/Projects/agentic/.codex/hooks.json:pre_tool_use:0:0",
+              "eventName": "preToolUse",
+              "handlerType": "command",
+              "command": "python3 \"$(git rev-parse --show-toplevel)/.ai/scripts/shell_guard.py\"",
+              "async": false,
+              "matcher": "Bash",
+              "timeoutSec": 10,
+              "statusMessage": "Checking shell command",
+              "additionalContextLimit": null,
+              "sourcePath": "/home/enramosjr/Projects/agentic/.codex/hooks.json",
+              "source": "project",
+              "pluginId": null,
+              "displayOrder": 0,
+              "enabled": true,
+              "isManaged": false,
+              "currentHash": "sha256:dc9ce7b16acf959ae4e3b53be1c61b90f8542811019b328364612685c7f81fae",
+              "trustStatus": "trusted"
+            },
+            {
+              "key": "/home/enramosjr/Projects/agentic/.codex/hooks.json:pre_tool_use:0:1",
+              "eventName": "preToolUse",
+              "handlerType": "command",
+              "command": "python3 \"$(git rev-parse --show-toplevel)/.ai/scripts/lifecycle.py\" hook",
+              "async": false,
+              "matcher": "Bash",
+              "timeoutSec": 10,
+              "statusMessage": "Checking lifecycle stage",
+              "additionalContextLimit": null,
+              "sourcePath": "/home/enramosjr/Projects/agentic/.codex/hooks.json",
+              "source": "project",
+              "pluginId": null,
+              "displayOrder": 1,
+              "enabled": true,
+              "isManaged": false,
+              "currentHash": "sha256:c07aab8011a7d67850352878c75d5e48008731ab6a062d193310046cea3cc7da",
+              "trustStatus": "trusted"
+            },
+            {
+              "key": "/home/enramosjr/Projects/agentic/.codex/hooks.json:pre_tool_use:1:0",
+              "eventName": "preToolUse",
+              "handlerType": "command",
+              "command": "python3 \"$(git rev-parse --show-toplevel)/.ai/scripts/lifecycle.py\" hook",
+              "async": false,
+              "matcher": "apply_patch|Edit|Write",
+              "timeoutSec": 10,
+              "statusMessage": "Checking lifecycle stage",
+              "additionalContextLimit": null,
+              "sourcePath": "/home/enramosjr/Projects/agentic/.codex/hooks.json",
+              "source": "project",
+              "pluginId": null,
+              "displayOrder": 2,
+              "enabled": true,
+              "isManaged": false,
+              "currentHash": "sha256:c3baf29a190eb54aca3d973c1349ebd26bc6582fb10cfb55ea704b6b794a40a3",
+              "trustStatus": "trusted"
+            },
+            {
+              "key": "/home/enramosjr/Projects/agentic/.codex/hooks.json:session_start:0:0",
+              "eventName": "sessionStart",
+              "handlerType": "command",
+              "command": "python3 \"$(git rev-parse --show-toplevel)/.ai/scripts/lifecycle.py\" hook",
+              "async": false,
+              "matcher": null,
+              "timeoutSec": 10,
+              "statusMessage": "Loading lifecycle router",
+              "additionalContextLimit": null,
+              "sourcePath": "/home/enramosjr/Projects/agentic/.codex/hooks.json",
+              "source": "project",
+              "pluginId": null,
+              "displayOrder": 3,
+              "enabled": true,
+              "isManaged": false,
+              "currentHash": "sha256:8f07a2e4ce3da0319d9102467f06730f8289f8df9012b22ec28a30ed43895320",
+              "trustStatus": "trusted"
+            },
+            {
+              "key": "/<session-flags>/config.toml:subagent_start:0:0",
+              "eventName": "subagentStart",
+              "handlerType": "command",
+              "command": "/usr/bin/python3 /home/enramosjr/Projects/agentic-assurance-7/docs/assurance/codex-capability-scope-2/hook-probe.py",
+              "async": false,
+              "matcher": null,
+              "timeoutSec": 5,
+              "statusMessage": null,
+              "additionalContextLimit": null,
+              "sourcePath": "/<session-flags>/config.toml",
+              "source": "sessionFlags",
+              "pluginId": null,
+              "displayOrder": 4,
+              "enabled": true,
+              "isManaged": false,
+              "currentHash": "sha256:e857cfa5e684ab0b71384491b41ff4e2a8824a7200cfd31a80662f0f34dc2570",
+              "trustStatus": "untrusted"
+            },
+            {
+              "key": "/<session-flags>/config.toml:subagent_stop:0:0",
+              "eventName": "subagentStop",
+              "handlerType": "command",
+              "command": "/usr/bin/python3 /home/enramosjr/Projects/agentic-assurance-7/docs/assurance/codex-capability-scope-2/hook-probe.py",
+              "async": false,
+              "matcher": null,
+              "timeoutSec": 5,
+              "statusMessage": null,
+              "additionalContextLimit": null,
+              "sourcePath": "/<session-flags>/config.toml",
+              "source": "sessionFlags",
+              "pluginId": null,
+              "displayOrder": 5,
+              "enabled": true,
+              "isManaged": false,
+              "currentHash": "sha256:49a0f9ed22e182ed80191646ccdee49797b4608b98569fd4adae8c3bb3ad8db3",
+              "trustStatus": "untrusted"
+            }
+          ],
+          "warnings": [],
+          "errors": []
+        }
+      ]
+    }
+  },
+  {
+    "id": 3,
+    "result": {
+      "config": {
+        "model": "gpt-6.1-sol",
+        "review_model": null,
+        "model_context_window": null,
+        "model_auto_compact_token_limit": null,
+        "model_auto_compact_token_limit_scope": null,
+        "model_provider": null,
+        "approval_policy": null,
+        "approvals_reviewer": null,
+        "sandbox_mode": null,
+        "sandbox_workspace_write": null,
+        "forced_chatgpt_workspace_id": null,
+        "forced_login_method": null,
+        "web_search": null,
+        "tools": null,
+        "instructions": null,
+        "developer_instructions": null,
+        "compact_prompt": null,
+        "model_reasoning_effort": "medium",
+        "model_reasoning_summary": null,
+        "model_verbosity": null,
+        "service_tier": "default",
+        "analytics": {
+          "enabled": false
+        },
+        "apps": {
+          "_default": null,
+          "connector_76869538009648d5b282a4bb21c3d157": {
+            "enabled": true,
+            "omit_tools_from": null,
+            "approvals_reviewer": null,
+            "destructive_enabled": null,
+            "open_world_enabled": null,
+            "default_tools_approval_mode": null,
+            "default_tools_enabled": null,
+            "tools": {
+              "github.create_pull_request": {
+                "enabled": null,
+                "approval_mode": "approve"
+              }
+            },
+            "links": null
+          }
+        },
+        "browser_use": null,
+        "computer_use": null,
+        "desktop": {
+          "keepRemoteControlAwakeWhilePluggedIn": true,
+          "worktree-upstream-refresh-mode": "best-effort",
+          "followUpQueueMode": "steer",
+          "git-pr-watch-auto-merge": true,
+          "conversationDetailMode": "STEPS_COMMANDS",
+          "selected-avatar-id": "null-signal"
+        },
+        "mcp_optional_startup_grace_ms": null,
+        "mcp_servers": {
+          "node_repl": {
+            "command": "/usr/lib/chatgpt/resources/cua_node/bin/node_repl",
+            "args": [],
+            "env": {
+              "BROWSER_USE_AVAILABLE_BACKENDS": "chrome,iab,mcpapps",
+              "NODE_REPL_NODE_MODULE_DIRS": "/usr/lib/chatgpt/resources/cua_node/lib/node_modules",
+              "NODE_REPL_NATIVE_PIPE_CONNECT_TIMEOUT_MS": "1000",
+              "BROWSER_USE_CODEX_APP_VERSION": "26.1021.22027",
+              "NODE_REPL_INSTRUCTIONS_USE_CASE_BROWSER": "",
+              "NODE_REPL_TRUSTED_SERVICES": "{\"browser\":\"/home/enramosjr/.codex/plugins/cache/openai-bundled/browser/26.1021.22027/scripts/browser-service.mjs\"}",
+              "NODE_REPL_NODE_PATH": "/usr/lib/chatgpt/resources/cua_node/bin/node",
+              "CODEX_CLI_PATH": "/usr/lib/chatgpt/resources/codex",
+              "BROWSER_USE_TINYSKY_ENABLED": "1",
+              "NODE_REPL_TRUSTED_CODE_PATHS": "/home/enramosjr/.codex:/usr/lib/chatgpt/resources/cua_node/lib/node_modules",
+              "BROWSER_USE_CODEX_APP_BUILD_FLAVOR": "prod",
+              "CODEX_HOME": "/home/enramosjr/.codex",
+              "NODE_REPL_INSTRUCTIONS_USE_CASE_CHROME": ""
+            },
+            "env_vars": [
+              "BROWSER_USE_ACCESS_EXECUTOR_ID",
+              "BROWSER_USE_ACCESS_PIPE_PATH",
+              "BROWSER_USE_ACCESS_VERIFYING_IDENTITY"
+            ],
+            "environment_id": "local",
+            "enabled": true,
+            "startup_timeout_sec": 120.0,
+            "tool_timeout_sec": null
+          }
+        },
+        "otel": null,
+        "mcp_oauth_callback_url": null,
+        "include_permissions_instructions": true,
+        "responses_api_metadata": null,
+        "disable_paste_burst": null,
+        "include_collaboration_mode_instructions": true,
+        "show_raw_agent_reasoning": null,
+        "sqlite_home": null,
+        "history": {
+          "persistence": "save-all",
+          "max_bytes": null
+        },
+        "project_doc_max_bytes": 32768,
+        "js_repl_node_path": null,
+        "hide_agent_reasoning": false,
+        "plan_mode_reasoning_effort": null,
+        "profile": null,
+        "plugins": {
+          "browser@openai-bundled": {
+            "enabled": true
+          },
+          "codex-app-tools@openai-bundled": {
+            "enabled": true
+          },
+          "template-creator@openai-primary-runtime": {
+            "enabled": true
+          },
+          "spreadsheets@openai-primary-runtime": {
+            "enabled": true
+          },
+          "unified-computer-use@openai-bundled": {
+            "enabled": true
+          },
+          "documents@openai-primary-runtime": {
+            "enabled": true
+          },
+          "pdf@openai-primary-runtime": {
+            "enabled": true
+          },
+          "presentations@openai-primary-runtime": {
+            "enabled": true
+          },
+          "visualize@openai-bundled": {
+            "enabled": true
+          }
+        },
+        "check_for_update_on_startup": null,
+        "allow_symlinked_codex_home": null,
+        "apps_mcp_product_sku": null,
+        "personality": null,
+        "background_terminal_max_timeout": 300000,
+        "project_doc_fallback_filenames": [],
+        "openai_base_url": null,
+        "agents": null,
+        "ghost_snapshot": null,
+        "marketplaces": {
+          "openai-bundled": {
+            "last_updated": null,
+            "last_revision": null,
+            "source_type": "local",
+            "source": "/home/enramosjr/.codex/.tmp/bundled-marketplaces/openai-bundled",
+            "ref": null,
+            "sparse_paths": null
+          },
+          "openai-primary-runtime": {
+            "last_updated": null,
+            "last_revision": null,
+            "source_type": "local",
+            "source": "/home/enramosjr/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime",
+            "ref": null,
+            "sparse_paths": null
+          }
+        },
+        "mcp_enterprise_managed_auth": null,
+        "log_dir": null,
+        "goals": null,
+        "tool_output_token_limit": null,
+        "experimental_thread_store_endpoint": null,
+        "skills": null,
+        "notice": null,
+        "orchestrator": null,
+        "cloud": null,
+        "experimental_realtime_start_instructions": null,
+        "mcp_oauth_credentials_store": "auto",
+        "model_providers": {},
+        "windows": null,
+        "audio": null,
+        "oss_provider": null,
+        "allow_login_shell": true,
+        "model_post_turn_compact_threshold_percent": null,
+        "tui": {
+          "notifications": true,
+          "notification_method": "auto",
+          "notification_condition": "unfocused",
+          "animations": true,
+          "screen_reader_detection_done": true,
+          "effects": {
+            "starfield": true,
+            "shimmer": true,
+            "welcome": true,
+            "effort": true,
+            "progress": true,
+            "title": true
+          },
+          "rendering": {
+            "mermaid": true,
+            "math": true,
+            "tables": true,
+            "lists": true
+          },
+          "show_tooltips": true,
+          "show_server_version_notice": true,
+          "auto_recap": true,
+          "disable_paste_burst": null,
+          "vim_mode_default": false,
+          "question_esc_back": true,
+          "raw_output_mode": false,
+          "fullscreen_transcript": true,
+          "mouse_scroll_speed": null,
+          "copy_on_select": "auto",
+          "right_click_paste": "auto",
+          "alternate_screen": "auto",
+          "status_line": null,
+          "status_line_use_colors": true,
+          "terminal_title": null,
+          "theme": null,
+          "pet": null,
+          "pet_anchor": "composer",
+          "session_picker_view": null,
+          "agents_overview_grouping": "project",
+          "resume_cwd": null,
+          "keymap": {
+            "global": {
+              "open_agents": null,
+              "open_transcript": null,
+              "find_transcript": null,
+              "focus_activity": null,
+              "open_external_editor": null,
+              "copy": null,
+              "clear_terminal": null,
+              "submit": null,
+              "queue": null,
+              "toggle_shortcuts": null,
+              "toggle_vim_mode": null,
+              "toggle_fast_mode": null,
+              "toggle_raw_output": null,
+              "toggle_side_conversation": null
+            },
+            "chat": {
+              "toggle_voice": null,
+              "toggle_voice_mute": null,
+              "interrupt_turn": null,
+              "decrease_reasoning_effort": null,
+              "increase_reasoning_effort": null,
+              "previous_permission_mode": null,
+              "next_permission_mode": null,
+              "edit_queued_message": null,
+              "prompt_stack_back": null,
+              "skip_question": null
+            },
+            "composer": {
+              "submit": null,
+              "queue": null,
+              "toggle_shortcuts": null,
+              "history_search_previous": null,
+              "history_search_next": null
+            },
+            "editor": {
+              "insert_newline": null,
+              "move_left": null,
+              "move_right": null,
+              "move_up": null,
+              "move_down": null,
+              "move_word_left": null,
+              "move_word_right": null,
+              "move_line_start": null,
+              "move_line_end": null,
+              "delete_backward": null,
+              "delete_forward": null,
+              "delete_backward_word": null,
+              "delete_forward_word": null,
+              "kill_line_start": null,
+              "kill_whole_line": null,
+              "kill_line_end": null,
+              "yank": null
+            },
+            "vim_normal": {
+              "enter_insert": null,
+              "append_after_cursor": null,
+              "append_line_end": null,
+              "insert_line_start": null,
+              "open_line_below": null,
+              "open_line_above": null,
+              "enter_replace_mode": null,
+              "move_left": null,
+              "move_right": null,
+              "move_up": null,
+              "move_down": null,
+              "move_word_forward": null,
+              "move_word_backward": null,
+              "move_word_end": null,
+              "move_line_start": null,
+              "move_line_end": null,
+              "find_forward": null,
+              "find_backward": null,
+              "till_forward": null,
+              "till_backward": null,
+              "jump_top": null,
+              "jump_bottom": null,
+              "delete_char": null,
+              "replace_char": null,
+              "repeat_last_change": null,
+              "substitute_char": null,
+              "delete_to_line_end": null,
+              "change_to_line_end": null,
+              "yank_line": null,
+              "paste_after": null,
+              "start_delete_operator": null,
+              "start_yank_operator": null,
+              "start_change_operator": null,
+              "undo": null,
+              "redo": null,
+              "cancel_operator": null
+            },
+            "vim_operator": {
+              "delete_line": null,
+              "yank_line": null,
+              "motion_left": null,
+              "motion_right": null,
+              "motion_up": null,
+              "motion_down": null,
+              "motion_word_forward": null,
+              "motion_word_backward": null,
+              "motion_word_end": null,
+              "motion_line_start": null,
+              "motion_line_end": null,
+              "motion_find_forward": null,
+              "motion_find_backward": null,
+              "motion_till_forward": null,
+              "motion_till_backward": null,
+              "motion_jump_top": null,
+              "motion_jump_bottom": null,
+              "select_inner_text_object": null,
+              "select_around_text_object": null,
+              "cancel": null
+            },
+            "vim_search": {
+              "forward": null,
+              "backward": null,
+              "next": null,
+              "previous": null
+            },
+            "vim_text_object": {
+              "word": null,
+              "big_word": null,
+              "parentheses": null,
+              "brackets": null,
+              "braces": null,
+              "double_quote": null,
+              "single_quote": null,
+              "backtick": null,
+              "cancel": null
+            },
+            "pager": {
+              "scroll_up": null,
+              "scroll_down": null,
+              "page_up": null,
+              "page_down": null,
+              "half_page_up": null,
+              "half_page_down": null,
+              "jump_top": null,
+              "jump_bottom": null,
+              "close": null,
+              "close_transcript": null,
+              "find": null
+            },
+            "list": {
+              "move_up": null,
+              "move_down": null,
+              "move_left": null,
+              "move_right": null,
+              "page_up": null,
+              "page_down": null,
+              "jump_top": null,
+              "jump_bottom": null,
+              "accept": null,
+              "cancel": null
+            },
+            "agents": {
+              "resume": null,
+              "search": null,
+              "new_task": null,
+              "new_worktree": null,
+              "fork": null,
+              "rename": null,
+              "stop": null,
+              "archive": null,
+              "delete": null,
+              "hide": null,
+              "toggle_pin": null,
+              "toggle_grouping": null
+            },
+            "approval": {
+              "open_fullscreen": null,
+              "open_thread": null,
+              "approve": null,
+              "approve_for_session": null,
+              "approve_for_prefix": null,
+              "deny": null,
+              "decline": null,
+              "cancel": null
+            }
+          },
+          "model_availability_nux": {
+            "gpt-6.1-sol": 4
+          },
+          "terminal_resize_reflow_max_rows": null
+        },
+        "chatgpt_base_url": "https://chatgpt.com/backend-api/",
+        "daybreak": null,
+        "notify": null,
+        "experimental_realtime_ws_startup_context": null,
+        "file_opener": "vscode",
+        "tool_suggest": null,
+        "permissions": null,
+        "include_apps_instructions": true,
+        "profiles": {},
+        "mcp_oauth_callback_port": null,
+        "cli_auth_credentials_store": "file",
+        "realtime": null,
+        "features": {
+          "api_key_cyber_access_programs": false,
+          "api_key_model_discovery": true,
+          "auth_elicitation": true,
+          "background_paginated_rollout_migration": false,
+          "codex_apps_mcp_2026_07_28": false,
+          "mcp_2026_07_28": false,
+          "memories": false,
+          "mentions_v2": true,
+          "remote_control": false,
+          "remote_plugin": true,
+          "tool_suggest": true,
+          "windows_sandbox_service": false
+        },
+        "feedback": null,
+        "thread_unload_delay_secs": null,
+        "experimental_realtime_ws_model": null,
+        "experimental_realtime_ws_base_url": null,
+        "memories": null,
+        "hooks": {
+          "PreToolUse": [],
+          "PermissionRequest": [],
+          "PostToolUse": [],
+          "PreCompact": [],
+          "PostCompact": [],
+          "SessionStart": [],
+          "SessionEnd": [],
+          "UserPromptSubmit": [],
+          "SubagentStart": [
+            {
+              "matcher": null,
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "/usr/bin/python3 /home/enramosjr/Projects/agentic-assurance-7/docs/assurance/codex-capability-scope-2/hook-probe.py",
+                  "commandWindows": null,
+                  "timeout": 5,
+                  "async": false,
+                  "statusMessage": null
+                }
+              ]
+            }
+          ],
+          "SubagentStop": [
+            {
+              "matcher": null,
+              "hooks": [
+                {
+                  "type": "command",
+                  "command": "/usr/bin/python3 /home/enramosjr/Projects/agentic-assurance-7/docs/assurance/codex-capability-scope-2/hook-probe.py",
+                  "commandWindows": null,
+                  "timeout": 5,
+                  "async": false,
+                  "statusMessage": null
+                }
+              ]
+            }
+          ],
+          "Stop": [],
+          "Interrupt": [],
+          "state": {
+            "/home/enramosjr/Projects/ISARS/.codex/hooks.json:pre_tool_use:0:0": {
+              "trusted_hash": "sha256:dc9ce7b16acf959ae4e3b53be1c61b90f8542811019b328364612685c7f81fae"
+            },
+            "/home/enramosjr/Projects/ISARS/.codex/hooks.json:pre_tool_use:0:1": {
+              "trusted_hash": "sha256:c07aab8011a7d67850352878c75d5e48008731ab6a062d193310046cea3cc7da"
+            },
+            "/home/enramosjr/Projects/ISARS/.codex/hooks.json:pre_tool_use:1:0": {
+              "trusted_hash": "sha256:c3baf29a190eb54aca3d973c1349ebd26bc6582fb10cfb55ea704b6b794a40a3"
+            },
+            "/home/enramosjr/Projects/ISARS/.codex/hooks.json:session_start:0:0": {
+              "trusted_hash": "sha256:8f07a2e4ce3da0319d9102467f06730f8289f8df9012b22ec28a30ed43895320"
+            },
+            "/home/enramosjr/Projects/agentic-assistant/.codex/hooks.json:pre_tool_use:0:0": {
+              "trusted_hash": "sha256:dc9ce7b16acf959ae4e3b53be1c61b90f8542811019b328364612685c7f81fae"
+            },
+            "/home/enramosjr/Projects/agentic-assistant/.codex/hooks.json:pre_tool_use:0:1": {
+              "trusted_hash": "sha256:c07aab8011a7d67850352878c75d5e48008731ab6a062d193310046cea3cc7da"
+            },
+            "/home/enramosjr/Projects/agentic-assistant/.codex/hooks.json:pre_tool_use:1:0": {
+              "trusted_hash": "sha256:c3baf29a190eb54aca3d973c1349ebd26bc6582fb10cfb55ea704b6b794a40a3"
+            },
+            "/home/enramosjr/Projects/agentic-assistant/.codex/hooks.json:session_start:0:0": {
+              "trusted_hash": "sha256:8f07a2e4ce3da0319d9102467f06730f8289f8df9012b22ec28a30ed43895320"
+            },
+            "/home/enramosjr/Projects/agentic/.codex/hooks.json:pre_tool_use:0:0": {
+              "trusted_hash": "sha256:dc9ce7b16acf959ae4e3b53be1c61b90f8542811019b328364612685c7f81fae"
+            },
+            "/home/enramosjr/Projects/agentic/.codex/hooks.json:pre_tool_use:0:1": {
+              "trusted_hash": "sha256:c07aab8011a7d67850352878c75d5e48008731ab6a062d193310046cea3cc7da"
+            },
+            "/home/enramosjr/Projects/agentic/.codex/hooks.json:pre_tool_use:1:0": {
+              "trusted_hash": "sha256:c3baf29a190eb54aca3d973c1349ebd26bc6582fb10cfb55ea704b6b794a40a3"
+            },
+            "/home/enramosjr/Projects/agentic/.codex/hooks.json:session_start:0:0": {
+              "trusted_hash": "sha256:8f07a2e4ce3da0319d9102467f06730f8289f8df9012b22ec28a30ed43895320"
+            },
+            "/home/enramosjr/Projects/athenaeum/.codex/hooks.json:pre_tool_use:0:0": {
+              "trusted_hash": "sha256:dc9ce7b16acf959ae4e3b53be1c61b90f8542811019b328364612685c7f81fae"
+            },
+            "/home/enramosjr/Projects/athenaeum/.codex/hooks.json:pre_tool_use:0:1": {
+              "trusted_hash": "sha256:c07aab8011a7d67850352878c75d5e48008731ab6a062d193310046cea3cc7da"
+            },
+            "/home/enramosjr/Projects/athenaeum/.codex/hooks.json:pre_tool_use:1:0": {
+              "trusted_hash": "sha256:c3baf29a190eb54aca3d973c1349ebd26bc6582fb10cfb55ea704b6b794a40a3"
+            },
+            "/home/enramosjr/Projects/athenaeum/.codex/hooks.json:session_start:0:0": {
+              "trusted_hash": "sha256:8f07a2e4ce3da0319d9102467f06730f8289f8df9012b22ec28a30ed43895320"
+            },
+            "/home/enramosjr/Projects/gpui/.codex/hooks.json:pre_tool_use:0:0": {
+              "trusted_hash": "sha256:dc9ce7b16acf959ae4e3b53be1c61b90f8542811019b328364612685c7f81fae"
+            },
+            "/home/enramosjr/Projects/gpui/.codex/hooks.json:pre_tool_use:0:1": {
+              "trusted_hash": "sha256:c07aab8011a7d67850352878c75d5e48008731ab6a062d193310046cea3cc7da"
+            },
+            "/home/enramosjr/Projects/gpui/.codex/hooks.json:pre_tool_use:1:0": {
+              "trusted_hash": "sha256:c3baf29a190eb54aca3d973c1349ebd26bc6582fb10cfb55ea704b6b794a40a3"
+            },
+            "/home/enramosjr/Projects/gpui/.codex/hooks.json:session_start:0:0": {
+              "trusted_hash": "sha256:8f07a2e4ce3da0319d9102467f06730f8289f8df9012b22ec28a30ed43895320"
+            },
+            "/home/enramosjr/Projects/olmec/.codex/hooks.json:pre_tool_use:0:0": {
+              "trusted_hash": "sha256:dc9ce7b16acf959ae4e3b53be1c61b90f8542811019b328364612685c7f81fae"
+            },
+            "/home/enramosjr/Projects/olmec/.codex/hooks.json:pre_tool_use:0:1": {
+              "trusted_hash": "sha256:c07aab8011a7d67850352878c75d5e48008731ab6a062d193310046cea3cc7da"
+            },
+            "/home/enramosjr/Projects/olmec/.codex/hooks.json:pre_tool_use:1:0": {
+              "trusted_hash": "sha256:c3baf29a190eb54aca3d973c1349ebd26bc6582fb10cfb55ea704b6b794a40a3"
+            },
+            "/home/enramosjr/Projects/olmec/.codex/hooks.json:session_start:0:0": {
+              "trusted_hash": "sha256:8f07a2e4ce3da0319d9102467f06730f8289f8df9012b22ec28a30ed43895320"
+            },
+            "/home/enramosjr/Projects/techo5-llm-bridge/.codex/hooks.json:pre_tool_use:0:0": {
+              "trusted_hash": "sha256:dc9ce7b16acf959ae4e3b53be1c61b90f8542811019b328364612685c7f81fae"
+            },
+            "/home/enramosjr/Projects/techo5-llm-bridge/.codex/hooks.json:pre_tool_use:0:1": {
+              "trusted_hash": "sha256:c07aab8011a7d67850352878c75d5e48008731ab6a062d193310046cea3cc7da"
+            },
+            "/home/enramosjr/Projects/techo5-llm-bridge/.codex/hooks.json:pre_tool_use:1:0": {
+              "trusted_hash": "sha256:c3baf29a190eb54aca3d973c1349ebd26bc6582fb10cfb55ea704b6b794a40a3"
+            },
+            "/home/enramosjr/Projects/techo5-llm-bridge/.codex/hooks.json:session_start:0:0": {
+              "trusted_hash": "sha256:8f07a2e4ce3da0319d9102467f06730f8289f8df9012b22ec28a30ed43895320"
+            },
+            "/home/enramosjr/Projects/template/.codex/hooks.json:pre_tool_use:0:0": {
+              "trusted_hash": "sha256:dc9ce7b16acf959ae4e3b53be1c61b90f8542811019b328364612685c7f81fae"
+            },
+            "/home/enramosjr/Projects/template/.codex/hooks.json:pre_tool_use:0:1": {
+              "trusted_hash": "sha256:c07aab8011a7d67850352878c75d5e48008731ab6a062d193310046cea3cc7da"
+            },
+            "/home/enramosjr/Projects/template/.codex/hooks.json:pre_tool_use:1:0": {
+              "trusted_hash": "sha256:c3baf29a190eb54aca3d973c1349ebd26bc6582fb10cfb55ea704b6b794a40a3"
+            },
+            "/home/enramosjr/Projects/template/.codex/hooks.json:session_start:0:0": {
+              "trusted_hash": "sha256:8f07a2e4ce3da0319d9102467f06730f8289f8df9012b22ec28a30ed43895320"
+            }
+          }
+        },
+        "project_root_markers": [
+          ".git"
+        ],
+        "experimental_compact_prompt_file": null,
+        "auto_review": null,
+        "default_permissions": null,
+        "suppress_unstable_features_warning": null,
+        "include_environment_context": true,
+        "experimental_realtime_webrtc_call_base_url": null,
+        "experimental_realtime_ws_backend_prompt": null,
+        "model_instructions_file": null,
+        "experimental_use_unified_exec_tool": null,
+        "js_repl_node_module_dirs": null,
+        "projects": {
+          "/home/enramosjr/Projects/agentic-assistant": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Projects/template/.git/okf-scratch/tmpb4nxco38/repo": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Projects/template/.git/okf-scratch/tmpt8mgrcs6/repo": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Projects/prints": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Projects/template/.git/okf-scratch/tmpsx_27uer/repo": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Documents/Codex/2026-09-15/files-pasted-by-the-user-i": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Documents/Codex/2026-09-15/i-n": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Projects/athenaeum/.git/okf-scratch/eval-attempt-tod2mai8/repo": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Projects/gpui": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Projects/agentic/.git/okf-scratch/eval-attempt-72c_zf1o/repo": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Projects/ISARS": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Projects/agentic/.git/okf-scratch/eval-attempt-n50m32re/repo": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr": {
+            "trust_level": "trusted"
+          },
+          "/run/media/enramosjr/Ventoy/bios": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Projects/olmec/.git/okf-scratch/eval-attempt-bdzdk96o/repo": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Projects/romulus-launcher": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Projects/agentic": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Projects/techo5-llm-bridge": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Projects/athenaeum": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Projects/agentic/.git/okf-scratch/eval-attempt-ta7yd9th/repo": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Projects/olmec": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Projects/template": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Projects/template/.git/okf-scratch/tmp5cup0vt3/repo": {
+            "trust_level": "trusted"
+          },
+          "/home/enramosjr/Documents/Codex/2026-09-15/here-is-the-finalized-blueprint-updated": {
+            "trust_level": "trusted"
+          },
+          "/run/media/enramosjr/DumpStore/Music": {
+            "trust_level": "trusted"
+          }
+        },
+        "model_catalog_json": null,
+        "experimental_thread_store": null,
+        "shell_environment_policy": {
+          "inherit": null,
+          "ignore_default_excludes": null,
+          "exclude": null,
+          "set": null,
+          "include_only": null,
+          "filters": null,
+          "experimental_use_profile": null
+        }
+      },
+      "origins": {
+        "projects./home/enramosjr/Projects/agentic-assistant.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/ISARS/.codex/hooks.json:pre_tool_use:0:1.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/gpui/.codex/hooks.json:pre_tool_use:1:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "desktop.keepRemoteControlAwakeWhilePluggedIn": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "plugins.codex-app-tools@openai-bundled.enabled": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "plugins.spreadsheets@openai-primary-runtime.enabled": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "plugins.unified-computer-use@openai-bundled.enabled": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/olmec/.codex/hooks.json:pre_tool_use:0:1.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "plugins.template-creator@openai-primary-runtime.enabled": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/gpui/.codex/hooks.json:pre_tool_use:0:1.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "desktop.followUpQueueMode": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "mcp_servers.node_repl.env_vars.2": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Documents/Codex/2026-09-15/i-n.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/gpui/.codex/hooks.json:pre_tool_use:0:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "mcp_servers.node_repl.command": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Projects/athenaeum/.git/okf-scratch/eval-attempt-tod2mai8/repo.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "mcp_servers.node_repl.env_vars.1": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "plugins.documents@openai-primary-runtime.enabled": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.SubagentStart.0.hooks.0.timeout": {
+          "name": {
+            "type": "sessionFlags"
+          },
+          "version": "sha256:7c1dfd9cf67ae9c4ef07082b701cdddf605cee65a0813b2f51749f129a646928"
+        },
+        "mcp_servers.node_repl.env.CODEX_CLI_PATH": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "desktop.conversationDetailMode": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.SubagentStop.0.hooks.0.timeout": {
+          "name": {
+            "type": "sessionFlags"
+          },
+          "version": "sha256:7c1dfd9cf67ae9c4ef07082b701cdddf605cee65a0813b2f51749f129a646928"
+        },
+        "model": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "desktop.git-pr-watch-auto-merge": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Projects/template/.git/okf-scratch/tmpsx_27uer/repo.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "mcp_servers.node_repl.env.NODE_REPL_NODE_PATH": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "mcp_servers.node_repl.env.NODE_REPL_INSTRUCTIONS_USE_CASE_BROWSER": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/techo5-llm-bridge/.codex/hooks.json:pre_tool_use:1:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.SubagentStop.0.hooks.0.type": {
+          "name": {
+            "type": "sessionFlags"
+          },
+          "version": "sha256:7c1dfd9cf67ae9c4ef07082b701cdddf605cee65a0813b2f51749f129a646928"
+        },
+        "marketplaces.openai-primary-runtime.source": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "marketplaces.openai-bundled.source": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "plugins.pdf@openai-primary-runtime.enabled": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Projects/agentic.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/athenaeum/.codex/hooks.json:pre_tool_use:0:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "mcp_servers.node_repl.env.NODE_REPL_NODE_MODULE_DIRS": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "tui.screen_reader_detection_done": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Projects/template.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "mcp_servers.node_repl.env.BROWSER_USE_TINYSKY_ENABLED": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Projects/template/.git/okf-scratch/tmp5cup0vt3/repo.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Projects/gpui.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "apps.connector_76869538009648d5b282a4bb21c3d157.tools.github.create_pull_request.sandbox_mode": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/olmec/.codex/hooks.json:pre_tool_use:1:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Projects/agentic/.git/okf-scratch/eval-attempt-72c_zf1o/repo.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Projects/prints.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Projects/template/.git/okf-scratch/tmpt8mgrcs6/repo.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "mcp_servers.node_repl.env.NODE_REPL_INSTRUCTIONS_USE_CASE_CHROME": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "plugins.visualize@openai-bundled.enabled": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Documents/Codex/2026-09-15/files-pasted-by-the-user-i.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.SubagentStop.0.hooks.0.command": {
+          "name": {
+            "type": "sessionFlags"
+          },
+          "version": "sha256:7c1dfd9cf67ae9c4ef07082b701cdddf605cee65a0813b2f51749f129a646928"
+        },
+        "hooks.state./home/enramosjr/Projects/athenaeum/.codex/hooks.json:session_start:0:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Projects/athenaeum.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "desktop.selected-avatar-id": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "service_tier": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "mcp_servers.node_repl.env_vars.0": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Projects/agentic/.git/okf-scratch/eval-attempt-n50m32re/repo.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Projects/romulus-launcher.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Projects/techo5-llm-bridge.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/template/.codex/hooks.json:session_start:0:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.SubagentStart.0.hooks.0.type": {
+          "name": {
+            "type": "sessionFlags"
+          },
+          "version": "sha256:7c1dfd9cf67ae9c4ef07082b701cdddf605cee65a0813b2f51749f129a646928"
+        },
+        "marketplaces.openai-primary-runtime.source_type": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/gpui/.codex/hooks.json:session_start:0:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.SubagentStart.0.hooks.0.command": {
+          "name": {
+            "type": "sessionFlags"
+          },
+          "version": "sha256:7c1dfd9cf67ae9c4ef07082b701cdddf605cee65a0813b2f51749f129a646928"
+        },
+        "hooks.state./home/enramosjr/Projects/ISARS/.codex/hooks.json:session_start:0:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "plugins.browser@openai-bundled.enabled": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/techo5-llm-bridge/.codex/hooks.json:session_start:0:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/agentic/.codex/hooks.json:pre_tool_use:1:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Projects/agentic/.git/okf-scratch/eval-attempt-ta7yd9th/repo.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/ISARS/.codex/hooks.json:pre_tool_use:0:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "mcp_servers.node_repl.env.NODE_REPL_TRUSTED_SERVICES": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./run/media/enramosjr/Ventoy/bios.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/olmec/.codex/hooks.json:pre_tool_use:0:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Projects/olmec/.git/okf-scratch/eval-attempt-bdzdk96o/repo.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/techo5-llm-bridge/.codex/hooks.json:pre_tool_use:0:1.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "mcp_servers.node_repl.env.BROWSER_USE_CODEX_APP_BUILD_FLAVOR": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/template/.codex/hooks.json:pre_tool_use:1:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/agentic-assistant/.codex/hooks.json:session_start:0:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "model_reasoning_effort": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/athenaeum/.codex/hooks.json:pre_tool_use:1:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/agentic-assistant/.codex/hooks.json:pre_tool_use:0:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./run/media/enramosjr/DumpStore/Music.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "mcp_servers.node_repl.env.CODEX_HOME": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "tui.model_availability_nux.gpt-6.1-sol": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/agentic-assistant/.codex/hooks.json:pre_tool_use:0:1.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "apps.connector_76869538009648d5b282a4bb21c3d157.tools.github.create_pull_request.approval_mode": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/athenaeum/.codex/hooks.json:pre_tool_use:0:1.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "mcp_servers.node_repl.env.BROWSER_USE_AVAILABLE_BACKENDS": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/agentic/.codex/hooks.json:session_start:0:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/agentic/.codex/hooks.json:pre_tool_use:0:1.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Projects/olmec.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "mcp_servers.node_repl.env.NODE_REPL_NATIVE_PIPE_CONNECT_TIMEOUT_MS": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "apps.connector_76869538009648d5b282a4bb21c3d157.tools.github.create_pull_request.approval_policy": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "desktop.worktree-upstream-refresh-mode": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "marketplaces.openai-bundled.source_type": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/agentic/.codex/hooks.json:pre_tool_use:0:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/template/.codex/hooks.json:pre_tool_use:0:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Documents/Codex/2026-09-15/here-is-the-finalized-blueprint-updated.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "projects./home/enramosjr/Projects/ISARS.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "plugins.presentations@openai-primary-runtime.enabled": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/template/.codex/hooks.json:pre_tool_use:0:1.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/ISARS/.codex/hooks.json:pre_tool_use:1:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "analytics.enabled": {
+          "name": {
+            "type": "sessionFlags"
+          },
+          "version": "sha256:7c1dfd9cf67ae9c4ef07082b701cdddf605cee65a0813b2f51749f129a646928"
+        },
+        "projects./home/enramosjr/Projects/template/.git/okf-scratch/tmpb4nxco38/repo.trust_level": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "mcp_servers.node_repl.env.NODE_REPL_TRUSTED_CODE_PATHS": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/agentic-assistant/.codex/hooks.json:pre_tool_use:1:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/olmec/.codex/hooks.json:session_start:0:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "hooks.state./home/enramosjr/Projects/techo5-llm-bridge/.codex/hooks.json:pre_tool_use:0:0.trusted_hash": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "mcp_servers.node_repl.startup_timeout_sec": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        },
+        "mcp_servers.node_repl.env.BROWSER_USE_CODEX_APP_VERSION": {
+          "name": {
+            "type": "user",
+            "file": "/home/enramosjr/.codex/config.toml",
+            "profile": null
+          },
+          "version": "sha256:b269ea6f20d0b7d4979f0ffac3042dd6cbc03c60b709cd90e42f0a62f4221969"
+        }
+      }
+    }
+  }
+]

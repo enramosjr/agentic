@@ -1,0 +1,22 @@
+test_missing_journal_after_native_review_cannot_verify_as_legacy (test_review_enforcement.FreshnessTests.test_missing_journal_after_native_review_cannot_verify_as_legacy) ... FAIL
+
+======================================================================
+FAIL: test_missing_journal_after_native_review_cannot_verify_as_legacy (test_review_enforcement.FreshnessTests.test_missing_journal_after_native_review_cannot_verify_as_legacy)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-hjnwmh6j/.ai/scripts/tests/test_review_enforcement.py", line 320, in test_missing_journal_after_native_review_cannot_verify_as_legacy
+    result = self.lc('stage', 'verify', code=1)
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-hjnwmh6j/.ai/scripts/tests/test_assurance.py", line 76, in lc
+    return self.cli('lifecycle.py', *args, code=code)
+           ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-hjnwmh6j/.ai/scripts/tests/test_assurance.py", line 72, in cli
+    self.assertEqual(result.returncode, code, result.stdout + result.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 0 != 1 : stage verify recorded for tier L2
+
+
+----------------------------------------------------------------------
+Ran 1 test in 2.199s
+
+FAILED (failures=1)
+timing: {"elapsed_seconds": 2.316, "exit_code": 1, "finished_at": "2026-10-28T23:35:15.221922+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T23:35:12.905838+00:00"}

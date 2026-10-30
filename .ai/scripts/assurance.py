@@ -209,11 +209,6 @@ class Evidence:
     index: int
     entry: dict
 
-    @property
-    def order(self) -> tuple:
-        return (str(self.entry.get('at') or ''), self.record, self.index)
-
-
 def evidence(records_dir: Path, state: dict | None) -> tuple[list[Evidence], list[str]]:
     """`req:` ledger entries from committed records and the active state; malformed records contribute nothing."""
     items: list[Evidence] = []
@@ -364,6 +359,22 @@ def result(obligation: Obligation, status: str, reason: str, basis: str = 'none'
     return item
 
 
+def _completion_interval(value: object) -> tuple[int, int]:
+    """UTC completion precision as a half-open integer-microsecond interval."""
+    match = re.fullmatch(
+        r'([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})'
+        r'(?:\.([0-9]{1,6}))?Z', value) if isinstance(value, str) else None
+    if match is None:
+        raise ValueError('unsupported completion timestamp')
+    parts = match.groups()
+    instant = datetime.datetime(*(int(part) for part in parts[:6]))
+    fraction = parts[6] or ''
+    lower = ((instant.toordinal() * 86400 + instant.hour * 3600
+              + instant.minute * 60 + instant.second) * 1000000
+             + int(fraction.ljust(6, '0')))
+    return lower, lower + 10 ** (6 - len(fraction))
+
+
 def evaluate(root: Path, obligation: Obligation, items: list[Evidence], tree: str) -> dict:
     """One requirement's status: only a passing, current ledger entry for this exact obligation is VERIFIED."""
     if obligation.invalid:
@@ -381,7 +392,23 @@ def evaluate(root: Path, obligation: Obligation, items: list[Evidence], tree: st
         if mine:
             return result(obligation, 'UNVERIFIED', f'evidence is for a different command or inputs; {hint}')
         return result(obligation, 'UNVERIFIED', f'no evidence; {hint}')
-    newest = max(matching, key=lambda item: item.order)
+    intervals, invalid = [], []
+    for item in matching:
+        try:
+            lower, upper = _completion_interval(item.entry.get('at'))
+        except ValueError:
+            invalid.append(f'{item.record}#{item.index}')
+        else:
+            intervals.append((item, lower, upper))
+    if invalid:
+        return result(obligation, 'UNVERIFIED', 'reconcile mechanical evidence ordering metadata in '
+                      + ', '.join(sorted(invalid)) + '; a rerun alone cannot order unknown completion time')
+    latest = max(range(len(intervals)), key=lambda index: intervals[index][1])
+    newest, lower, _ = intervals[latest]
+    if any(index != latest and lower < upper for index, (_, _, upper) in enumerate(intervals)):
+        identities = ', '.join(sorted(f'{item.record}#{item.index}' for item in matching))
+        return result(obligation, 'UNVERIFIED', f'mechanical evidence ordering is ambiguous: {identities}; '
+                      f'{hint} after the overlapping completion intervals')
     if newest.entry.get('exit') != 0:
         return result(obligation, 'FAILED', f"newest run exited {newest.entry.get('exit')}", 'mechanical', newest)
     current, text = ledger._entry_verdict(root, newest.entry, tree)

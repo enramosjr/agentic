@@ -1,0 +1,9 @@
+{
+  "after": "972c784336891b03e78f111b4c590044a12e8bf948f16432efa86be140db458f",
+  "before": "f59b7187ca81fa1ce99fb98a1886c3afaefae71f414114b1f8252a69a201cab8",
+  "id": "N04",
+  "new": "'UNVERIFIED', f'passed on {scope}; covers only this command on these inputs'",
+  "old": "'VERIFIED', f'passed on {scope}; covers only this command on these inputs'",
+  "path": ".ai/scripts/assurance.py",
+  "restored": false
+}

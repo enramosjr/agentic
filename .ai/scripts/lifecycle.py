@@ -1035,7 +1035,8 @@ def execute_check(root: Path, state: dict, label: str, command: list[str], globs
         output = f"cannot run: {error}"
     entry = ledger.make_entry(label, command, code, before_tree if globs else tree_hash(root),
                               before_head if globs else head_sha(root), time.monotonic() - started,
-                              now(), globs, before_digest)
+                              datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+                              if label.startswith('req:') else now(), globs, before_digest)
     if profile:
         entry.update(profile=profile[0], input_files=before_files, context_sha256=before_context)
     elif before_files is not None:
@@ -1269,7 +1270,8 @@ def cmd_converge(args: argparse.Namespace) -> int:
         results.append(entry)
         durations[rid] = time.monotonic() - started
         if snapshot is not None:
-            snapshot.update(exit=entry['exit'], duration=round(durations[rid], 3), at=now())
+            snapshot.update(exit=entry['exit'], duration=round(durations[rid], 3),
+                            at=datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z"))
             requirement_entries[rid] = snapshot
     tree = tree_hash(root)
     with state_lock(root):

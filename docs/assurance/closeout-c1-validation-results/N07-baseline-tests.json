@@ -1,0 +1,23 @@
+{
+  "errors": [],
+  "expected_failures": [],
+  "failures": [],
+  "finished": [
+    "test_assurance.UnscopedTests.test_any_commit_makes_it_stale",
+    "test_assurance.UnscopedTests.test_identical_tree_is_verified",
+    "test_assurance.UnscopedTests.test_uncommitted_source_edit_makes_it_stale"
+  ],
+  "loaded": [
+    "test_assurance.UnscopedTests.test_any_commit_makes_it_stale",
+    "test_assurance.UnscopedTests.test_identical_tree_is_verified",
+    "test_assurance.UnscopedTests.test_uncommitted_source_edit_makes_it_stale"
+  ],
+  "run": 3,
+  "skips": [],
+  "started": [
+    "test_assurance.UnscopedTests.test_any_commit_makes_it_stale",
+    "test_assurance.UnscopedTests.test_identical_tree_is_verified",
+    "test_assurance.UnscopedTests.test_uncommitted_source_edit_makes_it_stale"
+  ],
+  "unexpected": []
+}

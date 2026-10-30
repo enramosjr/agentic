@@ -1,0 +1,68 @@
+{
+  "errors": [],
+  "expected_failures": [],
+  "failures": [
+    {
+      "frames": [
+        {
+          "file": "case.py",
+          "function": "testPartExecutor",
+          "line": 58,
+          "locals": {}
+        },
+        {
+          "file": "case.py",
+          "function": "run",
+          "line": 669,
+          "locals": {}
+        },
+        {
+          "file": "case.py",
+          "function": "_callTestMethod",
+          "line": 615,
+          "locals": {}
+        },
+        {
+          "file": "test_assurance.py",
+          "function": "test_changed_executable_is_stale",
+          "line": 240,
+          "locals": {}
+        },
+        {
+          "file": "case.py",
+          "function": "assertEqual",
+          "line": 925,
+          "locals": {}
+        },
+        {
+          "file": "case.py",
+          "function": "assertMultiLineEqual",
+          "line": 1291,
+          "locals": {}
+        },
+        {
+          "file": "case.py",
+          "function": "fail",
+          "line": 750,
+          "locals": {}
+        }
+      ],
+      "id": "test_assurance.RuntimeTests.test_changed_executable_is_stale",
+      "message": "'VERIFIED' != 'STALE'\n- VERIFIED\n+ STALE\n",
+      "traceback": "Traceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/case.py\", line 58, in testPartExecutor\n    yield\n  File \"/usr/lib/python3.14/unittest/case.py\", line 669, in run\n    self._callTestMethod(testMethod)\n    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/unittest/case.py\", line 615, in _callTestMethod\n    result = method()\n  File \"/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/closeout-c1-validation-results/.work/N05-mutant/repo/.ai/scripts/tests/test_assurance.py\", line 240, in test_changed_executable_is_stale\n    self.assertEqual(item['status'], 'STALE')\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/unittest/case.py\", line 925, in assertEqual\n    assertion_func(first, second, msg=msg)\n    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/unittest/case.py\", line 1291, in assertMultiLineEqual\n    self.fail(self._formatMessage(msg, standardMsg))\n    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/unittest/case.py\", line 750, in fail\n    raise self.failureException(msg)\nAssertionError: 'VERIFIED' != 'STALE'\n- VERIFIED\n+ STALE\n\n",
+      "type": "AssertionError"
+    }
+  ],
+  "finished": [
+    "test_assurance.RuntimeTests.test_changed_executable_is_stale"
+  ],
+  "loaded": [
+    "test_assurance.RuntimeTests.test_changed_executable_is_stale"
+  ],
+  "run": 1,
+  "skips": [],
+  "started": [
+    "test_assurance.RuntimeTests.test_changed_executable_is_stale"
+  ],
+  "unexpected": []
+}

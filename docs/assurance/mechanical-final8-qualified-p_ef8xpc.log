@@ -1,0 +1,27 @@
+test_windows_lifetime_probe_never_sends_a_signal (test_review_enforcement.CompatibilityTests.test_windows_lifetime_probe_never_sends_a_signal) ... FAIL
+
+======================================================================
+FAIL: test_windows_lifetime_probe_never_sends_a_signal (test_review_enforcement.CompatibilityTests.test_windows_lifetime_probe_never_sends_a_signal)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-p_ef8xpc/.ai/scripts/tests/test_review_enforcement.py", line 484, in test_windows_lifetime_probe_never_sends_a_signal
+    self.assertFalse(guard.stopped({'pid': 123, 'birth': None}))
+                     ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-p_ef8xpc/.ai/scripts/review_guard.py", line 161, in stopped
+    os.kill(pid, 0)
+    ~~~~~~~^^^^^^^^
+  File "/usr/lib/python3.14/unittest/mock.py", line 1176, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/unittest/mock.py", line 1180, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/unittest/mock.py", line 1241, in _execute_mock_call
+    raise effect
+AssertionError: a Windows lifetime probe must never signal the owner
+
+----------------------------------------------------------------------
+Ran 1 test in 0.217s
+
+FAILED (failures=1)
+timing: {"elapsed_seconds": 0.314, "exit_code": 1, "finished_at": "2026-10-28T22:24:46.933507+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T22:24:46.619772+00:00"}

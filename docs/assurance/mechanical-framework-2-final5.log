@@ -1,0 +1,2 @@
+run assurance-2-mechanical-framework-final5: exit=1 tree=d9004a9
+    full output: docs/assurance/mechanical-framework-2-final5-full.log; exit=1

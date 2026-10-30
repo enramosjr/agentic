@@ -1,0 +1,111 @@
+{
+  "native_initialize": {
+    "userAgent": "Codex Desktop/0.162.1 (CachyOS Linux Rolling Release; x86_64) dumb (assurance_scope_readonly; 1)",
+    "codexHome": "/home/enramosjr/.codex",
+    "platformFamily": "unix",
+    "platformOs": "linux"
+  },
+  "schema_hook_events": [
+    "preToolUse",
+    "permissionRequest",
+    "postToolUse",
+    "preCompact",
+    "postCompact",
+    "sessionStart",
+    "sessionEnd",
+    "userPromptSubmit",
+    "subagentStart",
+    "subagentStop",
+    "stop",
+    "interrupt"
+  ],
+  "configured_probe_hooks": [
+    {
+      "key": "/<session-flags>/config.toml:subagent_start:0:0",
+      "eventName": "subagentStart",
+      "handlerType": "command",
+      "command": "/usr/bin/python3 /home/enramosjr/Projects/agentic-assurance-7/docs/assurance/codex-capability-scope-2/hook-probe.py",
+      "async": false,
+      "matcher": null,
+      "timeoutSec": 5,
+      "statusMessage": null,
+      "additionalContextLimit": null,
+      "sourcePath": "/<session-flags>/config.toml",
+      "source": "sessionFlags",
+      "pluginId": null,
+      "displayOrder": 4,
+      "enabled": true,
+      "isManaged": false,
+      "currentHash": "sha256:e857cfa5e684ab0b71384491b41ff4e2a8824a7200cfd31a80662f0f34dc2570",
+      "trustStatus": "untrusted"
+    },
+    {
+      "key": "/<session-flags>/config.toml:subagent_stop:0:0",
+      "eventName": "subagentStop",
+      "handlerType": "command",
+      "command": "/usr/bin/python3 /home/enramosjr/Projects/agentic-assurance-7/docs/assurance/codex-capability-scope-2/hook-probe.py",
+      "async": false,
+      "matcher": null,
+      "timeoutSec": 5,
+      "statusMessage": null,
+      "additionalContextLimit": null,
+      "sourcePath": "/<session-flags>/config.toml",
+      "source": "sessionFlags",
+      "pluginId": null,
+      "displayOrder": 5,
+      "enabled": true,
+      "isManaged": false,
+      "currentHash": "sha256:49a0f9ed22e182ed80191646ccdee49797b4608b98569fd4adae8c3bb3ad8db3",
+      "trustStatus": "untrusted"
+    }
+  ],
+  "hook_group_errors": [
+    []
+  ],
+  "thread_read_identity_field_schemas": {
+    "parentThreadId": {
+      "description": "The ID of the parent thread. This will only be set if this thread is a subagent.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "agentRole": {
+      "description": "Optional role (agent_role) assigned to an AgentControl-spawned sub-agent.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "model": {
+      "description": "Current configured model when loaded, otherwise the latest persisted model. Null when unavailable. This is not per-turn execution telemetry.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reasoningEffort": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/ReasoningEffort"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Current configured reasoning effort when loaded, otherwise the latest persisted effort. Null when unset or unavailable. This is not per-turn execution telemetry."
+    },
+    "cliVersion": {
+      "description": "Version of the CLI that created the thread.",
+      "type": "string"
+    }
+  },
+  "actual_model_thread_calls": 0,
+  "trust_bypass_used": false,
+  "request_methods": [
+    "initialize",
+    "hooks/list",
+    "config/read"
+  ],
+  "boundary": "schema/config acceptance only, no native subagent event-fire or populated reviewer payload proof"
+}

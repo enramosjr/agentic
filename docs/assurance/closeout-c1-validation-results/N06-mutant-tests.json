@@ -1,0 +1,68 @@
+{
+  "errors": [],
+  "expected_failures": [],
+  "failures": [
+    {
+      "frames": [
+        {
+          "file": "case.py",
+          "function": "testPartExecutor",
+          "line": 58,
+          "locals": {}
+        },
+        {
+          "file": "case.py",
+          "function": "run",
+          "line": 669,
+          "locals": {}
+        },
+        {
+          "file": "case.py",
+          "function": "_callTestMethod",
+          "line": 615,
+          "locals": {}
+        },
+        {
+          "file": "test_assurance.py",
+          "function": "test_invalid_and_output_bearing_records_contribute_nothing",
+          "line": 258,
+          "locals": {}
+        },
+        {
+          "file": "case.py",
+          "function": "assertEqual",
+          "line": 925,
+          "locals": {}
+        },
+        {
+          "file": "case.py",
+          "function": "assertMultiLineEqual",
+          "line": 1291,
+          "locals": {}
+        },
+        {
+          "file": "case.py",
+          "function": "fail",
+          "line": 750,
+          "locals": {}
+        }
+      ],
+      "id": "test_assurance.IntegrityTests.test_invalid_and_output_bearing_records_contribute_nothing",
+      "message": "'VERIFIED' != 'UNVERIFIED'\n- VERIFIED\n+ UNVERIFIED\n? ++\n",
+      "traceback": "Traceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/case.py\", line 58, in testPartExecutor\n    yield\n  File \"/usr/lib/python3.14/unittest/case.py\", line 669, in run\n    self._callTestMethod(testMethod)\n    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/unittest/case.py\", line 615, in _callTestMethod\n    result = method()\n  File \"/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/closeout-c1-validation-results/.work/N06-mutant/repo/.ai/scripts/tests/test_assurance.py\", line 258, in test_invalid_and_output_bearing_records_contribute_nothing\n    self.assertEqual(item['status'], 'UNVERIFIED')\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/unittest/case.py\", line 925, in assertEqual\n    assertion_func(first, second, msg=msg)\n    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/unittest/case.py\", line 1291, in assertMultiLineEqual\n    self.fail(self._formatMessage(msg, standardMsg))\n    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/unittest/case.py\", line 750, in fail\n    raise self.failureException(msg)\nAssertionError: 'VERIFIED' != 'UNVERIFIED'\n- VERIFIED\n+ UNVERIFIED\n? ++\n\n",
+      "type": "AssertionError"
+    }
+  ],
+  "finished": [
+    "test_assurance.IntegrityTests.test_invalid_and_output_bearing_records_contribute_nothing"
+  ],
+  "loaded": [
+    "test_assurance.IntegrityTests.test_invalid_and_output_bearing_records_contribute_nothing"
+  ],
+  "run": 1,
+  "skips": [],
+  "started": [
+    "test_assurance.IntegrityTests.test_invalid_and_output_bearing_records_contribute_nothing"
+  ],
+  "unexpected": []
+}

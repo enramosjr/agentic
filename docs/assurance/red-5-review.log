@@ -1,0 +1,13 @@
+RED recorded (exit 1):
+    self.refused(extra=(value,))
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_assurance_inputs.py", line 89, in refused
+    self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 0 != 2 : {"schema_version": 1, "ok": true, "profile_id": "python-runner-test", "argv": ["python3", "-m", "unittest", "discover", "-s", ".ai/scripts/tests", "-p", "test_run_tests.py"], "inputs": [".ai/scripts/tests/test_run_tests.py", ".ai/scripts/tests/disk_tmp.py", ".ai/scripts/scratch.py", ".ai/scripts/run_tests.py", "assets"], "inputs_line": "  - Inputs: `.ai/scripts/tests/test_run_tests.py` `.ai/scripts/tests/disk_tmp.py` `.ai/scripts/scratch.py` `.ai/scripts/run_tests.py` `assets`", "lifecycle_inputs_argv": ["--inputs", ".ai/scripts/tests/test_run_tests.py", ".ai/scripts/tests/disk_tmp.py", ".ai/scripts/scratch.py", ".ai/scripts/run_tests.py", "assets"], "rationale": {".ai/scripts/tests/test_run_tests.py": "Selected test module, including its generated fixture source.", ".ai/scripts/tests/disk_tmp.py": "Imported fixture temporary-directory helper.", ".ai/scripts/scratch.py": "Transitive helper used to validate disk-backed temporary storage.", ".ai/scripts/run_tests.py": "Subprocess script exercised by the selected test.", "assets": "Author-supplied supplemental input; completeness requires review."}, "limitations": ["Declared repository input scope; review required when command reads or dependencies change.", "This is not complete read discovery, approval, or VERIFIED evidence; adoption is explicit.", "Runtime environment, executable, temporary storage and mount state remain outside this file-scope claim.", "Ignored files and external mutable data are not covered; unresolved application-data reads require retaining current scope.", "Full-suite coverage and existing inference, evidence matching and gates remain unchanged."], "review_required": true}
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.100s
+
+FAILED (failures=2)

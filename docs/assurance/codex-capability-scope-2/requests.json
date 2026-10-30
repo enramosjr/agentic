@@ -1,0 +1,32 @@
+[
+  {
+    "id": 1,
+    "method": "initialize",
+    "params": {
+      "clientInfo": {
+        "name": "assurance_scope_readonly",
+        "version": "1"
+      },
+      "capabilities": {
+        "experimentalApi": true
+      }
+    }
+  },
+  {
+    "id": 2,
+    "method": "hooks/list",
+    "params": {
+      "cwds": [
+        "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/codex-capability-scope-2/fixture"
+      ]
+    }
+  },
+  {
+    "id": 3,
+    "method": "config/read",
+    "params": {
+      "cwd": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/codex-capability-scope-2/fixture",
+      "includeLayers": false
+    }
+  }
+]

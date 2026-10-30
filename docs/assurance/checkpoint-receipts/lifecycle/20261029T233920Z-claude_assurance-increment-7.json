@@ -1,0 +1,13 @@
+{
+  "branch": "claude/assurance-increment-7",
+  "head": "02dd97586873f24a604224aa5ad186a60c4104e7",
+  "history": [],
+  "kind": "feature",
+  "reason": "5o contract-profile specification and broader assurance scope assessment; human approval pending",
+  "redgreen": [],
+  "stages": {},
+  "task": "20261029T233920Z-claude_assurance-increment-7",
+  "tier": "L2",
+  "user_set": false,
+  "version": 1
+}

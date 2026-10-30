@@ -1,0 +1,18 @@
+{
+  "fixture": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-codex-v6/git-metadata/okf-scratch/eval-attempt-l1exc5va/repo",
+  "head": "4337b1c75682244df691e510a61ecad3b9241c14",
+  "git_metadata": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-codex-v6/retained/codex/git-metadata",
+  "isolation": {
+    "branch": "codex/named-greeting",
+    "head": "4337b1c75682244df691e510a61ecad3b9241c14",
+    "tree": "e712c5fc42f901a4932ad649ccd7a373ca390297",
+    "commits": "1",
+    "index_sha256": "635f639a951fbf989bb0fc6c29d7563e4c8031d4daf137e0254ac00e0c265691",
+    "provided_before_session": true
+  },
+  "temporary_environment": {
+    "TMPDIR": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-codex-v6/retained/codex/git-metadata/okf-scratch",
+    "TMP": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-codex-v6/retained/codex/git-metadata/okf-scratch",
+    "TEMP": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-codex-v6/retained/codex/git-metadata/okf-scratch"
+  }
+}

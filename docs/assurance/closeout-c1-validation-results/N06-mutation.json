@@ -1,0 +1,9 @@
+{
+  "after": "11f05a9cc2981425a21fcc1a4d0b9c1a8a7bbe0bae4c32ebd2355b824c3897ee",
+  "before": "f59b7187ca81fa1ce99fb98a1886c3afaefae71f414114b1f8252a69a201cab8",
+  "id": "N06",
+  "new": "if False and problems:",
+  "old": "if problems:",
+  "path": ".ai/scripts/assurance.py",
+  "restored": false
+}

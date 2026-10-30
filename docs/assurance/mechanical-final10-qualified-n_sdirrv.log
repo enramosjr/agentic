@@ -1,0 +1,16 @@
+test_git_environment_cannot_redirect_the_guard_namespace (test_review_enforcement.ReadOnlyTests.test_git_environment_cannot_redirect_the_guard_namespace) ... FAIL
+
+======================================================================
+FAIL: test_git_environment_cannot_redirect_the_guard_namespace (test_review_enforcement.ReadOnlyTests.test_git_environment_cannot_redirect_the_guard_namespace)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-n_sdirrv/.ai/scripts/tests/test_review_enforcement.py", line 748, in test_git_environment_cannot_redirect_the_guard_namespace
+    self.fail('a Git environment override bypassed the physical worktree guard')
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: a Git environment override bypassed the physical worktree guard
+
+----------------------------------------------------------------------
+Ran 1 test in 0.263s
+
+FAILED (failures=1)
+timing: {"elapsed_seconds": 0.364, "exit_code": 1, "finished_at": "2026-10-28T23:35:12.305599+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T23:35:11.941800+00:00"}

@@ -1,0 +1,2 @@
+run assurance-2-mechanical-install-diagnostic-final4: exit=1 tree=00654a5
+    full output: docs/assurance/mechanical-install-diagnostic-2-final4-full.log; exit=1

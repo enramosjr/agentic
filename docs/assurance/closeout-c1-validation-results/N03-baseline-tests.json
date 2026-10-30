@@ -1,0 +1,26 @@
+{
+  "errors": [],
+  "expected_failures": [],
+  "failures": [],
+  "finished": [
+    "test_assurance.AssureRunTests.test_run_records_req_entry_with_declared_inputs",
+    "test_assurance.AssureRunTests.test_run_refuses_inside_lifecycle_run",
+    "test_assurance.AssureRunTests.test_run_refuses_unknown_id",
+    "test_assurance.AssureRunTests.test_run_refuses_without_active_task"
+  ],
+  "loaded": [
+    "test_assurance.AssureRunTests.test_run_records_req_entry_with_declared_inputs",
+    "test_assurance.AssureRunTests.test_run_refuses_inside_lifecycle_run",
+    "test_assurance.AssureRunTests.test_run_refuses_unknown_id",
+    "test_assurance.AssureRunTests.test_run_refuses_without_active_task"
+  ],
+  "run": 4,
+  "skips": [],
+  "started": [
+    "test_assurance.AssureRunTests.test_run_records_req_entry_with_declared_inputs",
+    "test_assurance.AssureRunTests.test_run_refuses_inside_lifecycle_run",
+    "test_assurance.AssureRunTests.test_run_refuses_unknown_id",
+    "test_assurance.AssureRunTests.test_run_refuses_without_active_task"
+  ],
+  "unexpected": []
+}

@@ -10,7 +10,6 @@ import shutil
 import signal
 import sys
 import tempfile
-import time
 from typing import Callable, Optional, TextIO
 
 sys.dont_write_bytecode = True
@@ -146,9 +145,6 @@ def measure(base: Optional[Path] = None, hook: Optional[Callable[[Path], None]] 
             session.lifecycle("assure", "--run", ok=(0, 1))
             commit(session)
             if scenario.name == "handoff":
-                # Records and task names have second precision. Give the later task a later
-                # timestamp so this fixture measures handoff rather than same-second ordering.
-                time.sleep(1.05)
                 session.lifecycle("tier", "L1", "--reason", "measurement handoff", "--new")
             rows = []
             for step in scenario.steps:

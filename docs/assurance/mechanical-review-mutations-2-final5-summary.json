@@ -1,0 +1,266 @@
+{
+  "source_tree": "d9004a92fd67d8291856395496f3652ce13569635bf75bb67e3c2c91bcf7dce1",
+  "artifact_bundle": "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-y18nwkhf",
+  "artifact_sha256": "f1749a736f92014adea5a0ee2b44f4e6c7c1e874cb98a24a86facb3012074dde",
+  "declared_files": 143,
+  "baseline_exit": 0,
+  "baseline_valid": true,
+  "baseline_test_count": 59,
+  "total": 28,
+  "killed": 26,
+  "model_calls": 0,
+  "controls": [
+    {
+      "name": "active-freeze-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_active_review_refuses_writer_before_effects",
+      "variant_sha256": "2fc838e41d7cd51cb8b019e2b10be06531925e693f61ac34b82ba45496a909b0"
+    },
+    {
+      "name": "borrower-quiescence-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_dead_owner_cannot_release_a_live_borrower",
+      "variant_sha256": "afcb03ad8fc29fd83363c8d95f98e07414e329e18e538b0bf662b34b0796085b"
+    },
+    {
+      "name": "canonical-capture-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_malformed_or_changed_completion_never_qualifies",
+      "variant_sha256": "6a9a1c2d5fb849fd7eaf64b5493d80c86c23d11dfd0678de5fbadd0584fbe7f7"
+    },
+    {
+      "name": "captured-body-binding-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_exact_body_hash_semantics_and_parent_reconstruction_rejected",
+      "variant_sha256": "96a74738ccbc77d3392f613b000b7e24a0b350b8ca14cebce787df7e414e78ad"
+    },
+    {
+      "name": "runtime-replacement-accepted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_replaced_native_host_cannot_complete_original_review",
+      "variant_sha256": "4a85b06c13fecfc5d630659938695290145d6a902be89c215a0148a802f3d73b"
+    },
+    {
+      "name": "retired-child-reuse-accepted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_abandoned_native_child_identity_cannot_be_reused",
+      "variant_sha256": "62c712f71e2325941fe4347d514cbe116b1290ab010226cf2b96ce2d22ccb180"
+    },
+    {
+      "name": "exact-source-convergence-pins-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_exact_convergence_or_source_drift_refuses",
+      "variant_sha256": "ae9872aa7170b84ac1f15f9cfcdf692f28fd370d4e2e7b4cc15f2bf5130a10f7"
+    },
+    {
+      "name": "evidence-append-proof-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_unrecorded_append_is_not_inferred_from_suffix",
+      "variant_sha256": "7fd80fb4851179c1cf26ce24ff04d3c40afa29cd7dda612b974bb77437f4a967"
+    },
+    {
+      "name": "arbitrary-eviction-accepted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_publication_chain_and_archive_corruption_refuse",
+      "variant_sha256": "e010c1dc0605633b676bf03d4ba10d4008f03525c65a5e08893510f10d6b8e61"
+    },
+    {
+      "name": "stage-freshness-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_default_broad_validation_refresh_reaches_verify_without_rereview",
+      "variant_sha256": "cbcde94fc8003bc83f1c2a3f1753e4a28ff569adaa7b4ff29f32daf28478fe18"
+    },
+    {
+      "name": "whole-driver-native-lease-restored",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_driver_launch_does_not_hold_a_whole_session_native_lease",
+      "variant_sha256": "1516987555fa4c3463a4f6efb24c17b6da38e0e6bb70ea49d922e2ccc77d8f5a"
+    },
+    {
+      "name": "new-file-root-guard-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_markdown_delete_and_wrapped_writer_hooks_ignore_legacy_bypass",
+      "variant_sha256": "7051958e04d5a737ad60d82b2e0dd0e7acf641e5f4b56b11dda2d53bc9fedd7e"
+    },
+    {
+      "name": "raw-command-registration-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_plain_command_group_survives_supervisor_loss_without_unlocking",
+      "variant_sha256": "a9cd73f67c781436a0df1ce378060508eec418f6e469f8a8085eeef489309573"
+    },
+    {
+      "name": "raw-descendant-group-proof-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_plain_command_group_survives_supervisor_loss_without_unlocking",
+      "variant_sha256": "2727537472183f1f7af4e70803a3b0c5db22b216e2e3b930e7097353d0e3f8f6"
+    },
+    {
+      "name": "recovery-self-lease-restored",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_explicit_recovery_does_not_lease_itself",
+      "variant_sha256": "ca30bf1c9add56614c55fb4a73b267c17ddf27ba7825113f39633ffd4666b9e7"
+    },
+    {
+      "name": "broad-driver-operand-exception-restored",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_driver_filename_operands_keep_the_native_mutation_lease",
+      "variant_sha256": "7fcd4b3f0873d92b134ce0c5055a48db712e73d0ef916b0c6a33483aa61cf8a5"
+    },
+    {
+      "name": "partial-commit-argument-check-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_partial_commit_hook_cannot_bypass_the_reviewed_full_index",
+      "variant_sha256": "e347d16543dbc5d2ba60c4ca56f7a5792941a18212e21b3a14e87713c5093fe6"
+    },
+    {
+      "name": "windows-kill-zero-probe-restored",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_windows_lifetime_probe_never_sends_a_signal",
+      "variant_sha256": "db137e3c3216c7fdc039f2558df68976c26dc641415f5f28093c679616233429"
+    },
+    {
+      "name": "shim-python-startup-isolation-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_launch_shim_does_not_repeat_product_python_startup",
+      "variant_sha256": "9b34d798c1f45a88ee7dc2517ae1ee4e0be2fa610968d503437cde18d1bd130b"
+    },
+    {
+      "name": "compact-C-target-routing-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_nested_git_directory_targets_freeze_the_actual_worktree",
+      "variant_sha256": "9dd171fe7b397f76531f21f1ecc14b143c472cb41107705eeacc40001ba20200"
+    },
+    {
+      "name": "explicit-git-selector-extraction-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_explicit_git_and_environment_selectors_cannot_hide_active_target",
+      "variant_sha256": "2a0b9ba844d68d20bbe72efca503a4839ab79c373e8de73ea56833750a24fc2a"
+    },
+    {
+      "name": "git-namespace-environment-stripping-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_git_environment_cannot_redirect_the_guard_namespace",
+      "variant_sha256": "cfb033a98d5dfad25a35269265ab333e6df2a2f5fa1d3d4046046ebf95eec34e"
+    },
+    {
+      "name": "native-terminal-proof-bypassed",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_dead_native_host_is_not_invocation_terminal_proof",
+      "variant_sha256": "da376c14437c01b7556b46091734984ab7a96dab7a4c27ebf5919ffd5a53aa3b"
+    },
+    {
+      "name": "durable-native-opt-in-silent-legacy-fallback",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_missing_journal_after_native_review_cannot_verify_as_legacy",
+      "variant_sha256": "d4e9d4aa1c95cbea7856c084f46eb4eb911f27183d8606944c99fb5598dd3f51"
+    },
+    {
+      "name": "relative-selected-target-replaced-by-invocation-directory",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_relative_git_selectors_follow_git_directory_order",
+      "variant_sha256": "c85bca928d4184ce5fb43c855f5bfded30af7721708a3488eadbabed9904082a"
+    },
+    {
+      "name": "guard-namespace-disk-validation-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_guard_namespace_rejects_system_temp_symlinks_before_writes",
+      "variant_sha256": "b058bfba4e9f84a20c2a812a94c14d00434fe9fb485d2949871d43228f942603"
+    },
+    {
+      "name": "snapshot-policy-and-history-comparison-omitted",
+      "confirmed": true,
+      "killed": false,
+      "valid": false,
+      "exit": 1,
+      "test": "test_snapshot_exception_preserves_policy_captures_and_live_grants",
+      "variant_sha256": "a6eca350feefe6421ba5a4719cd5d211c10ce3a03edb2be9c2be317c3f923011"
+    },
+    {
+      "name": "snapshot-blanket-capture-exclusion",
+      "confirmed": true,
+      "killed": false,
+      "valid": false,
+      "exit": 1,
+      "test": "test_snapshot_exception_preserves_policy_captures_and_live_grants",
+      "variant_sha256": "954bf356a37553e7a9081b38b6d458aeac6ef676107a72ba21b03a8c218b9207"
+    }
+  ]
+}

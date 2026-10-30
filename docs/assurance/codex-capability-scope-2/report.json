@@ -1,0 +1,831 @@
+{
+  "scope": "installed schema/event acceptance only; no model/provider inference or reviewer event-fire claim",
+  "allowed_methods_only": true,
+  "model_or_thread_calls": 0,
+  "trust_bypass_used": false,
+  "global_config_modified": false,
+  "protocol_error": null,
+  "schema_generated": true,
+  "schema_facts": [
+    {
+      "file": "ServerNotification.json",
+      "pointer": "/definitions/HookEventName",
+      "events": [
+        "preToolUse",
+        "permissionRequest",
+        "postToolUse",
+        "preCompact",
+        "postCompact",
+        "sessionStart",
+        "sessionEnd",
+        "userPromptSubmit",
+        "subagentStart",
+        "subagentStop",
+        "stop",
+        "interrupt"
+      ]
+    },
+    {
+      "file": "codex_app_server_protocol.schemas.json",
+      "pointer": "/definitions/v2/HookEventName",
+      "events": [
+        "preToolUse",
+        "permissionRequest",
+        "postToolUse",
+        "preCompact",
+        "postCompact",
+        "sessionStart",
+        "sessionEnd",
+        "userPromptSubmit",
+        "subagentStart",
+        "subagentStop",
+        "stop",
+        "interrupt"
+      ]
+    },
+    {
+      "file": "codex_app_server_protocol.v2.schemas.json",
+      "pointer": "/definitions/HookEventName",
+      "events": [
+        "preToolUse",
+        "permissionRequest",
+        "postToolUse",
+        "preCompact",
+        "postCompact",
+        "sessionStart",
+        "sessionEnd",
+        "userPromptSubmit",
+        "subagentStart",
+        "subagentStop",
+        "stop",
+        "interrupt"
+      ]
+    },
+    {
+      "file": "v2/HookCompletedNotification.json",
+      "pointer": "/definitions/HookEventName",
+      "events": [
+        "preToolUse",
+        "permissionRequest",
+        "postToolUse",
+        "preCompact",
+        "postCompact",
+        "sessionStart",
+        "sessionEnd",
+        "userPromptSubmit",
+        "subagentStart",
+        "subagentStop",
+        "stop",
+        "interrupt"
+      ]
+    },
+    {
+      "file": "v2/HookStartedNotification.json",
+      "pointer": "/definitions/HookEventName",
+      "events": [
+        "preToolUse",
+        "permissionRequest",
+        "postToolUse",
+        "preCompact",
+        "postCompact",
+        "sessionStart",
+        "sessionEnd",
+        "userPromptSubmit",
+        "subagentStart",
+        "subagentStop",
+        "stop",
+        "interrupt"
+      ]
+    },
+    {
+      "file": "v2/HooksListResponse.json",
+      "pointer": "/definitions/HookEventName",
+      "events": [
+        "preToolUse",
+        "permissionRequest",
+        "postToolUse",
+        "preCompact",
+        "postCompact",
+        "sessionStart",
+        "sessionEnd",
+        "userPromptSubmit",
+        "subagentStart",
+        "subagentStop",
+        "stop",
+        "interrupt"
+      ]
+    },
+    {
+      "file": "v2/PluginReadResponse.json",
+      "pointer": "/definitions/HookEventName",
+      "events": [
+        "preToolUse",
+        "permissionRequest",
+        "postToolUse",
+        "preCompact",
+        "postCompact",
+        "sessionStart",
+        "sessionEnd",
+        "userPromptSubmit",
+        "subagentStart",
+        "subagentStop",
+        "stop",
+        "interrupt"
+      ]
+    },
+    {
+      "file": "v2/ThreadForkParams.json",
+      "pointer": "",
+      "identity_fields": [
+        "model"
+      ]
+    },
+    {
+      "file": "v2/ThreadForkResponse.json",
+      "pointer": "",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadForkResponse.json",
+      "pointer": "/definitions/Thread",
+      "identity_fields": [
+        "agentRole",
+        "cliVersion",
+        "model",
+        "parentThreadId",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadForkResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/10",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadForkResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/11",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadItemsListResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/10",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadItemsListResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/11",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadListParams.json",
+      "pointer": "",
+      "identity_fields": [
+        "parentThreadId"
+      ]
+    },
+    {
+      "file": "v2/ThreadListResponse.json",
+      "pointer": "/definitions/Thread",
+      "identity_fields": [
+        "agentRole",
+        "cliVersion",
+        "model",
+        "parentThreadId",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadListResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/10",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadListResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/11",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadMetadataUpdateResponse.json",
+      "pointer": "/definitions/Thread",
+      "identity_fields": [
+        "agentRole",
+        "cliVersion",
+        "model",
+        "parentThreadId",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadMetadataUpdateResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/10",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadMetadataUpdateResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/11",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadQueueStartResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/10",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadQueueStartResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/11",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadReadResponse.json",
+      "pointer": "/definitions/Thread",
+      "identity_fields": [
+        "agentRole",
+        "cliVersion",
+        "model",
+        "parentThreadId",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadReadResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/10",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadReadResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/11",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadRealtimeStartParams.json",
+      "pointer": "",
+      "identity_fields": [
+        "model"
+      ]
+    },
+    {
+      "file": "v2/ThreadResumeParams.json",
+      "pointer": "",
+      "identity_fields": [
+        "model"
+      ]
+    },
+    {
+      "file": "v2/ThreadResumeResponse.json",
+      "pointer": "",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadResumeResponse.json",
+      "pointer": "/definitions/Settings",
+      "identity_fields": [
+        "model"
+      ]
+    },
+    {
+      "file": "v2/ThreadResumeResponse.json",
+      "pointer": "/definitions/Thread",
+      "identity_fields": [
+        "agentRole",
+        "cliVersion",
+        "model",
+        "parentThreadId",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadResumeResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/10",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadResumeResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/11",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadRevertResponse.json",
+      "pointer": "/definitions/Thread",
+      "identity_fields": [
+        "agentRole",
+        "cliVersion",
+        "model",
+        "parentThreadId",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadRevertResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/10",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadRevertResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/11",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadSearchResponse.json",
+      "pointer": "/definitions/Thread",
+      "identity_fields": [
+        "agentRole",
+        "cliVersion",
+        "model",
+        "parentThreadId",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadSearchResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/10",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadSearchResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/11",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadSettingsUpdateParams.json",
+      "pointer": "",
+      "identity_fields": [
+        "model"
+      ]
+    },
+    {
+      "file": "v2/ThreadSettingsUpdateParams.json",
+      "pointer": "/definitions/Settings",
+      "identity_fields": [
+        "model"
+      ]
+    },
+    {
+      "file": "v2/ThreadSettingsUpdatedNotification.json",
+      "pointer": "/definitions/Settings",
+      "identity_fields": [
+        "model"
+      ]
+    },
+    {
+      "file": "v2/ThreadSettingsUpdatedNotification.json",
+      "pointer": "/definitions/ThreadSettings",
+      "identity_fields": [
+        "model"
+      ]
+    },
+    {
+      "file": "v2/ThreadStartParams.json",
+      "pointer": "",
+      "identity_fields": [
+        "model"
+      ]
+    },
+    {
+      "file": "v2/ThreadStartResponse.json",
+      "pointer": "",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadStartResponse.json",
+      "pointer": "/definitions/Thread",
+      "identity_fields": [
+        "agentRole",
+        "cliVersion",
+        "model",
+        "parentThreadId",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadStartResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/10",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadStartResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/11",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadStartedNotification.json",
+      "pointer": "/definitions/Thread",
+      "identity_fields": [
+        "agentRole",
+        "cliVersion",
+        "model",
+        "parentThreadId",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadStartedNotification.json",
+      "pointer": "/definitions/ThreadItem/oneOf/10",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadStartedNotification.json",
+      "pointer": "/definitions/ThreadItem/oneOf/11",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadTimelineListResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/10",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadTimelineListResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/11",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadTurnsListResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/10",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadTurnsListResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/11",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadUnarchiveResponse.json",
+      "pointer": "/definitions/Thread",
+      "identity_fields": [
+        "agentRole",
+        "cliVersion",
+        "model",
+        "parentThreadId",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadUnarchiveResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/10",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    },
+    {
+      "file": "v2/ThreadUnarchiveResponse.json",
+      "pointer": "/definitions/ThreadItem/oneOf/11",
+      "identity_fields": [
+        "model",
+        "reasoningEffort"
+      ]
+    }
+  ],
+  "hooks_list": {
+    "data": [
+      {
+        "cwd": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/codex-capability-scope-2/fixture",
+        "hooks": [
+          {
+            "key": "/home/enramosjr/Projects/agentic/.codex/hooks.json:pre_tool_use:0:0",
+            "eventName": "preToolUse",
+            "handlerType": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.ai/scripts/shell_guard.py\"",
+            "async": false,
+            "matcher": "Bash",
+            "timeoutSec": 10,
+            "statusMessage": "Checking shell command",
+            "additionalContextLimit": null,
+            "sourcePath": "/home/enramosjr/Projects/agentic/.codex/hooks.json",
+            "source": "project",
+            "pluginId": null,
+            "displayOrder": 0,
+            "enabled": true,
+            "isManaged": false,
+            "currentHash": "sha256:dc9ce7b16acf959ae4e3b53be1c61b90f8542811019b328364612685c7f81fae",
+            "trustStatus": "trusted"
+          },
+          {
+            "key": "/home/enramosjr/Projects/agentic/.codex/hooks.json:pre_tool_use:0:1",
+            "eventName": "preToolUse",
+            "handlerType": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.ai/scripts/lifecycle.py\" hook",
+            "async": false,
+            "matcher": "Bash",
+            "timeoutSec": 10,
+            "statusMessage": "Checking lifecycle stage",
+            "additionalContextLimit": null,
+            "sourcePath": "/home/enramosjr/Projects/agentic/.codex/hooks.json",
+            "source": "project",
+            "pluginId": null,
+            "displayOrder": 1,
+            "enabled": true,
+            "isManaged": false,
+            "currentHash": "sha256:c07aab8011a7d67850352878c75d5e48008731ab6a062d193310046cea3cc7da",
+            "trustStatus": "trusted"
+          },
+          {
+            "key": "/home/enramosjr/Projects/agentic/.codex/hooks.json:pre_tool_use:1:0",
+            "eventName": "preToolUse",
+            "handlerType": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.ai/scripts/lifecycle.py\" hook",
+            "async": false,
+            "matcher": "apply_patch|Edit|Write",
+            "timeoutSec": 10,
+            "statusMessage": "Checking lifecycle stage",
+            "additionalContextLimit": null,
+            "sourcePath": "/home/enramosjr/Projects/agentic/.codex/hooks.json",
+            "source": "project",
+            "pluginId": null,
+            "displayOrder": 2,
+            "enabled": true,
+            "isManaged": false,
+            "currentHash": "sha256:c3baf29a190eb54aca3d973c1349ebd26bc6582fb10cfb55ea704b6b794a40a3",
+            "trustStatus": "trusted"
+          },
+          {
+            "key": "/home/enramosjr/Projects/agentic/.codex/hooks.json:session_start:0:0",
+            "eventName": "sessionStart",
+            "handlerType": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.ai/scripts/lifecycle.py\" hook",
+            "async": false,
+            "matcher": null,
+            "timeoutSec": 10,
+            "statusMessage": "Loading lifecycle router",
+            "additionalContextLimit": null,
+            "sourcePath": "/home/enramosjr/Projects/agentic/.codex/hooks.json",
+            "source": "project",
+            "pluginId": null,
+            "displayOrder": 3,
+            "enabled": true,
+            "isManaged": false,
+            "currentHash": "sha256:8f07a2e4ce3da0319d9102467f06730f8289f8df9012b22ec28a30ed43895320",
+            "trustStatus": "trusted"
+          },
+          {
+            "key": "/<session-flags>/config.toml:subagent_start:0:0",
+            "eventName": "subagentStart",
+            "handlerType": "command",
+            "command": "/usr/bin/python3 /home/enramosjr/Projects/agentic-assurance-7/docs/assurance/codex-capability-scope-2/hook-probe.py",
+            "async": false,
+            "matcher": null,
+            "timeoutSec": 5,
+            "statusMessage": null,
+            "additionalContextLimit": null,
+            "sourcePath": "/<session-flags>/config.toml",
+            "source": "sessionFlags",
+            "pluginId": null,
+            "displayOrder": 4,
+            "enabled": true,
+            "isManaged": false,
+            "currentHash": "sha256:e857cfa5e684ab0b71384491b41ff4e2a8824a7200cfd31a80662f0f34dc2570",
+            "trustStatus": "untrusted"
+          },
+          {
+            "key": "/<session-flags>/config.toml:subagent_stop:0:0",
+            "eventName": "subagentStop",
+            "handlerType": "command",
+            "command": "/usr/bin/python3 /home/enramosjr/Projects/agentic-assurance-7/docs/assurance/codex-capability-scope-2/hook-probe.py",
+            "async": false,
+            "matcher": null,
+            "timeoutSec": 5,
+            "statusMessage": null,
+            "additionalContextLimit": null,
+            "sourcePath": "/<session-flags>/config.toml",
+            "source": "sessionFlags",
+            "pluginId": null,
+            "displayOrder": 5,
+            "enabled": true,
+            "isManaged": false,
+            "currentHash": "sha256:49a0f9ed22e182ed80191646ccdee49797b4608b98569fd4adae8c3bb3ad8db3",
+            "trustStatus": "untrusted"
+          }
+        ],
+        "warnings": [],
+        "errors": []
+      }
+    ]
+  },
+  "active_hook_config": {
+    "PreToolUse": [],
+    "PermissionRequest": [],
+    "PostToolUse": [],
+    "PreCompact": [],
+    "PostCompact": [],
+    "SessionStart": [],
+    "SessionEnd": [],
+    "UserPromptSubmit": [],
+    "SubagentStart": [
+      {
+        "matcher": null,
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 /home/enramosjr/Projects/agentic-assurance-7/docs/assurance/codex-capability-scope-2/hook-probe.py",
+            "commandWindows": null,
+            "timeout": 5,
+            "async": false,
+            "statusMessage": null
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": null,
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/bin/python3 /home/enramosjr/Projects/agentic-assurance-7/docs/assurance/codex-capability-scope-2/hook-probe.py",
+            "commandWindows": null,
+            "timeout": 5,
+            "async": false,
+            "statusMessage": null
+          }
+        ]
+      }
+    ],
+    "Stop": [],
+    "Interrupt": [],
+    "state": {
+      "/home/enramosjr/Projects/ISARS/.codex/hooks.json:pre_tool_use:0:0": {
+        "trusted_hash": "sha256:dc9ce7b16acf959ae4e3b53be1c61b90f8542811019b328364612685c7f81fae"
+      },
+      "/home/enramosjr/Projects/ISARS/.codex/hooks.json:pre_tool_use:0:1": {
+        "trusted_hash": "sha256:c07aab8011a7d67850352878c75d5e48008731ab6a062d193310046cea3cc7da"
+      },
+      "/home/enramosjr/Projects/ISARS/.codex/hooks.json:pre_tool_use:1:0": {
+        "trusted_hash": "sha256:c3baf29a190eb54aca3d973c1349ebd26bc6582fb10cfb55ea704b6b794a40a3"
+      },
+      "/home/enramosjr/Projects/ISARS/.codex/hooks.json:session_start:0:0": {
+        "trusted_hash": "sha256:8f07a2e4ce3da0319d9102467f06730f8289f8df9012b22ec28a30ed43895320"
+      },
+      "/home/enramosjr/Projects/agentic-assistant/.codex/hooks.json:pre_tool_use:0:0": {
+        "trusted_hash": "sha256:dc9ce7b16acf959ae4e3b53be1c61b90f8542811019b328364612685c7f81fae"
+      },
+      "/home/enramosjr/Projects/agentic-assistant/.codex/hooks.json:pre_tool_use:0:1": {
+        "trusted_hash": "sha256:c07aab8011a7d67850352878c75d5e48008731ab6a062d193310046cea3cc7da"
+      },
+      "/home/enramosjr/Projects/agentic-assistant/.codex/hooks.json:pre_tool_use:1:0": {
+        "trusted_hash": "sha256:c3baf29a190eb54aca3d973c1349ebd26bc6582fb10cfb55ea704b6b794a40a3"
+      },
+      "/home/enramosjr/Projects/agentic-assistant/.codex/hooks.json:session_start:0:0": {
+        "trusted_hash": "sha256:8f07a2e4ce3da0319d9102467f06730f8289f8df9012b22ec28a30ed43895320"
+      },
+      "/home/enramosjr/Projects/agentic/.codex/hooks.json:pre_tool_use:0:0": {
+        "trusted_hash": "sha256:dc9ce7b16acf959ae4e3b53be1c61b90f8542811019b328364612685c7f81fae"
+      },
+      "/home/enramosjr/Projects/agentic/.codex/hooks.json:pre_tool_use:0:1": {
+        "trusted_hash": "sha256:c07aab8011a7d67850352878c75d5e48008731ab6a062d193310046cea3cc7da"
+      },
+      "/home/enramosjr/Projects/agentic/.codex/hooks.json:pre_tool_use:1:0": {
+        "trusted_hash": "sha256:c3baf29a190eb54aca3d973c1349ebd26bc6582fb10cfb55ea704b6b794a40a3"
+      },
+      "/home/enramosjr/Projects/agentic/.codex/hooks.json:session_start:0:0": {
+        "trusted_hash": "sha256:8f07a2e4ce3da0319d9102467f06730f8289f8df9012b22ec28a30ed43895320"
+      },
+      "/home/enramosjr/Projects/athenaeum/.codex/hooks.json:pre_tool_use:0:0": {
+        "trusted_hash": "sha256:dc9ce7b16acf959ae4e3b53be1c61b90f8542811019b328364612685c7f81fae"
+      },
+      "/home/enramosjr/Projects/athenaeum/.codex/hooks.json:pre_tool_use:0:1": {
+        "trusted_hash": "sha256:c07aab8011a7d67850352878c75d5e48008731ab6a062d193310046cea3cc7da"
+      },
+      "/home/enramosjr/Projects/athenaeum/.codex/hooks.json:pre_tool_use:1:0": {
+        "trusted_hash": "sha256:c3baf29a190eb54aca3d973c1349ebd26bc6582fb10cfb55ea704b6b794a40a3"
+      },
+      "/home/enramosjr/Projects/athenaeum/.codex/hooks.json:session_start:0:0": {
+        "trusted_hash": "sha256:8f07a2e4ce3da0319d9102467f06730f8289f8df9012b22ec28a30ed43895320"
+      },
+      "/home/enramosjr/Projects/gpui/.codex/hooks.json:pre_tool_use:0:0": {
+        "trusted_hash": "sha256:dc9ce7b16acf959ae4e3b53be1c61b90f8542811019b328364612685c7f81fae"
+      },
+      "/home/enramosjr/Projects/gpui/.codex/hooks.json:pre_tool_use:0:1": {
+        "trusted_hash": "sha256:c07aab8011a7d67850352878c75d5e48008731ab6a062d193310046cea3cc7da"
+      },
+      "/home/enramosjr/Projects/gpui/.codex/hooks.json:pre_tool_use:1:0": {
+        "trusted_hash": "sha256:c3baf29a190eb54aca3d973c1349ebd26bc6582fb10cfb55ea704b6b794a40a3"
+      },
+      "/home/enramosjr/Projects/gpui/.codex/hooks.json:session_start:0:0": {
+        "trusted_hash": "sha256:8f07a2e4ce3da0319d9102467f06730f8289f8df9012b22ec28a30ed43895320"
+      },
+      "/home/enramosjr/Projects/olmec/.codex/hooks.json:pre_tool_use:0:0": {
+        "trusted_hash": "sha256:dc9ce7b16acf959ae4e3b53be1c61b90f8542811019b328364612685c7f81fae"
+      },
+      "/home/enramosjr/Projects/olmec/.codex/hooks.json:pre_tool_use:0:1": {
+        "trusted_hash": "sha256:c07aab8011a7d67850352878c75d5e48008731ab6a062d193310046cea3cc7da"
+      },
+      "/home/enramosjr/Projects/olmec/.codex/hooks.json:pre_tool_use:1:0": {
+        "trusted_hash": "sha256:c3baf29a190eb54aca3d973c1349ebd26bc6582fb10cfb55ea704b6b794a40a3"
+      },
+      "/home/enramosjr/Projects/olmec/.codex/hooks.json:session_start:0:0": {
+        "trusted_hash": "sha256:8f07a2e4ce3da0319d9102467f06730f8289f8df9012b22ec28a30ed43895320"
+      },
+      "/home/enramosjr/Projects/techo5-llm-bridge/.codex/hooks.json:pre_tool_use:0:0": {
+        "trusted_hash": "sha256:dc9ce7b16acf959ae4e3b53be1c61b90f8542811019b328364612685c7f81fae"
+      },
+      "/home/enramosjr/Projects/techo5-llm-bridge/.codex/hooks.json:pre_tool_use:0:1": {
+        "trusted_hash": "sha256:c07aab8011a7d67850352878c75d5e48008731ab6a062d193310046cea3cc7da"
+      },
+      "/home/enramosjr/Projects/techo5-llm-bridge/.codex/hooks.json:pre_tool_use:1:0": {
+        "trusted_hash": "sha256:c3baf29a190eb54aca3d973c1349ebd26bc6582fb10cfb55ea704b6b794a40a3"
+      },
+      "/home/enramosjr/Projects/techo5-llm-bridge/.codex/hooks.json:session_start:0:0": {
+        "trusted_hash": "sha256:8f07a2e4ce3da0319d9102467f06730f8289f8df9012b22ec28a30ed43895320"
+      },
+      "/home/enramosjr/Projects/template/.codex/hooks.json:pre_tool_use:0:0": {
+        "trusted_hash": "sha256:dc9ce7b16acf959ae4e3b53be1c61b90f8542811019b328364612685c7f81fae"
+      },
+      "/home/enramosjr/Projects/template/.codex/hooks.json:pre_tool_use:0:1": {
+        "trusted_hash": "sha256:c07aab8011a7d67850352878c75d5e48008731ab6a062d193310046cea3cc7da"
+      },
+      "/home/enramosjr/Projects/template/.codex/hooks.json:pre_tool_use:1:0": {
+        "trusted_hash": "sha256:c3baf29a190eb54aca3d973c1349ebd26bc6582fb10cfb55ea704b6b794a40a3"
+      },
+      "/home/enramosjr/Projects/template/.codex/hooks.json:session_start:0:0": {
+        "trusted_hash": "sha256:8f07a2e4ce3da0319d9102467f06730f8289f8df9012b22ec28a30ed43895320"
+      }
+    }
+  },
+  "boundary": "actual subagent firing, payload population and report capture require separately authorized live evaluation"
+}

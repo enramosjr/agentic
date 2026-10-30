@@ -1,0 +1,99 @@
+{
+  "artifact": {
+    "bundle": "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-_7w1uz1h",
+    "sha256": "472a2e9cb90da939a8bb93022736a09b9cd7f408dc002cc254060439f4f09805",
+    "files": [
+      "docs/assurance/native-launch-2-review-enforcement.py",
+      "docs/assurance/prepare-native-2-review-enforcement.py",
+      "docs/assurance/run-native-2-review-enforcement.py",
+      "docs/assurance/test-native-preparation-2-review-enforcement.py"
+    ]
+  },
+  "baseline": {
+    "command": [
+      "/usr/bin/python3",
+      "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/artifacts.py",
+      "run",
+      "--bundle",
+      "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-_7w1uz1h",
+      "--sha256",
+      "472a2e9cb90da939a8bb93022736a09b9cd7f408dc002cc254060439f4f09805",
+      "--timeout",
+      "30",
+      "--",
+      "/usr/bin/python3",
+      "{artifact:docs/assurance/test-native-preparation-2-review-enforcement.py}"
+    ],
+    "exit": 0,
+    "output": "..........\n----------------------------------------------------------------------\nRan 10 tests in 0.049s\n\nOK\ntiming: {\"elapsed_seconds\": 0.164, \"exit_code\": 0, \"finished_at\": \"2026-10-28T21:28:56.381942+00:00\", \"label\": \"artifact-acceptance\", \"outcome\": \"PASS\", \"started_at\": \"2026-10-28T21:28:56.218257+00:00\"}\n"
+  },
+  "controls": [
+    {
+      "name": "trusted-runtime-check-omitted",
+      "confirmed": true,
+      "artifact": {
+        "bundle": "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-evcfb97o",
+        "sha256": "647922d8f60db327072d457654ead666812164765394fc16869930b70efafeb4",
+        "files": [
+          "docs/assurance/native-launch-2-review-enforcement.py",
+          "docs/assurance/prepare-native-2-review-enforcement.py",
+          "docs/assurance/run-native-2-review-enforcement.py",
+          "docs/assurance/test-native-preparation-2-review-enforcement.py"
+        ]
+      },
+      "killed": true,
+      "command": [
+        "/usr/bin/python3",
+        "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/artifacts.py",
+        "run",
+        "--bundle",
+        "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-evcfb97o",
+        "--sha256",
+        "647922d8f60db327072d457654ead666812164765394fc16869930b70efafeb4",
+        "--timeout",
+        "30",
+        "--",
+        "/usr/bin/python3",
+        "{artifact:docs/assurance/test-native-preparation-2-review-enforcement.py}",
+        "TrustPolicyTests.test_trust_requires_exact_native_definitions_and_actual_trusted_reply"
+      ],
+      "exit": 1,
+      "output": "F\n======================================================================\nFAIL: test_trust_requires_exact_native_definitions_and_actual_trusted_reply (__main__.TrustPolicyTests.test_trust_requires_exact_native_definitions_and_actual_trusted_reply)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-evcfb97o/docs/assurance/test-native-preparation-2-review-enforcement.py\", line 49, in test_trust_requires_exact_native_definitions_and_actual_trusted_reply\n    with self.assertRaisesRegex(ValueError, 'trust unavailable'):\n         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: ValueError not raised\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (failures=1)\ntiming: {\"elapsed_seconds\": 0.114, \"exit_code\": 1, \"finished_at\": \"2026-10-28T21:28:56.603930+00:00\", \"label\": \"artifact-acceptance\", \"outcome\": \"FAIL\", \"started_at\": \"2026-10-28T21:28:56.490390+00:00\"}\n"
+    },
+    {
+      "name": "native-discovery-mutated",
+      "confirmed": true,
+      "artifact": {
+        "bundle": "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-9fdjgbfj",
+        "sha256": "a45fbd4a5dd1d60cac281eec21731ac6d1e83a5abf56e33e3c70bff6e7408a50",
+        "files": [
+          "docs/assurance/native-launch-2-review-enforcement.py",
+          "docs/assurance/prepare-native-2-review-enforcement.py",
+          "docs/assurance/run-native-2-review-enforcement.py",
+          "docs/assurance/test-native-preparation-2-review-enforcement.py"
+        ]
+      },
+      "killed": true,
+      "command": [
+        "/usr/bin/python3",
+        "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/artifacts.py",
+        "run",
+        "--bundle",
+        "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-9fdjgbfj",
+        "--sha256",
+        "a45fbd4a5dd1d60cac281eec21731ac6d1e83a5abf56e33e3c70bff6e7408a50",
+        "--timeout",
+        "30",
+        "--",
+        "/usr/bin/python3",
+        "{artifact:docs/assurance/test-native-preparation-2-review-enforcement.py}",
+        "TrustPolicyTests.test_overlay_preserves_existing_state_without_editing_discovery"
+      ],
+      "exit": 1,
+      "output": "F\n======================================================================\nFAIL: test_overlay_preserves_existing_state_without_editing_discovery (__main__.TrustPolicyTests.test_overlay_preserves_existing_state_without_editing_discovery)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-9fdjgbfj/docs/assurance/test-native-preparation-2-review-enforcement.py\", line 73, in test_overlay_preserves_existing_state_without_editing_discovery\n    self.assertEqual(self.preflight, original)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: {'_ho[519 chars]old'}, 'fixture:session_start:0:0': {'trusted_[80 chars]}}}}} != {'_ho[519 chars]old'}}}}}\nDiff is 1224 characters long. Set self.maxDiff to None to see it.\n\n----------------------------------------------------------------------\nRan 1 test in 0.001s\n\nFAILED (failures=1)\ntiming: {\"elapsed_seconds\": 0.114, \"exit_code\": 1, \"finished_at\": \"2026-10-28T21:28:56.826496+00:00\", \"label\": \"artifact-acceptance\", \"outcome\": \"FAIL\", \"started_at\": \"2026-10-28T21:28:56.712909+00:00\"}\n"
+    }
+  ],
+  "Claude_Codex_app_server_processes": 0,
+  "model_calls": 0,
+  "scope": "local Git/Python/mocked policy and retention; native qualification remains unverified"
+}

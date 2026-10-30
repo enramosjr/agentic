@@ -1,0 +1,18 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "-I",
+    "-B",
+    "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/validate-closeout-c1.py",
+    "--worker",
+    "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/closeout-c1-validation-results/.work/N05-mutant/repo",
+    "test_assurance.RuntimeTests.test_changed_executable_is_stale",
+    "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/closeout-c1-validation-results/N05-mutant-tests.json"
+  ],
+  "cwd": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/closeout-c1-validation-results/.work/N05-mutant/repo",
+  "duration": 0.8847079440020025,
+  "exit": 1,
+  "stderr": "",
+  "stdout": "",
+  "timeout": false
+}

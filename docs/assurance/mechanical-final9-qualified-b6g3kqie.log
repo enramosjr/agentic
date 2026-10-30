@@ -1,0 +1,18 @@
+test_unrecorded_append_is_not_inferred_from_suffix (test_review_enforcement.FreshnessTests.test_unrecorded_append_is_not_inferred_from_suffix) ... FAIL
+
+======================================================================
+FAIL: test_unrecorded_append_is_not_inferred_from_suffix (test_review_enforcement.FreshnessTests.test_unrecorded_append_is_not_inferred_from_suffix)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-b6g3kqie/.ai/scripts/tests/test_review_enforcement.py", line 481, in test_unrecorded_append_is_not_inferred_from_suffix
+    self.assertIsNotNone(guard.evidence_problem(self.root,
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        {'task': 'task', 'ledger': [{'entry': 'reviewed'}, {'entry': 'unrecorded'}]}))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None
+
+----------------------------------------------------------------------
+Ran 1 test in 0.262s
+
+FAILED (failures=1)
+timing: {"elapsed_seconds": 0.364, "exit_code": 1, "finished_at": "2026-10-28T23:09:16.440759+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T23:09:16.076932+00:00"}

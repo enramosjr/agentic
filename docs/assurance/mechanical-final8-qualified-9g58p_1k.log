@@ -1,0 +1,16 @@
+test_guard_namespace_rejects_system_temp_symlinks_before_writes (test_review_enforcement.CompatibilityTests.test_guard_namespace_rejects_system_temp_symlinks_before_writes) ... FAIL
+
+======================================================================
+FAIL: test_guard_namespace_rejects_system_temp_symlinks_before_writes (test_review_enforcement.CompatibilityTests.test_guard_namespace_rejects_system_temp_symlinks_before_writes)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-9g58p_1k/.ai/scripts/tests/test_review_enforcement.py", line 446, in test_guard_namespace_rejects_system_temp_symlinks_before_writes
+    with self.assertRaisesRegex(guard.ReviewError, 'outside system temporary'):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ReviewError not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 0.193s
+
+FAILED (failures=1)
+timing: {"elapsed_seconds": 0.314, "exit_code": 1, "finished_at": "2026-10-28T22:24:50.283421+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T22:24:49.969688+00:00"}

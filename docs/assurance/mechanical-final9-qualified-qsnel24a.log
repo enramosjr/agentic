@@ -1,0 +1,16 @@
+test_publication_chain_and_archive_corruption_refuse (test_review_enforcement.FreshnessTests.test_publication_chain_and_archive_corruption_refuse) ... FAIL
+
+======================================================================
+FAIL: test_publication_chain_and_archive_corruption_refuse (test_review_enforcement.FreshnessTests.test_publication_chain_and_archive_corruption_refuse)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-qsnel24a/.ai/scripts/tests/test_review_enforcement.py", line 359, in test_publication_chain_and_archive_corruption_refuse
+    self.assertIsNotNone(guard.evidence_problem(self.root, state), key)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : evicted
+
+----------------------------------------------------------------------
+Ran 1 test in 0.270s
+
+FAILED (failures=1)
+timing: {"elapsed_seconds": 0.364, "exit_code": 1, "finished_at": "2026-10-28T23:09:16.927582+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T23:09:16.563720+00:00"}

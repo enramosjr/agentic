@@ -1,0 +1,194 @@
+{
+  "source_tree": "4667037e1963b44a19b4b9a804ac8efd95c4057ca739903cf871732e5b9925e6",
+  "artifact_bundle": "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-wyjgv108",
+  "artifact_sha256": "2ac1aa183331af3428b53dfed15948870d9df21c038aa5d2620b08c3c1b4dbd7",
+  "declared_files": 39,
+  "baseline_exit": 0,
+  "baseline_valid": true,
+  "baseline_test_count": 44,
+  "total": 20,
+  "killed": 20,
+  "model_calls": 0,
+  "controls": [
+    {
+      "name": "active-freeze-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_active_review_refuses_writer_before_effects",
+      "variant_sha256": "36e2cf475b0eb143c996cd23f0c2a71b061defaf5245bcc6c14527ab6f9f069f"
+    },
+    {
+      "name": "borrower-quiescence-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_dead_owner_cannot_release_a_live_borrower",
+      "variant_sha256": "1a2eaae80055f829d94c6e1fb50c0bfe806a55636b915d4ea191ae582c260410"
+    },
+    {
+      "name": "canonical-capture-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_malformed_or_changed_completion_never_qualifies",
+      "variant_sha256": "b495838347a2b27176fe9998e48c7566b255624ba1544af80f78e9d473b68a39"
+    },
+    {
+      "name": "captured-body-binding-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_exact_body_hash_semantics_and_parent_reconstruction_rejected",
+      "variant_sha256": "bf5d559ee2e0e2eba616f15c94d94dad353808c5f0b3dc8965159b87ef84a468"
+    },
+    {
+      "name": "runtime-replacement-accepted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_replaced_native_host_cannot_complete_original_review",
+      "variant_sha256": "660b857254f1a8d050dd38da1ff2f6b725b6e79e8aaac143450f9c99275d938a"
+    },
+    {
+      "name": "retired-child-reuse-accepted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_abandoned_native_child_identity_cannot_be_reused",
+      "variant_sha256": "32c0fb18b067fd2c172eee812f5f54dc86ca6f545495f7f837b7aef73b18c88a"
+    },
+    {
+      "name": "exact-source-convergence-pins-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_exact_convergence_or_source_drift_refuses",
+      "variant_sha256": "d13b739d0dec2017b9f7eb84ba5a12a10f9d13edc3aa42747a7a12f42c2fce3a"
+    },
+    {
+      "name": "evidence-append-proof-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_unrecorded_append_is_not_inferred_from_suffix",
+      "variant_sha256": "619e1d264849dbee6ab9b7308ad5cb5b5fc871df1f2648a20db03371b84517c4"
+    },
+    {
+      "name": "arbitrary-eviction-accepted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_publication_chain_and_archive_corruption_refuse",
+      "variant_sha256": "b0847838e61ca06eaf6fddf84d6cecd239191a39d28bf2b373cd0fe9db764bc2"
+    },
+    {
+      "name": "stage-freshness-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_default_broad_validation_refresh_reaches_verify_without_rereview",
+      "variant_sha256": "853df6935680b435076b2e080646ecaed8e54703b230d03ef29f081071ba1602"
+    },
+    {
+      "name": "whole-driver-native-lease-restored",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_driver_launch_does_not_hold_a_whole_session_native_lease",
+      "variant_sha256": "dca76a0af6b89642386064be61ae14b0358241fac19146ff51b10e963ae2569b"
+    },
+    {
+      "name": "new-file-root-guard-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_markdown_delete_and_wrapped_writer_hooks_ignore_legacy_bypass",
+      "variant_sha256": "35e3e698918ed1f4e244415f73cb5c27f7b918086c4a3f6311f4e59c4d704e90"
+    },
+    {
+      "name": "raw-command-registration-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_plain_command_group_survives_supervisor_loss_without_unlocking",
+      "variant_sha256": "2ca5b4551a8c7e96bf5ef1ad62352cdd331130fb68132775377d80b1b15bc7ef"
+    },
+    {
+      "name": "raw-descendant-group-proof-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_plain_command_group_survives_supervisor_loss_without_unlocking",
+      "variant_sha256": "739d204b5acb893cd04b4eb85d7caeabc321368744580f72de2717a40c4f4dde"
+    },
+    {
+      "name": "recovery-self-lease-restored",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_explicit_recovery_does_not_lease_itself",
+      "variant_sha256": "974f4a60788e218ddef1494b3f182e801b991335d9929f3b5f9e6e1e718503f2"
+    },
+    {
+      "name": "broad-driver-operand-exception-restored",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_driver_filename_operands_keep_the_native_mutation_lease",
+      "variant_sha256": "d68451bfe6b67347187c4721ede9654b6a40dbecbf30994f90cbdeb876e93d08"
+    },
+    {
+      "name": "compact-C-target-routing-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_nested_git_directory_targets_freeze_the_actual_worktree",
+      "variant_sha256": "e6cc0eeede063a638e00be0ca740f3727638e76f88d02776b941c97a55e424d5"
+    },
+    {
+      "name": "partial-commit-argument-check-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_partial_commit_hook_cannot_bypass_the_reviewed_full_index",
+      "variant_sha256": "83bd3d9ce16afa6537dfae38367d6dddab9be767c90ce2b898180f16935a32a1"
+    },
+    {
+      "name": "windows-kill-zero-probe-restored",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_windows_lifetime_probe_never_sends_a_signal",
+      "variant_sha256": "4859a00eb60639f68eefa4a01de1fb48c4dfcd5577d908dd075a088ad1322e49"
+    },
+    {
+      "name": "shim-python-startup-isolation-omitted",
+      "confirmed": true,
+      "killed": true,
+      "valid": true,
+      "exit": 1,
+      "test": "test_launch_shim_does_not_repeat_product_python_startup",
+      "variant_sha256": "673ec2c722fd8a12c64fd15e44a95f6a1e8389ad371833d5521ab682fdcd9c62"
+    }
+  ]
+}

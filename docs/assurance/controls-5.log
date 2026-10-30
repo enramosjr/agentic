@@ -1,0 +1,2 @@
+run inputs-5-controls: exit=1 tree=66eb0e8
+    baseline PASS; confirmed controls killed: 3/4

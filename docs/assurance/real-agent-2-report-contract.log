@@ -1,0 +1,6 @@
+run assurance-2-real-agent: exit=1 tree=6ad08d1
+    PASS feature-l2 repeat 1
+    FAIL control-delta repeat 1
+      - review candidate mismatch, source mutation or observed reviewer writes
+      - Approved review artifact is not bound to the observed reviewer result
+    1/2 passed

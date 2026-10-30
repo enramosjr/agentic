@@ -1,0 +1,9 @@
+{
+  "after": "c6e79cbabe1d719313f4e3fe5f5620b8fab052cc7166b96c14ec8db2e35d0a0a",
+  "before": "f9f409cc1e791f00ca0de5825b1ed565d80b3f6eaab96bab59111c7d25fa4944",
+  "id": "N05",
+  "new": "if False and entry.get('runtime_sha256') and runtime_digest(entry['argv']) != entry['runtime_sha256']:",
+  "old": "if entry.get('runtime_sha256') and runtime_digest(entry['argv']) != entry['runtime_sha256']:",
+  "path": ".ai/scripts/ledger.py",
+  "restored": false
+}

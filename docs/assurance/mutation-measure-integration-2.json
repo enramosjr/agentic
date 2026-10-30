@@ -1,0 +1,7 @@
+{
+  "baseline_exit": 0,
+  "confirmed": true,
+  "mutant_exit": 1,
+  "killed": true,
+  "tail": "F\n======================================================================\nFAIL: test_protected_files_unchanged (test_assurance_measure.ReportOnlyTests.test_protected_files_unchanged)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp0ixulk1b/.ai/scripts/tests/test_assurance_measure.py\", line 274, in test_protected_files_unchanged\n    self.assertEqual(before[key], after[key], name)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: b'#!/[25185 chars]_base\\'] = base\\n    return data\\n' != b'#!/[25185 chars]_base\\'] = base\\n    return data\\n\\n# mutated by measurement\\n' : assurance.py\n\n----------------------------------------------------------------------\nRan 1 test in 6.730s\n\nFAILED (failures=1)\n"
+}

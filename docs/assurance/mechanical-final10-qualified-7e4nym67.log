@@ -1,0 +1,16 @@
+test_active_review_refuses_writer_before_effects (test_review_enforcement.ReadOnlyTests.test_active_review_refuses_writer_before_effects) ... FAIL
+
+======================================================================
+FAIL: test_active_review_refuses_writer_before_effects (test_review_enforcement.ReadOnlyTests.test_active_review_refuses_writer_before_effects)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-7e4nym67/.ai/scripts/tests/test_review_enforcement.py", line 872, in test_active_review_refuses_writer_before_effects
+    with self.assertRaisesRegex(guard.ReviewError, 'active review'):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ReviewError not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 0.243s
+
+FAILED (failures=1)
+timing: {"elapsed_seconds": 0.364, "exit_code": 1, "finished_at": "2026-10-28T23:35:03.483573+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T23:35:03.119679+00:00"}

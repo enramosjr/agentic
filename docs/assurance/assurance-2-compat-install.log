@@ -1,0 +1,13 @@
+run assurance-2-compat-install: exit=1 tree=828bac2
+    ----------------------------------------------------------------------
+    Traceback (most recent call last):
+      File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_install.py", line 326, in test_absent_file_created_from_kit
+        self.assertEqual(json.loads((self.target / name).read_bytes()), json.loads((self.template / name).read_bytes()))
+        ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    AssertionError: {'per[1187 chars]: 10}, {'type': 'command', 'command': 'python3[876 chars]]}]}} != {'per[1187 chars]: 10}]}, {'hooks': [{'type': 'command', 'comma[889 chars]]}]}}
+    Diff is 5276 characters long. Set self.maxDiff to None to see it.
+    
+    ----------------------------------------------------------------------
+    Ran 49 tests in 14.713s
+    
+    FAILED (failures=4)

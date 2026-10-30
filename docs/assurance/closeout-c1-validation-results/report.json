@@ -1,0 +1,967 @@
+{
+  "artifacts": {
+    "N01-baseline-process.json": "42d2e2c7e0ac40522339293def4aea8a0311bfe69adfdb9dd39c9c618dc9732e",
+    "N01-baseline-tests.json": "0ca89f66704d8fc131c792a07198ca4439dd06e5524169f901542a6bd3ba6674",
+    "N01-mutant-process.json": "dcad09a4aaa033140fb281dc6981f91ecdcb7fa03c2c3bf1b7c23d37e50b333a",
+    "N01-mutant-tests.json": "c62cb6b665147fbec1a84317fdffdd9d43b2a9f6f55a9937af47d37d00839faf",
+    "N01-mutation.json": "de188f7b18a17686cf80077c4bd581788483b60cd35f4b46a5f0c978f440416b",
+    "N02-baseline-process.json": "947ab77b14307c6abf083c0229b391ef4364e469f40601a1b313d3b3ed7160f7",
+    "N02-baseline-tests.json": "eaa50b1192493886e133d3707d1251da25fc974f72e12cffe1e330405a7c5568",
+    "N02-mutant-process.json": "452160e82d130dccfd6e71374f98176f5dc234eb83b3b8d95eb32a23144d18b2",
+    "N02-mutant-tests.json": "4104f1108d9c2de1b76d22f3835df423adb08873ef02240b8204eb351a3bb97e",
+    "N02-mutation.json": "3f1ad28c382d17fc49cdfe31e9856b41316a94106a96f6777e369ca808c8c344",
+    "N03-baseline-process.json": "7f95ce6a4375021412742bf19fa38623055cd0e1986087ce84b31ec068b01bb5",
+    "N03-baseline-tests.json": "c16c1336677e8cd9026783ea1774d020dc8136a694637fa5e69d5b6cf5f4c7a2",
+    "N03-mutant-process.json": "0e3f9ab7771a222eefed8abf9056c5745335322f2198b3c2a6e514f317b50679",
+    "N03-mutant-tests.json": "2ca4105cf39becc5868ce9f8e4a42a3d30b630156329cb952b5246f2e23170b4",
+    "N03-mutation.json": "8e26f8d45524a65289b94dd2c9f294762f9b0e9984c4e707531a81c350b3a83e",
+    "N04-baseline-process.json": "af07fccb7fd748418f7b0f2c78f9efbe06d2648694fd9dfbd7dbb61fe69dcbe5",
+    "N04-baseline-tests.json": "9059bb0efb57f904f7fb86bd1e3170c37d9df5a294d20d9d9a801a434bc86236",
+    "N04-mutant-process.json": "af1495f1f00e3acfff2a5e2841d4950f4eaa6bed196e261705308d46ca81118c",
+    "N04-mutant-tests.json": "c9e795e85387cf946da399ac0f78d867fe0aaf1f541f4fcf9733c7ef5f38706c",
+    "N04-mutation.json": "c976cde8daf6b658b55eb71cb487588486e05f7d0aa24724fac24110579d3360",
+    "N05-baseline-process.json": "5881261e80cf9a12016fff3579425456f698b8e471fd47c0b1bd8f5de95a78d1",
+    "N05-baseline-tests.json": "7c1a1f6c018a4dd573298a7d121fb2ebb58a6d7c229f5de3b92d7a25f13c6243",
+    "N05-mutant-process.json": "28eac135383955b40e1c651b4598e560e72cc069f3e3c9d1b785cee38b8bcad5",
+    "N05-mutant-tests.json": "6485d8bd0a47ec3dd4e4f75920ae4ed48c0ca6a675ebbef92f3f0d5f2f3b629f",
+    "N05-mutation.json": "b5394231c196d800cab58db7eb712d18fbb9683d312a402a9ac9c8bdbfec15c3",
+    "N06-baseline-process.json": "353862e8ea53e78817b4e83666f51011701e91e6884570a77d1e643eeb2cd669",
+    "N06-baseline-tests.json": "7d8d7405f809ec5d0efeaa56f726ed1546087a3a2be65cb880ffde1fe435296c",
+    "N06-mutant-process.json": "b4495173a5f006706a54c3f6c029cd27b9d3c65d4820dc59c2d47b2f2646bf45",
+    "N06-mutant-tests.json": "6afa5f9c73e9d74ad9447fd9b23de421d952bcb2578f334ea4f6ca9f5f05f12b",
+    "N06-mutation.json": "f94a9a6643fb459ed99107a5587864b50bc9093a82c9369e904cb2a468b36d9e",
+    "N07-baseline-process.json": "ce93c519dd3adf17096a16fedadde481bf3239aada4b094d5025b4943106dfef",
+    "N07-baseline-tests.json": "14accd5f20b3e0ec3f119c647f835cb13e04c8610d95569713336620ace7edde",
+    "N07-mutant-process.json": "53cee44f17ca8cdd12cc3e90e302ea212b0b4fad9e0db11237cc0070030978f8",
+    "N07-mutant-tests.json": "d6f7207d161ceb415e2adbb15eb30c43f8f0f5d7bf1a584ee7918dd9bff38b8e",
+    "N07-mutation.json": "69ce1c9d6fdc46b6c365438a1c0c180a62f3f8833f0805f96ee50d408064458f",
+    "N08-baseline-process.json": "6396ab72b7ff175ef99520d5f88827042c674bb09caa458d5c7e893c4cb5b110",
+    "N08-baseline-tests.json": "8f70f311e08a7d839ea8c93a1b7aa349fbf79ffaaae0f755623a74821db20096",
+    "N08-mutant-process.json": "6b4d98969bea612747fd4a6e07070d4a2eabd80e07dcd449b91215bf477b9fba",
+    "N08-mutant-tests.json": "7b3dcb29a1cf6a02ef26f82dd978e0b32799bd2010c3708801cb7a649810f35d",
+    "N08-mutation.json": "acfbc822fb2186051469977b771656ec9bca557cb8531557b72df9d013402b1f"
+  },
+  "controls": [
+    "empty-suite",
+    "unapplied-mutation",
+    "unrelated-error",
+    "restoration-failure"
+  ],
+  "duration": 19.68976359300723,
+  "error": "ProofError: ProofError: wrong changed selection",
+  "identity": {
+    "candidate": {
+      "branch": "claude/assurance-increment-7",
+      "head": "02dd97586873f24a604224aa5ad186a60c4104e7",
+      "pins": {
+        ".agentic.json": "7b178dde144127021927771857428a5fca27f4f490a8e40a8dabc883915eb548",
+        ".ai/lifecycle.md": "e8e13fde4ecced5cf8a9e63483972236c67d81b55806132775ad1d9074013e68",
+        ".ai/scripts/artifacts.py": "3b8eb6401da21debdc4b33141542572e3f570750dc1a8518f99c8a1da138ab0f",
+        ".ai/scripts/assurance.py": "f59b7187ca81fa1ce99fb98a1886c3afaefae71f414114b1f8252a69a201cab8",
+        ".ai/scripts/assurance_architecture_demo.py": "9f6135fa4f88f01cf89c79c17a41e1a6ca76413c49c715ad1d6321a5c00bbc18",
+        ".ai/scripts/assurance_demo.py": "464d3fbb14e90109ed4e689bcdc726ae88b62562517c380f6f129de94faf3529",
+        ".ai/scripts/assurance_inputs.py": "7faa37f1bc04b55511ce84ac3b97378a4e922b574c581cdb6c4b95c1c4a3b90b",
+        ".ai/scripts/assurance_measure.py": "656aacb2b7b87090809fe78ef1b36ecfd5d901bf6e51302a69fbf9861d340878",
+        ".ai/scripts/autonomy_driver.py": "fd614e443a0df88ae6a4852d0a80dee8154c8dcfbaea8d421be194541eb578b6",
+        ".ai/scripts/autonomy_hook.py": "8bed1b962710918b5e382ed28f075042a82a735420bf8adb835aaa6499dbf7a4",
+        ".ai/scripts/autonomy_progress.py": "1c28dcfff754f1b278177d688b931f407db9ca5b555cc96aa0129f08a099539b",
+        ".ai/scripts/autonomy_validation.py": "3906fe01deb00e3d4bec4d562c0dadf8efce3edef2c2ecca609b5ea1473c8e02",
+        ".ai/scripts/brownfield.py": "0b227e2ca782477788dcc81929930b6357d0cbd0eaeca7cb2d6a44d61d23439e",
+        ".ai/scripts/completion.py": "d885987ca9612d9239ca8eb79d565cc928decd7df2040f6aa3bc9e9f4fc27f15",
+        ".ai/scripts/eval_outcome.py": "e63938bfeb34d5788f26e2aa0f352aa5501b592a5de8cbd768aea820920074ef",
+        ".ai/scripts/eval_process.py": "b8e3d85a2bf1db4af8958505dc6c0b1596b085072ae16722527228db613564c2",
+        ".ai/scripts/eval_results.py": "8668b466179a8333cf67b53d973f7bdcccc2202a267f8a1980c8900d02d36b92",
+        ".ai/scripts/install.py": "8196e023d82c164e82549996c857750565c1e92b5efec3bf7282297c39d221d2",
+        ".ai/scripts/learning.py": "e748c6e00157dd3613370b907fe0e15775c772051008a10c1ba223d2caa0e256",
+        ".ai/scripts/ledger.py": "f9f409cc1e791f00ca0de5825b1ed565d80b3f6eaab96bab59111c7d25fa4944",
+        ".ai/scripts/lifecycle.py": "7529944d1488c0e239f62abbd32feeca3e837e18e004d52ec1f96b1e0bbf7c2a",
+        ".ai/scripts/lifecycle_eval.py": "40851f38cb83b53863b8adb4e37dfbf76a392e14e75a870859ce93594a3f27b2",
+        ".ai/scripts/okf.py": "3244581bff07d8a7c8086f72b51fba6664a4a30a6422a6b35965440430ce4819",
+        ".ai/scripts/pr_sync.py": "a5a12d0c588fdcac1fa9b958b59249f71be99cd651b326e82afc736ac2cc7981",
+        ".ai/scripts/project_context.py": "700783fa941f5aaee714900d22e80d2f231b1ed107e2c068181b823e489e86e1",
+        ".ai/scripts/repo.py": "04df995a722b8f897264175ea87b3762d8c0571c2d53057b2a058dc4f5feede5",
+        ".ai/scripts/review_evidence.py": "8ecdf7d70177f8d83e28fbeec66aff666db68e9a7d40548ebcb8d191fbc1fe58",
+        ".ai/scripts/review_guard.py": "09987e1581f5524629d20046fba0c3601a9224498c5562a26f5e100dd2063dfa",
+        ".ai/scripts/review_native.py": "0cf7634c1acdbd95a96c81a498989fe1659e4870f13d7c293be2247e7ce63773",
+        ".ai/scripts/run_tests.py": "80ff942bf39066df7609c38962bbfd0f5429d750a450af99fb1bd02a86bb4217",
+        ".ai/scripts/scan.py": "4c1bd7162e4141275bff7cc60ff7134f25f4c630a28cbd04226358d260fa0253",
+        ".ai/scripts/scratch.py": "a5f6349179d9fae06f81b74d0bd07a5326f131688c82cb4643661af42c63b74c",
+        ".ai/scripts/shell_guard.py": "6cb2f790830eb8b3904bb760d22e7a57e08d7bdef5eaa3a5df3f5b12ab339133",
+        ".ai/scripts/tests/disk_tmp.py": "bdb1bba9136c63ad4e243d86e2388a783b6f520de96c5f5c7759284932eadf18",
+        ".ai/scripts/tests/test_assurance.py": "625cb6a026d98f302ff58aea1eea75af6ccb0e27def76bc6c52c48c6e732c2ee",
+        ".ai/scripts/tests/test_assurance_attested.py": "a13fb28a63362e8a864e8e6578f04d93567848407ce6bf1081d2d3c01122e5d1",
+        ".ai/scripts/tests/test_assurance_inputs.py": "f5493ff420a8daf28dd4c329cc044cab872b8d9856c8067796c897336a5cb09f",
+        ".ai/scripts/tests/test_assurance_ordering.py": "153666168f8ec8ec1503753d34d181c59bc99c2375e86a82c2ad4e4476803250",
+        ".ai/scripts/tests/test_lifecycle_conformance.py": "01865fd036b703561e57b798eda013ffa4b038db1309512d6109b54951138b1b",
+        ".ai/scripts/timed_check.py": "69117027c50451ed134b523c3840ea9f27c9e8299e8969419947c6913bcdb335",
+        ".ai/scripts/validation_select.py": "fe278207aa63ea76bd674be90572351e1ac979237954687631074163c63c29d5",
+        ".ai/scripts/wait_check.py": "ec80b027714a52a3afcd4d81fa501b37fb36affed718c49876965dcabc4a12b1"
+      },
+      "roster": {
+        "N01": [
+          "test_assurance.ObligationSyntaxTests.test_valid_and_malformed_obligations"
+        ],
+        "N02": [
+          "test_assurance.CompatibilityTests.test_obligation_free_and_prose_capabilities_stay_green",
+          "test_assurance.CompatibilityTests.test_obligation_lines_keep_validate_clean",
+          "test_assurance.CompatibilityTests.test_repository_without_bundle_reports_nothing"
+        ],
+        "N03": [
+          "test_assurance.AssureRunTests.test_run_records_req_entry_with_declared_inputs",
+          "test_assurance.AssureRunTests.test_run_refuses_inside_lifecycle_run",
+          "test_assurance.AssureRunTests.test_run_refuses_unknown_id",
+          "test_assurance.AssureRunTests.test_run_refuses_without_active_task"
+        ],
+        "N04": [
+          "test_assurance.StatusTests.test_changed_command_is_unverified",
+          "test_assurance.StatusTests.test_deleted_input_is_stale",
+          "test_assurance.StatusTests.test_evidence_from_earlier_committed_record",
+          "test_assurance.StatusTests.test_fresh_evidence_is_verified",
+          "test_assurance.StatusTests.test_input_edit_is_stale_and_names_file",
+          "test_assurance.StatusTests.test_newer_failure_wins",
+          "test_assurance.StatusTests.test_unrelated_edit_stays_verified"
+        ],
+        "N05": [
+          "test_assurance.RuntimeTests.test_changed_executable_is_stale"
+        ],
+        "N06": [
+          "test_assurance.IntegrityTests.test_invalid_and_output_bearing_records_contribute_nothing",
+          "test_assurance.IntegrityTests.test_schema_valid_hand_written_record_is_not_detected"
+        ],
+        "N07": [
+          "test_assurance.UnscopedTests.test_any_commit_makes_it_stale",
+          "test_assurance.UnscopedTests.test_identical_tree_is_verified",
+          "test_assurance.UnscopedTests.test_uncommitted_source_edit_makes_it_stale"
+        ],
+        "N08": [
+          "test_assurance.ChangedTests.test_bad_base_is_refused",
+          "test_assurance.ChangedTests.test_matched_unmatched_and_unscoped"
+        ],
+        "N09": [
+          "test_assurance.ReportFormatTests.test_basis_for_manual_and_missing_evidence",
+          "test_assurance.ReportFormatTests.test_text_and_json_fields_without_output"
+        ],
+        "N10": [
+          "test_assurance.ExitCodeTests.test_exit_codes_and_read_only_report",
+          "test_assurance.ExitCodeTests.test_invalid_fails",
+          "test_assurance.ExitCodeTests.test_run_with_report_flags_is_refused",
+          "test_assurance.ExitCodeTests.test_strict_counts_undeclared"
+        ],
+        "N11": [
+          "test_lifecycle_conformance.Assurance.test_assurance_documented"
+        ]
+      },
+      "status": "M .ai/lifecycle.md\n M .ai/scripts/assurance.py\n M .ai/scripts/assurance_measure.py\n M .ai/scripts/lifecycle.py\n M .ai/scripts/tests/test_assurance_attested.py\n?? .ai/scripts/tests/test_assurance_ordering.py"
+    },
+    "operator": {
+      "closeout-c1-candidate.sha256": "32affe791ca9c75523ec5780a46f7cfe30e8179f2d77e66eaff63d147003ca29",
+      "plan-closeout-c1-validation.md": "758a5856574150799e7120430fff22c1ed2d8e56b492412e87cb80a1d5b5803e",
+      "review-operator-closeout-c1.md": "6ba0126cc19864377f1d64b1972d6719db5223607e4d3ac3c08b8abec08a752f",
+      "specification-closeout-c1-validation.md": "4eccb9ae35f35a551d2aa051982843ad587751aa6e0ecd86090eb982544acdaa",
+      "test_closeout_c1_operator.py": "823e7446cebd4c58329777ad0df7ff6176a5032b7609c0231bdd0bed525dca23",
+      "validate-closeout-c1.py": "d86802775f980e2d8daebe34693a5e3f77ee77c471496b7cb8262b831d6da0fb"
+    },
+    "runtime": {
+      "git": {
+        "path": "/usr/bin/git",
+        "sha256": "6ecf9d07e5243c833b603e1d4c9684b7f337b0db314c4ca5833db2dfea29e7a8",
+        "version": "git version 2.56.0"
+      },
+      "python": {
+        "path": "/usr/bin/python3.14",
+        "sha256": "7579d289e4d95778305acd13fc71be2a3800f7f6a202619505875234659c2c60",
+        "version": "Python 3.14.8"
+      }
+    }
+  },
+  "outcome": "FAILED",
+  "product_invocations": 16,
+  "qualification": "Current candidate only. C1 remains open pending independent evidence review.",
+  "rows": [
+    {
+      "after": "d4231188acf65f75fff96a4aa816e49c442269c9bf6105fdb9972046eaa74ea5",
+      "before": "f59b7187ca81fa1ce99fb98a1886c3afaefae71f414114b1f8252a69a201cab8",
+      "candidate_after": {
+        "branch": "claude/assurance-increment-7",
+        "head": "02dd97586873f24a604224aa5ad186a60c4104e7",
+        "pins": {
+          ".agentic.json": "7b178dde144127021927771857428a5fca27f4f490a8e40a8dabc883915eb548",
+          ".ai/lifecycle.md": "e8e13fde4ecced5cf8a9e63483972236c67d81b55806132775ad1d9074013e68",
+          ".ai/scripts/artifacts.py": "3b8eb6401da21debdc4b33141542572e3f570750dc1a8518f99c8a1da138ab0f",
+          ".ai/scripts/assurance.py": "f59b7187ca81fa1ce99fb98a1886c3afaefae71f414114b1f8252a69a201cab8",
+          ".ai/scripts/assurance_architecture_demo.py": "9f6135fa4f88f01cf89c79c17a41e1a6ca76413c49c715ad1d6321a5c00bbc18",
+          ".ai/scripts/assurance_demo.py": "464d3fbb14e90109ed4e689bcdc726ae88b62562517c380f6f129de94faf3529",
+          ".ai/scripts/assurance_inputs.py": "7faa37f1bc04b55511ce84ac3b97378a4e922b574c581cdb6c4b95c1c4a3b90b",
+          ".ai/scripts/assurance_measure.py": "656aacb2b7b87090809fe78ef1b36ecfd5d901bf6e51302a69fbf9861d340878",
+          ".ai/scripts/autonomy_driver.py": "fd614e443a0df88ae6a4852d0a80dee8154c8dcfbaea8d421be194541eb578b6",
+          ".ai/scripts/autonomy_hook.py": "8bed1b962710918b5e382ed28f075042a82a735420bf8adb835aaa6499dbf7a4",
+          ".ai/scripts/autonomy_progress.py": "1c28dcfff754f1b278177d688b931f407db9ca5b555cc96aa0129f08a099539b",
+          ".ai/scripts/autonomy_validation.py": "3906fe01deb00e3d4bec4d562c0dadf8efce3edef2c2ecca609b5ea1473c8e02",
+          ".ai/scripts/brownfield.py": "0b227e2ca782477788dcc81929930b6357d0cbd0eaeca7cb2d6a44d61d23439e",
+          ".ai/scripts/completion.py": "d885987ca9612d9239ca8eb79d565cc928decd7df2040f6aa3bc9e9f4fc27f15",
+          ".ai/scripts/eval_outcome.py": "e63938bfeb34d5788f26e2aa0f352aa5501b592a5de8cbd768aea820920074ef",
+          ".ai/scripts/eval_process.py": "b8e3d85a2bf1db4af8958505dc6c0b1596b085072ae16722527228db613564c2",
+          ".ai/scripts/eval_results.py": "8668b466179a8333cf67b53d973f7bdcccc2202a267f8a1980c8900d02d36b92",
+          ".ai/scripts/install.py": "8196e023d82c164e82549996c857750565c1e92b5efec3bf7282297c39d221d2",
+          ".ai/scripts/learning.py": "e748c6e00157dd3613370b907fe0e15775c772051008a10c1ba223d2caa0e256",
+          ".ai/scripts/ledger.py": "f9f409cc1e791f00ca0de5825b1ed565d80b3f6eaab96bab59111c7d25fa4944",
+          ".ai/scripts/lifecycle.py": "7529944d1488c0e239f62abbd32feeca3e837e18e004d52ec1f96b1e0bbf7c2a",
+          ".ai/scripts/lifecycle_eval.py": "40851f38cb83b53863b8adb4e37dfbf76a392e14e75a870859ce93594a3f27b2",
+          ".ai/scripts/okf.py": "3244581bff07d8a7c8086f72b51fba6664a4a30a6422a6b35965440430ce4819",
+          ".ai/scripts/pr_sync.py": "a5a12d0c588fdcac1fa9b958b59249f71be99cd651b326e82afc736ac2cc7981",
+          ".ai/scripts/project_context.py": "700783fa941f5aaee714900d22e80d2f231b1ed107e2c068181b823e489e86e1",
+          ".ai/scripts/repo.py": "04df995a722b8f897264175ea87b3762d8c0571c2d53057b2a058dc4f5feede5",
+          ".ai/scripts/review_evidence.py": "8ecdf7d70177f8d83e28fbeec66aff666db68e9a7d40548ebcb8d191fbc1fe58",
+          ".ai/scripts/review_guard.py": "09987e1581f5524629d20046fba0c3601a9224498c5562a26f5e100dd2063dfa",
+          ".ai/scripts/review_native.py": "0cf7634c1acdbd95a96c81a498989fe1659e4870f13d7c293be2247e7ce63773",
+          ".ai/scripts/run_tests.py": "80ff942bf39066df7609c38962bbfd0f5429d750a450af99fb1bd02a86bb4217",
+          ".ai/scripts/scan.py": "4c1bd7162e4141275bff7cc60ff7134f25f4c630a28cbd04226358d260fa0253",
+          ".ai/scripts/scratch.py": "a5f6349179d9fae06f81b74d0bd07a5326f131688c82cb4643661af42c63b74c",
+          ".ai/scripts/shell_guard.py": "6cb2f790830eb8b3904bb760d22e7a57e08d7bdef5eaa3a5df3f5b12ab339133",
+          ".ai/scripts/tests/disk_tmp.py": "bdb1bba9136c63ad4e243d86e2388a783b6f520de96c5f5c7759284932eadf18",
+          ".ai/scripts/tests/test_assurance.py": "625cb6a026d98f302ff58aea1eea75af6ccb0e27def76bc6c52c48c6e732c2ee",
+          ".ai/scripts/tests/test_assurance_attested.py": "a13fb28a63362e8a864e8e6578f04d93567848407ce6bf1081d2d3c01122e5d1",
+          ".ai/scripts/tests/test_assurance_inputs.py": "f5493ff420a8daf28dd4c329cc044cab872b8d9856c8067796c897336a5cb09f",
+          ".ai/scripts/tests/test_assurance_ordering.py": "153666168f8ec8ec1503753d34d181c59bc99c2375e86a82c2ad4e4476803250",
+          ".ai/scripts/tests/test_lifecycle_conformance.py": "01865fd036b703561e57b798eda013ffa4b038db1309512d6109b54951138b1b",
+          ".ai/scripts/timed_check.py": "69117027c50451ed134b523c3840ea9f27c9e8299e8969419947c6913bcdb335",
+          ".ai/scripts/validation_select.py": "fe278207aa63ea76bd674be90572351e1ac979237954687631074163c63c29d5",
+          ".ai/scripts/wait_check.py": "ec80b027714a52a3afcd4d81fa501b37fb36affed718c49876965dcabc4a12b1"
+        },
+        "roster": {
+          "N01": [
+            "test_assurance.ObligationSyntaxTests.test_valid_and_malformed_obligations"
+          ],
+          "N02": [
+            "test_assurance.CompatibilityTests.test_obligation_free_and_prose_capabilities_stay_green",
+            "test_assurance.CompatibilityTests.test_obligation_lines_keep_validate_clean",
+            "test_assurance.CompatibilityTests.test_repository_without_bundle_reports_nothing"
+          ],
+          "N03": [
+            "test_assurance.AssureRunTests.test_run_records_req_entry_with_declared_inputs",
+            "test_assurance.AssureRunTests.test_run_refuses_inside_lifecycle_run",
+            "test_assurance.AssureRunTests.test_run_refuses_unknown_id",
+            "test_assurance.AssureRunTests.test_run_refuses_without_active_task"
+          ],
+          "N04": [
+            "test_assurance.StatusTests.test_changed_command_is_unverified",
+            "test_assurance.StatusTests.test_deleted_input_is_stale",
+            "test_assurance.StatusTests.test_evidence_from_earlier_committed_record",
+            "test_assurance.StatusTests.test_fresh_evidence_is_verified",
+            "test_assurance.StatusTests.test_input_edit_is_stale_and_names_file",
+            "test_assurance.StatusTests.test_newer_failure_wins",
+            "test_assurance.StatusTests.test_unrelated_edit_stays_verified"
+          ],
+          "N05": [
+            "test_assurance.RuntimeTests.test_changed_executable_is_stale"
+          ],
+          "N06": [
+            "test_assurance.IntegrityTests.test_invalid_and_output_bearing_records_contribute_nothing",
+            "test_assurance.IntegrityTests.test_schema_valid_hand_written_record_is_not_detected"
+          ],
+          "N07": [
+            "test_assurance.UnscopedTests.test_any_commit_makes_it_stale",
+            "test_assurance.UnscopedTests.test_identical_tree_is_verified",
+            "test_assurance.UnscopedTests.test_uncommitted_source_edit_makes_it_stale"
+          ],
+          "N08": [
+            "test_assurance.ChangedTests.test_bad_base_is_refused",
+            "test_assurance.ChangedTests.test_matched_unmatched_and_unscoped"
+          ],
+          "N09": [
+            "test_assurance.ReportFormatTests.test_basis_for_manual_and_missing_evidence",
+            "test_assurance.ReportFormatTests.test_text_and_json_fields_without_output"
+          ],
+          "N10": [
+            "test_assurance.ExitCodeTests.test_exit_codes_and_read_only_report",
+            "test_assurance.ExitCodeTests.test_invalid_fails",
+            "test_assurance.ExitCodeTests.test_run_with_report_flags_is_refused",
+            "test_assurance.ExitCodeTests.test_strict_counts_undeclared"
+          ],
+          "N11": [
+            "test_lifecycle_conformance.Assurance.test_assurance_documented"
+          ]
+        },
+        "status": "M .ai/lifecycle.md\n M .ai/scripts/assurance.py\n M .ai/scripts/assurance_measure.py\n M .ai/scripts/lifecycle.py\n M .ai/scripts/tests/test_assurance_attested.py\n?? .ai/scripts/tests/test_assurance_ordering.py"
+      },
+      "id": "N01",
+      "new": "if kind in found and kind != 'Verify':",
+      "old": "if kind in found:",
+      "path": ".ai/scripts/assurance.py",
+      "restored": true
+    },
+    {
+      "after": "ca93e3468012da301c2757b3c956fc248532202c38fbca3bec163c80bde1b765",
+      "before": "f59b7187ca81fa1ce99fb98a1886c3afaefae71f414114b1f8252a69a201cab8",
+      "candidate_after": {
+        "branch": "claude/assurance-increment-7",
+        "head": "02dd97586873f24a604224aa5ad186a60c4104e7",
+        "pins": {
+          ".agentic.json": "7b178dde144127021927771857428a5fca27f4f490a8e40a8dabc883915eb548",
+          ".ai/lifecycle.md": "e8e13fde4ecced5cf8a9e63483972236c67d81b55806132775ad1d9074013e68",
+          ".ai/scripts/artifacts.py": "3b8eb6401da21debdc4b33141542572e3f570750dc1a8518f99c8a1da138ab0f",
+          ".ai/scripts/assurance.py": "f59b7187ca81fa1ce99fb98a1886c3afaefae71f414114b1f8252a69a201cab8",
+          ".ai/scripts/assurance_architecture_demo.py": "9f6135fa4f88f01cf89c79c17a41e1a6ca76413c49c715ad1d6321a5c00bbc18",
+          ".ai/scripts/assurance_demo.py": "464d3fbb14e90109ed4e689bcdc726ae88b62562517c380f6f129de94faf3529",
+          ".ai/scripts/assurance_inputs.py": "7faa37f1bc04b55511ce84ac3b97378a4e922b574c581cdb6c4b95c1c4a3b90b",
+          ".ai/scripts/assurance_measure.py": "656aacb2b7b87090809fe78ef1b36ecfd5d901bf6e51302a69fbf9861d340878",
+          ".ai/scripts/autonomy_driver.py": "fd614e443a0df88ae6a4852d0a80dee8154c8dcfbaea8d421be194541eb578b6",
+          ".ai/scripts/autonomy_hook.py": "8bed1b962710918b5e382ed28f075042a82a735420bf8adb835aaa6499dbf7a4",
+          ".ai/scripts/autonomy_progress.py": "1c28dcfff754f1b278177d688b931f407db9ca5b555cc96aa0129f08a099539b",
+          ".ai/scripts/autonomy_validation.py": "3906fe01deb00e3d4bec4d562c0dadf8efce3edef2c2ecca609b5ea1473c8e02",
+          ".ai/scripts/brownfield.py": "0b227e2ca782477788dcc81929930b6357d0cbd0eaeca7cb2d6a44d61d23439e",
+          ".ai/scripts/completion.py": "d885987ca9612d9239ca8eb79d565cc928decd7df2040f6aa3bc9e9f4fc27f15",
+          ".ai/scripts/eval_outcome.py": "e63938bfeb34d5788f26e2aa0f352aa5501b592a5de8cbd768aea820920074ef",
+          ".ai/scripts/eval_process.py": "b8e3d85a2bf1db4af8958505dc6c0b1596b085072ae16722527228db613564c2",
+          ".ai/scripts/eval_results.py": "8668b466179a8333cf67b53d973f7bdcccc2202a267f8a1980c8900d02d36b92",
+          ".ai/scripts/install.py": "8196e023d82c164e82549996c857750565c1e92b5efec3bf7282297c39d221d2",
+          ".ai/scripts/learning.py": "e748c6e00157dd3613370b907fe0e15775c772051008a10c1ba223d2caa0e256",
+          ".ai/scripts/ledger.py": "f9f409cc1e791f00ca0de5825b1ed565d80b3f6eaab96bab59111c7d25fa4944",
+          ".ai/scripts/lifecycle.py": "7529944d1488c0e239f62abbd32feeca3e837e18e004d52ec1f96b1e0bbf7c2a",
+          ".ai/scripts/lifecycle_eval.py": "40851f38cb83b53863b8adb4e37dfbf76a392e14e75a870859ce93594a3f27b2",
+          ".ai/scripts/okf.py": "3244581bff07d8a7c8086f72b51fba6664a4a30a6422a6b35965440430ce4819",
+          ".ai/scripts/pr_sync.py": "a5a12d0c588fdcac1fa9b958b59249f71be99cd651b326e82afc736ac2cc7981",
+          ".ai/scripts/project_context.py": "700783fa941f5aaee714900d22e80d2f231b1ed107e2c068181b823e489e86e1",
+          ".ai/scripts/repo.py": "04df995a722b8f897264175ea87b3762d8c0571c2d53057b2a058dc4f5feede5",
+          ".ai/scripts/review_evidence.py": "8ecdf7d70177f8d83e28fbeec66aff666db68e9a7d40548ebcb8d191fbc1fe58",
+          ".ai/scripts/review_guard.py": "09987e1581f5524629d20046fba0c3601a9224498c5562a26f5e100dd2063dfa",
+          ".ai/scripts/review_native.py": "0cf7634c1acdbd95a96c81a498989fe1659e4870f13d7c293be2247e7ce63773",
+          ".ai/scripts/run_tests.py": "80ff942bf39066df7609c38962bbfd0f5429d750a450af99fb1bd02a86bb4217",
+          ".ai/scripts/scan.py": "4c1bd7162e4141275bff7cc60ff7134f25f4c630a28cbd04226358d260fa0253",
+          ".ai/scripts/scratch.py": "a5f6349179d9fae06f81b74d0bd07a5326f131688c82cb4643661af42c63b74c",
+          ".ai/scripts/shell_guard.py": "6cb2f790830eb8b3904bb760d22e7a57e08d7bdef5eaa3a5df3f5b12ab339133",
+          ".ai/scripts/tests/disk_tmp.py": "bdb1bba9136c63ad4e243d86e2388a783b6f520de96c5f5c7759284932eadf18",
+          ".ai/scripts/tests/test_assurance.py": "625cb6a026d98f302ff58aea1eea75af6ccb0e27def76bc6c52c48c6e732c2ee",
+          ".ai/scripts/tests/test_assurance_attested.py": "a13fb28a63362e8a864e8e6578f04d93567848407ce6bf1081d2d3c01122e5d1",
+          ".ai/scripts/tests/test_assurance_inputs.py": "f5493ff420a8daf28dd4c329cc044cab872b8d9856c8067796c897336a5cb09f",
+          ".ai/scripts/tests/test_assurance_ordering.py": "153666168f8ec8ec1503753d34d181c59bc99c2375e86a82c2ad4e4476803250",
+          ".ai/scripts/tests/test_lifecycle_conformance.py": "01865fd036b703561e57b798eda013ffa4b038db1309512d6109b54951138b1b",
+          ".ai/scripts/timed_check.py": "69117027c50451ed134b523c3840ea9f27c9e8299e8969419947c6913bcdb335",
+          ".ai/scripts/validation_select.py": "fe278207aa63ea76bd674be90572351e1ac979237954687631074163c63c29d5",
+          ".ai/scripts/wait_check.py": "ec80b027714a52a3afcd4d81fa501b37fb36affed718c49876965dcabc4a12b1"
+        },
+        "roster": {
+          "N01": [
+            "test_assurance.ObligationSyntaxTests.test_valid_and_malformed_obligations"
+          ],
+          "N02": [
+            "test_assurance.CompatibilityTests.test_obligation_free_and_prose_capabilities_stay_green",
+            "test_assurance.CompatibilityTests.test_obligation_lines_keep_validate_clean",
+            "test_assurance.CompatibilityTests.test_repository_without_bundle_reports_nothing"
+          ],
+          "N03": [
+            "test_assurance.AssureRunTests.test_run_records_req_entry_with_declared_inputs",
+            "test_assurance.AssureRunTests.test_run_refuses_inside_lifecycle_run",
+            "test_assurance.AssureRunTests.test_run_refuses_unknown_id",
+            "test_assurance.AssureRunTests.test_run_refuses_without_active_task"
+          ],
+          "N04": [
+            "test_assurance.StatusTests.test_changed_command_is_unverified",
+            "test_assurance.StatusTests.test_deleted_input_is_stale",
+            "test_assurance.StatusTests.test_evidence_from_earlier_committed_record",
+            "test_assurance.StatusTests.test_fresh_evidence_is_verified",
+            "test_assurance.StatusTests.test_input_edit_is_stale_and_names_file",
+            "test_assurance.StatusTests.test_newer_failure_wins",
+            "test_assurance.StatusTests.test_unrelated_edit_stays_verified"
+          ],
+          "N05": [
+            "test_assurance.RuntimeTests.test_changed_executable_is_stale"
+          ],
+          "N06": [
+            "test_assurance.IntegrityTests.test_invalid_and_output_bearing_records_contribute_nothing",
+            "test_assurance.IntegrityTests.test_schema_valid_hand_written_record_is_not_detected"
+          ],
+          "N07": [
+            "test_assurance.UnscopedTests.test_any_commit_makes_it_stale",
+            "test_assurance.UnscopedTests.test_identical_tree_is_verified",
+            "test_assurance.UnscopedTests.test_uncommitted_source_edit_makes_it_stale"
+          ],
+          "N08": [
+            "test_assurance.ChangedTests.test_bad_base_is_refused",
+            "test_assurance.ChangedTests.test_matched_unmatched_and_unscoped"
+          ],
+          "N09": [
+            "test_assurance.ReportFormatTests.test_basis_for_manual_and_missing_evidence",
+            "test_assurance.ReportFormatTests.test_text_and_json_fields_without_output"
+          ],
+          "N10": [
+            "test_assurance.ExitCodeTests.test_exit_codes_and_read_only_report",
+            "test_assurance.ExitCodeTests.test_invalid_fails",
+            "test_assurance.ExitCodeTests.test_run_with_report_flags_is_refused",
+            "test_assurance.ExitCodeTests.test_strict_counts_undeclared"
+          ],
+          "N11": [
+            "test_lifecycle_conformance.Assurance.test_assurance_documented"
+          ]
+        },
+        "status": "M .ai/lifecycle.md\n M .ai/scripts/assurance.py\n M .ai/scripts/assurance_measure.py\n M .ai/scripts/lifecycle.py\n M .ai/scripts/tests/test_assurance_attested.py\n?? .ai/scripts/tests/test_assurance_ordering.py"
+      },
+      "id": "N02",
+      "new": "return result(obligation, 'UNVERIFIED', 'no Verify: line')",
+      "old": "return result(obligation, 'UNDECLARED', 'no Verify: line')",
+      "path": ".ai/scripts/assurance.py",
+      "restored": true
+    },
+    {
+      "after": "878d45d8d00b620ea06a8d05efc7d3f79db5ac8871459997e720dcaa94f66856",
+      "before": "7529944d1488c0e239f62abbd32feeca3e837e18e004d52ec1f96b1e0bbf7c2a",
+      "candidate_after": {
+        "branch": "claude/assurance-increment-7",
+        "head": "02dd97586873f24a604224aa5ad186a60c4104e7",
+        "pins": {
+          ".agentic.json": "7b178dde144127021927771857428a5fca27f4f490a8e40a8dabc883915eb548",
+          ".ai/lifecycle.md": "e8e13fde4ecced5cf8a9e63483972236c67d81b55806132775ad1d9074013e68",
+          ".ai/scripts/artifacts.py": "3b8eb6401da21debdc4b33141542572e3f570750dc1a8518f99c8a1da138ab0f",
+          ".ai/scripts/assurance.py": "f59b7187ca81fa1ce99fb98a1886c3afaefae71f414114b1f8252a69a201cab8",
+          ".ai/scripts/assurance_architecture_demo.py": "9f6135fa4f88f01cf89c79c17a41e1a6ca76413c49c715ad1d6321a5c00bbc18",
+          ".ai/scripts/assurance_demo.py": "464d3fbb14e90109ed4e689bcdc726ae88b62562517c380f6f129de94faf3529",
+          ".ai/scripts/assurance_inputs.py": "7faa37f1bc04b55511ce84ac3b97378a4e922b574c581cdb6c4b95c1c4a3b90b",
+          ".ai/scripts/assurance_measure.py": "656aacb2b7b87090809fe78ef1b36ecfd5d901bf6e51302a69fbf9861d340878",
+          ".ai/scripts/autonomy_driver.py": "fd614e443a0df88ae6a4852d0a80dee8154c8dcfbaea8d421be194541eb578b6",
+          ".ai/scripts/autonomy_hook.py": "8bed1b962710918b5e382ed28f075042a82a735420bf8adb835aaa6499dbf7a4",
+          ".ai/scripts/autonomy_progress.py": "1c28dcfff754f1b278177d688b931f407db9ca5b555cc96aa0129f08a099539b",
+          ".ai/scripts/autonomy_validation.py": "3906fe01deb00e3d4bec4d562c0dadf8efce3edef2c2ecca609b5ea1473c8e02",
+          ".ai/scripts/brownfield.py": "0b227e2ca782477788dcc81929930b6357d0cbd0eaeca7cb2d6a44d61d23439e",
+          ".ai/scripts/completion.py": "d885987ca9612d9239ca8eb79d565cc928decd7df2040f6aa3bc9e9f4fc27f15",
+          ".ai/scripts/eval_outcome.py": "e63938bfeb34d5788f26e2aa0f352aa5501b592a5de8cbd768aea820920074ef",
+          ".ai/scripts/eval_process.py": "b8e3d85a2bf1db4af8958505dc6c0b1596b085072ae16722527228db613564c2",
+          ".ai/scripts/eval_results.py": "8668b466179a8333cf67b53d973f7bdcccc2202a267f8a1980c8900d02d36b92",
+          ".ai/scripts/install.py": "8196e023d82c164e82549996c857750565c1e92b5efec3bf7282297c39d221d2",
+          ".ai/scripts/learning.py": "e748c6e00157dd3613370b907fe0e15775c772051008a10c1ba223d2caa0e256",
+          ".ai/scripts/ledger.py": "f9f409cc1e791f00ca0de5825b1ed565d80b3f6eaab96bab59111c7d25fa4944",
+          ".ai/scripts/lifecycle.py": "7529944d1488c0e239f62abbd32feeca3e837e18e004d52ec1f96b1e0bbf7c2a",
+          ".ai/scripts/lifecycle_eval.py": "40851f38cb83b53863b8adb4e37dfbf76a392e14e75a870859ce93594a3f27b2",
+          ".ai/scripts/okf.py": "3244581bff07d8a7c8086f72b51fba6664a4a30a6422a6b35965440430ce4819",
+          ".ai/scripts/pr_sync.py": "a5a12d0c588fdcac1fa9b958b59249f71be99cd651b326e82afc736ac2cc7981",
+          ".ai/scripts/project_context.py": "700783fa941f5aaee714900d22e80d2f231b1ed107e2c068181b823e489e86e1",
+          ".ai/scripts/repo.py": "04df995a722b8f897264175ea87b3762d8c0571c2d53057b2a058dc4f5feede5",
+          ".ai/scripts/review_evidence.py": "8ecdf7d70177f8d83e28fbeec66aff666db68e9a7d40548ebcb8d191fbc1fe58",
+          ".ai/scripts/review_guard.py": "09987e1581f5524629d20046fba0c3601a9224498c5562a26f5e100dd2063dfa",
+          ".ai/scripts/review_native.py": "0cf7634c1acdbd95a96c81a498989fe1659e4870f13d7c293be2247e7ce63773",
+          ".ai/scripts/run_tests.py": "80ff942bf39066df7609c38962bbfd0f5429d750a450af99fb1bd02a86bb4217",
+          ".ai/scripts/scan.py": "4c1bd7162e4141275bff7cc60ff7134f25f4c630a28cbd04226358d260fa0253",
+          ".ai/scripts/scratch.py": "a5f6349179d9fae06f81b74d0bd07a5326f131688c82cb4643661af42c63b74c",
+          ".ai/scripts/shell_guard.py": "6cb2f790830eb8b3904bb760d22e7a57e08d7bdef5eaa3a5df3f5b12ab339133",
+          ".ai/scripts/tests/disk_tmp.py": "bdb1bba9136c63ad4e243d86e2388a783b6f520de96c5f5c7759284932eadf18",
+          ".ai/scripts/tests/test_assurance.py": "625cb6a026d98f302ff58aea1eea75af6ccb0e27def76bc6c52c48c6e732c2ee",
+          ".ai/scripts/tests/test_assurance_attested.py": "a13fb28a63362e8a864e8e6578f04d93567848407ce6bf1081d2d3c01122e5d1",
+          ".ai/scripts/tests/test_assurance_inputs.py": "f5493ff420a8daf28dd4c329cc044cab872b8d9856c8067796c897336a5cb09f",
+          ".ai/scripts/tests/test_assurance_ordering.py": "153666168f8ec8ec1503753d34d181c59bc99c2375e86a82c2ad4e4476803250",
+          ".ai/scripts/tests/test_lifecycle_conformance.py": "01865fd036b703561e57b798eda013ffa4b038db1309512d6109b54951138b1b",
+          ".ai/scripts/timed_check.py": "69117027c50451ed134b523c3840ea9f27c9e8299e8969419947c6913bcdb335",
+          ".ai/scripts/validation_select.py": "fe278207aa63ea76bd674be90572351e1ac979237954687631074163c63c29d5",
+          ".ai/scripts/wait_check.py": "ec80b027714a52a3afcd4d81fa501b37fb36affed718c49876965dcabc4a12b1"
+        },
+        "roster": {
+          "N01": [
+            "test_assurance.ObligationSyntaxTests.test_valid_and_malformed_obligations"
+          ],
+          "N02": [
+            "test_assurance.CompatibilityTests.test_obligation_free_and_prose_capabilities_stay_green",
+            "test_assurance.CompatibilityTests.test_obligation_lines_keep_validate_clean",
+            "test_assurance.CompatibilityTests.test_repository_without_bundle_reports_nothing"
+          ],
+          "N03": [
+            "test_assurance.AssureRunTests.test_run_records_req_entry_with_declared_inputs",
+            "test_assurance.AssureRunTests.test_run_refuses_inside_lifecycle_run",
+            "test_assurance.AssureRunTests.test_run_refuses_unknown_id",
+            "test_assurance.AssureRunTests.test_run_refuses_without_active_task"
+          ],
+          "N04": [
+            "test_assurance.StatusTests.test_changed_command_is_unverified",
+            "test_assurance.StatusTests.test_deleted_input_is_stale",
+            "test_assurance.StatusTests.test_evidence_from_earlier_committed_record",
+            "test_assurance.StatusTests.test_fresh_evidence_is_verified",
+            "test_assurance.StatusTests.test_input_edit_is_stale_and_names_file",
+            "test_assurance.StatusTests.test_newer_failure_wins",
+            "test_assurance.StatusTests.test_unrelated_edit_stays_verified"
+          ],
+          "N05": [
+            "test_assurance.RuntimeTests.test_changed_executable_is_stale"
+          ],
+          "N06": [
+            "test_assurance.IntegrityTests.test_invalid_and_output_bearing_records_contribute_nothing",
+            "test_assurance.IntegrityTests.test_schema_valid_hand_written_record_is_not_detected"
+          ],
+          "N07": [
+            "test_assurance.UnscopedTests.test_any_commit_makes_it_stale",
+            "test_assurance.UnscopedTests.test_identical_tree_is_verified",
+            "test_assurance.UnscopedTests.test_uncommitted_source_edit_makes_it_stale"
+          ],
+          "N08": [
+            "test_assurance.ChangedTests.test_bad_base_is_refused",
+            "test_assurance.ChangedTests.test_matched_unmatched_and_unscoped"
+          ],
+          "N09": [
+            "test_assurance.ReportFormatTests.test_basis_for_manual_and_missing_evidence",
+            "test_assurance.ReportFormatTests.test_text_and_json_fields_without_output"
+          ],
+          "N10": [
+            "test_assurance.ExitCodeTests.test_exit_codes_and_read_only_report",
+            "test_assurance.ExitCodeTests.test_invalid_fails",
+            "test_assurance.ExitCodeTests.test_run_with_report_flags_is_refused",
+            "test_assurance.ExitCodeTests.test_strict_counts_undeclared"
+          ],
+          "N11": [
+            "test_lifecycle_conformance.Assurance.test_assurance_documented"
+          ]
+        },
+        "status": "M .ai/lifecycle.md\n M .ai/scripts/assurance.py\n M .ai/scripts/assurance_measure.py\n M .ai/scripts/lifecycle.py\n M .ai/scripts/tests/test_assurance_attested.py\n?? .ai/scripts/tests/test_assurance_ordering.py"
+      },
+      "id": "N03",
+      "new": "f\"req:BROKEN-{obligation.id}\"",
+      "old": "f\"req:{obligation.id}\"",
+      "path": ".ai/scripts/lifecycle.py",
+      "restored": true
+    },
+    {
+      "after": "972c784336891b03e78f111b4c590044a12e8bf948f16432efa86be140db458f",
+      "before": "f59b7187ca81fa1ce99fb98a1886c3afaefae71f414114b1f8252a69a201cab8",
+      "candidate_after": {
+        "branch": "claude/assurance-increment-7",
+        "head": "02dd97586873f24a604224aa5ad186a60c4104e7",
+        "pins": {
+          ".agentic.json": "7b178dde144127021927771857428a5fca27f4f490a8e40a8dabc883915eb548",
+          ".ai/lifecycle.md": "e8e13fde4ecced5cf8a9e63483972236c67d81b55806132775ad1d9074013e68",
+          ".ai/scripts/artifacts.py": "3b8eb6401da21debdc4b33141542572e3f570750dc1a8518f99c8a1da138ab0f",
+          ".ai/scripts/assurance.py": "f59b7187ca81fa1ce99fb98a1886c3afaefae71f414114b1f8252a69a201cab8",
+          ".ai/scripts/assurance_architecture_demo.py": "9f6135fa4f88f01cf89c79c17a41e1a6ca76413c49c715ad1d6321a5c00bbc18",
+          ".ai/scripts/assurance_demo.py": "464d3fbb14e90109ed4e689bcdc726ae88b62562517c380f6f129de94faf3529",
+          ".ai/scripts/assurance_inputs.py": "7faa37f1bc04b55511ce84ac3b97378a4e922b574c581cdb6c4b95c1c4a3b90b",
+          ".ai/scripts/assurance_measure.py": "656aacb2b7b87090809fe78ef1b36ecfd5d901bf6e51302a69fbf9861d340878",
+          ".ai/scripts/autonomy_driver.py": "fd614e443a0df88ae6a4852d0a80dee8154c8dcfbaea8d421be194541eb578b6",
+          ".ai/scripts/autonomy_hook.py": "8bed1b962710918b5e382ed28f075042a82a735420bf8adb835aaa6499dbf7a4",
+          ".ai/scripts/autonomy_progress.py": "1c28dcfff754f1b278177d688b931f407db9ca5b555cc96aa0129f08a099539b",
+          ".ai/scripts/autonomy_validation.py": "3906fe01deb00e3d4bec4d562c0dadf8efce3edef2c2ecca609b5ea1473c8e02",
+          ".ai/scripts/brownfield.py": "0b227e2ca782477788dcc81929930b6357d0cbd0eaeca7cb2d6a44d61d23439e",
+          ".ai/scripts/completion.py": "d885987ca9612d9239ca8eb79d565cc928decd7df2040f6aa3bc9e9f4fc27f15",
+          ".ai/scripts/eval_outcome.py": "e63938bfeb34d5788f26e2aa0f352aa5501b592a5de8cbd768aea820920074ef",
+          ".ai/scripts/eval_process.py": "b8e3d85a2bf1db4af8958505dc6c0b1596b085072ae16722527228db613564c2",
+          ".ai/scripts/eval_results.py": "8668b466179a8333cf67b53d973f7bdcccc2202a267f8a1980c8900d02d36b92",
+          ".ai/scripts/install.py": "8196e023d82c164e82549996c857750565c1e92b5efec3bf7282297c39d221d2",
+          ".ai/scripts/learning.py": "e748c6e00157dd3613370b907fe0e15775c772051008a10c1ba223d2caa0e256",
+          ".ai/scripts/ledger.py": "f9f409cc1e791f00ca0de5825b1ed565d80b3f6eaab96bab59111c7d25fa4944",
+          ".ai/scripts/lifecycle.py": "7529944d1488c0e239f62abbd32feeca3e837e18e004d52ec1f96b1e0bbf7c2a",
+          ".ai/scripts/lifecycle_eval.py": "40851f38cb83b53863b8adb4e37dfbf76a392e14e75a870859ce93594a3f27b2",
+          ".ai/scripts/okf.py": "3244581bff07d8a7c8086f72b51fba6664a4a30a6422a6b35965440430ce4819",
+          ".ai/scripts/pr_sync.py": "a5a12d0c588fdcac1fa9b958b59249f71be99cd651b326e82afc736ac2cc7981",
+          ".ai/scripts/project_context.py": "700783fa941f5aaee714900d22e80d2f231b1ed107e2c068181b823e489e86e1",
+          ".ai/scripts/repo.py": "04df995a722b8f897264175ea87b3762d8c0571c2d53057b2a058dc4f5feede5",
+          ".ai/scripts/review_evidence.py": "8ecdf7d70177f8d83e28fbeec66aff666db68e9a7d40548ebcb8d191fbc1fe58",
+          ".ai/scripts/review_guard.py": "09987e1581f5524629d20046fba0c3601a9224498c5562a26f5e100dd2063dfa",
+          ".ai/scripts/review_native.py": "0cf7634c1acdbd95a96c81a498989fe1659e4870f13d7c293be2247e7ce63773",
+          ".ai/scripts/run_tests.py": "80ff942bf39066df7609c38962bbfd0f5429d750a450af99fb1bd02a86bb4217",
+          ".ai/scripts/scan.py": "4c1bd7162e4141275bff7cc60ff7134f25f4c630a28cbd04226358d260fa0253",
+          ".ai/scripts/scratch.py": "a5f6349179d9fae06f81b74d0bd07a5326f131688c82cb4643661af42c63b74c",
+          ".ai/scripts/shell_guard.py": "6cb2f790830eb8b3904bb760d22e7a57e08d7bdef5eaa3a5df3f5b12ab339133",
+          ".ai/scripts/tests/disk_tmp.py": "bdb1bba9136c63ad4e243d86e2388a783b6f520de96c5f5c7759284932eadf18",
+          ".ai/scripts/tests/test_assurance.py": "625cb6a026d98f302ff58aea1eea75af6ccb0e27def76bc6c52c48c6e732c2ee",
+          ".ai/scripts/tests/test_assurance_attested.py": "a13fb28a63362e8a864e8e6578f04d93567848407ce6bf1081d2d3c01122e5d1",
+          ".ai/scripts/tests/test_assurance_inputs.py": "f5493ff420a8daf28dd4c329cc044cab872b8d9856c8067796c897336a5cb09f",
+          ".ai/scripts/tests/test_assurance_ordering.py": "153666168f8ec8ec1503753d34d181c59bc99c2375e86a82c2ad4e4476803250",
+          ".ai/scripts/tests/test_lifecycle_conformance.py": "01865fd036b703561e57b798eda013ffa4b038db1309512d6109b54951138b1b",
+          ".ai/scripts/timed_check.py": "69117027c50451ed134b523c3840ea9f27c9e8299e8969419947c6913bcdb335",
+          ".ai/scripts/validation_select.py": "fe278207aa63ea76bd674be90572351e1ac979237954687631074163c63c29d5",
+          ".ai/scripts/wait_check.py": "ec80b027714a52a3afcd4d81fa501b37fb36affed718c49876965dcabc4a12b1"
+        },
+        "roster": {
+          "N01": [
+            "test_assurance.ObligationSyntaxTests.test_valid_and_malformed_obligations"
+          ],
+          "N02": [
+            "test_assurance.CompatibilityTests.test_obligation_free_and_prose_capabilities_stay_green",
+            "test_assurance.CompatibilityTests.test_obligation_lines_keep_validate_clean",
+            "test_assurance.CompatibilityTests.test_repository_without_bundle_reports_nothing"
+          ],
+          "N03": [
+            "test_assurance.AssureRunTests.test_run_records_req_entry_with_declared_inputs",
+            "test_assurance.AssureRunTests.test_run_refuses_inside_lifecycle_run",
+            "test_assurance.AssureRunTests.test_run_refuses_unknown_id",
+            "test_assurance.AssureRunTests.test_run_refuses_without_active_task"
+          ],
+          "N04": [
+            "test_assurance.StatusTests.test_changed_command_is_unverified",
+            "test_assurance.StatusTests.test_deleted_input_is_stale",
+            "test_assurance.StatusTests.test_evidence_from_earlier_committed_record",
+            "test_assurance.StatusTests.test_fresh_evidence_is_verified",
+            "test_assurance.StatusTests.test_input_edit_is_stale_and_names_file",
+            "test_assurance.StatusTests.test_newer_failure_wins",
+            "test_assurance.StatusTests.test_unrelated_edit_stays_verified"
+          ],
+          "N05": [
+            "test_assurance.RuntimeTests.test_changed_executable_is_stale"
+          ],
+          "N06": [
+            "test_assurance.IntegrityTests.test_invalid_and_output_bearing_records_contribute_nothing",
+            "test_assurance.IntegrityTests.test_schema_valid_hand_written_record_is_not_detected"
+          ],
+          "N07": [
+            "test_assurance.UnscopedTests.test_any_commit_makes_it_stale",
+            "test_assurance.UnscopedTests.test_identical_tree_is_verified",
+            "test_assurance.UnscopedTests.test_uncommitted_source_edit_makes_it_stale"
+          ],
+          "N08": [
+            "test_assurance.ChangedTests.test_bad_base_is_refused",
+            "test_assurance.ChangedTests.test_matched_unmatched_and_unscoped"
+          ],
+          "N09": [
+            "test_assurance.ReportFormatTests.test_basis_for_manual_and_missing_evidence",
+            "test_assurance.ReportFormatTests.test_text_and_json_fields_without_output"
+          ],
+          "N10": [
+            "test_assurance.ExitCodeTests.test_exit_codes_and_read_only_report",
+            "test_assurance.ExitCodeTests.test_invalid_fails",
+            "test_assurance.ExitCodeTests.test_run_with_report_flags_is_refused",
+            "test_assurance.ExitCodeTests.test_strict_counts_undeclared"
+          ],
+          "N11": [
+            "test_lifecycle_conformance.Assurance.test_assurance_documented"
+          ]
+        },
+        "status": "M .ai/lifecycle.md\n M .ai/scripts/assurance.py\n M .ai/scripts/assurance_measure.py\n M .ai/scripts/lifecycle.py\n M .ai/scripts/tests/test_assurance_attested.py\n?? .ai/scripts/tests/test_assurance_ordering.py"
+      },
+      "id": "N04",
+      "new": "'UNVERIFIED', f'passed on {scope}; covers only this command on these inputs'",
+      "old": "'VERIFIED', f'passed on {scope}; covers only this command on these inputs'",
+      "path": ".ai/scripts/assurance.py",
+      "restored": true
+    },
+    {
+      "after": "c6e79cbabe1d719313f4e3fe5f5620b8fab052cc7166b96c14ec8db2e35d0a0a",
+      "before": "f9f409cc1e791f00ca0de5825b1ed565d80b3f6eaab96bab59111c7d25fa4944",
+      "candidate_after": {
+        "branch": "claude/assurance-increment-7",
+        "head": "02dd97586873f24a604224aa5ad186a60c4104e7",
+        "pins": {
+          ".agentic.json": "7b178dde144127021927771857428a5fca27f4f490a8e40a8dabc883915eb548",
+          ".ai/lifecycle.md": "e8e13fde4ecced5cf8a9e63483972236c67d81b55806132775ad1d9074013e68",
+          ".ai/scripts/artifacts.py": "3b8eb6401da21debdc4b33141542572e3f570750dc1a8518f99c8a1da138ab0f",
+          ".ai/scripts/assurance.py": "f59b7187ca81fa1ce99fb98a1886c3afaefae71f414114b1f8252a69a201cab8",
+          ".ai/scripts/assurance_architecture_demo.py": "9f6135fa4f88f01cf89c79c17a41e1a6ca76413c49c715ad1d6321a5c00bbc18",
+          ".ai/scripts/assurance_demo.py": "464d3fbb14e90109ed4e689bcdc726ae88b62562517c380f6f129de94faf3529",
+          ".ai/scripts/assurance_inputs.py": "7faa37f1bc04b55511ce84ac3b97378a4e922b574c581cdb6c4b95c1c4a3b90b",
+          ".ai/scripts/assurance_measure.py": "656aacb2b7b87090809fe78ef1b36ecfd5d901bf6e51302a69fbf9861d340878",
+          ".ai/scripts/autonomy_driver.py": "fd614e443a0df88ae6a4852d0a80dee8154c8dcfbaea8d421be194541eb578b6",
+          ".ai/scripts/autonomy_hook.py": "8bed1b962710918b5e382ed28f075042a82a735420bf8adb835aaa6499dbf7a4",
+          ".ai/scripts/autonomy_progress.py": "1c28dcfff754f1b278177d688b931f407db9ca5b555cc96aa0129f08a099539b",
+          ".ai/scripts/autonomy_validation.py": "3906fe01deb00e3d4bec4d562c0dadf8efce3edef2c2ecca609b5ea1473c8e02",
+          ".ai/scripts/brownfield.py": "0b227e2ca782477788dcc81929930b6357d0cbd0eaeca7cb2d6a44d61d23439e",
+          ".ai/scripts/completion.py": "d885987ca9612d9239ca8eb79d565cc928decd7df2040f6aa3bc9e9f4fc27f15",
+          ".ai/scripts/eval_outcome.py": "e63938bfeb34d5788f26e2aa0f352aa5501b592a5de8cbd768aea820920074ef",
+          ".ai/scripts/eval_process.py": "b8e3d85a2bf1db4af8958505dc6c0b1596b085072ae16722527228db613564c2",
+          ".ai/scripts/eval_results.py": "8668b466179a8333cf67b53d973f7bdcccc2202a267f8a1980c8900d02d36b92",
+          ".ai/scripts/install.py": "8196e023d82c164e82549996c857750565c1e92b5efec3bf7282297c39d221d2",
+          ".ai/scripts/learning.py": "e748c6e00157dd3613370b907fe0e15775c772051008a10c1ba223d2caa0e256",
+          ".ai/scripts/ledger.py": "f9f409cc1e791f00ca0de5825b1ed565d80b3f6eaab96bab59111c7d25fa4944",
+          ".ai/scripts/lifecycle.py": "7529944d1488c0e239f62abbd32feeca3e837e18e004d52ec1f96b1e0bbf7c2a",
+          ".ai/scripts/lifecycle_eval.py": "40851f38cb83b53863b8adb4e37dfbf76a392e14e75a870859ce93594a3f27b2",
+          ".ai/scripts/okf.py": "3244581bff07d8a7c8086f72b51fba6664a4a30a6422a6b35965440430ce4819",
+          ".ai/scripts/pr_sync.py": "a5a12d0c588fdcac1fa9b958b59249f71be99cd651b326e82afc736ac2cc7981",
+          ".ai/scripts/project_context.py": "700783fa941f5aaee714900d22e80d2f231b1ed107e2c068181b823e489e86e1",
+          ".ai/scripts/repo.py": "04df995a722b8f897264175ea87b3762d8c0571c2d53057b2a058dc4f5feede5",
+          ".ai/scripts/review_evidence.py": "8ecdf7d70177f8d83e28fbeec66aff666db68e9a7d40548ebcb8d191fbc1fe58",
+          ".ai/scripts/review_guard.py": "09987e1581f5524629d20046fba0c3601a9224498c5562a26f5e100dd2063dfa",
+          ".ai/scripts/review_native.py": "0cf7634c1acdbd95a96c81a498989fe1659e4870f13d7c293be2247e7ce63773",
+          ".ai/scripts/run_tests.py": "80ff942bf39066df7609c38962bbfd0f5429d750a450af99fb1bd02a86bb4217",
+          ".ai/scripts/scan.py": "4c1bd7162e4141275bff7cc60ff7134f25f4c630a28cbd04226358d260fa0253",
+          ".ai/scripts/scratch.py": "a5f6349179d9fae06f81b74d0bd07a5326f131688c82cb4643661af42c63b74c",
+          ".ai/scripts/shell_guard.py": "6cb2f790830eb8b3904bb760d22e7a57e08d7bdef5eaa3a5df3f5b12ab339133",
+          ".ai/scripts/tests/disk_tmp.py": "bdb1bba9136c63ad4e243d86e2388a783b6f520de96c5f5c7759284932eadf18",
+          ".ai/scripts/tests/test_assurance.py": "625cb6a026d98f302ff58aea1eea75af6ccb0e27def76bc6c52c48c6e732c2ee",
+          ".ai/scripts/tests/test_assurance_attested.py": "a13fb28a63362e8a864e8e6578f04d93567848407ce6bf1081d2d3c01122e5d1",
+          ".ai/scripts/tests/test_assurance_inputs.py": "f5493ff420a8daf28dd4c329cc044cab872b8d9856c8067796c897336a5cb09f",
+          ".ai/scripts/tests/test_assurance_ordering.py": "153666168f8ec8ec1503753d34d181c59bc99c2375e86a82c2ad4e4476803250",
+          ".ai/scripts/tests/test_lifecycle_conformance.py": "01865fd036b703561e57b798eda013ffa4b038db1309512d6109b54951138b1b",
+          ".ai/scripts/timed_check.py": "69117027c50451ed134b523c3840ea9f27c9e8299e8969419947c6913bcdb335",
+          ".ai/scripts/validation_select.py": "fe278207aa63ea76bd674be90572351e1ac979237954687631074163c63c29d5",
+          ".ai/scripts/wait_check.py": "ec80b027714a52a3afcd4d81fa501b37fb36affed718c49876965dcabc4a12b1"
+        },
+        "roster": {
+          "N01": [
+            "test_assurance.ObligationSyntaxTests.test_valid_and_malformed_obligations"
+          ],
+          "N02": [
+            "test_assurance.CompatibilityTests.test_obligation_free_and_prose_capabilities_stay_green",
+            "test_assurance.CompatibilityTests.test_obligation_lines_keep_validate_clean",
+            "test_assurance.CompatibilityTests.test_repository_without_bundle_reports_nothing"
+          ],
+          "N03": [
+            "test_assurance.AssureRunTests.test_run_records_req_entry_with_declared_inputs",
+            "test_assurance.AssureRunTests.test_run_refuses_inside_lifecycle_run",
+            "test_assurance.AssureRunTests.test_run_refuses_unknown_id",
+            "test_assurance.AssureRunTests.test_run_refuses_without_active_task"
+          ],
+          "N04": [
+            "test_assurance.StatusTests.test_changed_command_is_unverified",
+            "test_assurance.StatusTests.test_deleted_input_is_stale",
+            "test_assurance.StatusTests.test_evidence_from_earlier_committed_record",
+            "test_assurance.StatusTests.test_fresh_evidence_is_verified",
+            "test_assurance.StatusTests.test_input_edit_is_stale_and_names_file",
+            "test_assurance.StatusTests.test_newer_failure_wins",
+            "test_assurance.StatusTests.test_unrelated_edit_stays_verified"
+          ],
+          "N05": [
+            "test_assurance.RuntimeTests.test_changed_executable_is_stale"
+          ],
+          "N06": [
+            "test_assurance.IntegrityTests.test_invalid_and_output_bearing_records_contribute_nothing",
+            "test_assurance.IntegrityTests.test_schema_valid_hand_written_record_is_not_detected"
+          ],
+          "N07": [
+            "test_assurance.UnscopedTests.test_any_commit_makes_it_stale",
+            "test_assurance.UnscopedTests.test_identical_tree_is_verified",
+            "test_assurance.UnscopedTests.test_uncommitted_source_edit_makes_it_stale"
+          ],
+          "N08": [
+            "test_assurance.ChangedTests.test_bad_base_is_refused",
+            "test_assurance.ChangedTests.test_matched_unmatched_and_unscoped"
+          ],
+          "N09": [
+            "test_assurance.ReportFormatTests.test_basis_for_manual_and_missing_evidence",
+            "test_assurance.ReportFormatTests.test_text_and_json_fields_without_output"
+          ],
+          "N10": [
+            "test_assurance.ExitCodeTests.test_exit_codes_and_read_only_report",
+            "test_assurance.ExitCodeTests.test_invalid_fails",
+            "test_assurance.ExitCodeTests.test_run_with_report_flags_is_refused",
+            "test_assurance.ExitCodeTests.test_strict_counts_undeclared"
+          ],
+          "N11": [
+            "test_lifecycle_conformance.Assurance.test_assurance_documented"
+          ]
+        },
+        "status": "M .ai/lifecycle.md\n M .ai/scripts/assurance.py\n M .ai/scripts/assurance_measure.py\n M .ai/scripts/lifecycle.py\n M .ai/scripts/tests/test_assurance_attested.py\n?? .ai/scripts/tests/test_assurance_ordering.py"
+      },
+      "id": "N05",
+      "new": "if False and entry.get('runtime_sha256') and runtime_digest(entry['argv']) != entry['runtime_sha256']:",
+      "old": "if entry.get('runtime_sha256') and runtime_digest(entry['argv']) != entry['runtime_sha256']:",
+      "path": ".ai/scripts/ledger.py",
+      "restored": true
+    },
+    {
+      "after": "11f05a9cc2981425a21fcc1a4d0b9c1a8a7bbe0bae4c32ebd2355b824c3897ee",
+      "before": "f59b7187ca81fa1ce99fb98a1886c3afaefae71f414114b1f8252a69a201cab8",
+      "candidate_after": {
+        "branch": "claude/assurance-increment-7",
+        "head": "02dd97586873f24a604224aa5ad186a60c4104e7",
+        "pins": {
+          ".agentic.json": "7b178dde144127021927771857428a5fca27f4f490a8e40a8dabc883915eb548",
+          ".ai/lifecycle.md": "e8e13fde4ecced5cf8a9e63483972236c67d81b55806132775ad1d9074013e68",
+          ".ai/scripts/artifacts.py": "3b8eb6401da21debdc4b33141542572e3f570750dc1a8518f99c8a1da138ab0f",
+          ".ai/scripts/assurance.py": "f59b7187ca81fa1ce99fb98a1886c3afaefae71f414114b1f8252a69a201cab8",
+          ".ai/scripts/assurance_architecture_demo.py": "9f6135fa4f88f01cf89c79c17a41e1a6ca76413c49c715ad1d6321a5c00bbc18",
+          ".ai/scripts/assurance_demo.py": "464d3fbb14e90109ed4e689bcdc726ae88b62562517c380f6f129de94faf3529",
+          ".ai/scripts/assurance_inputs.py": "7faa37f1bc04b55511ce84ac3b97378a4e922b574c581cdb6c4b95c1c4a3b90b",
+          ".ai/scripts/assurance_measure.py": "656aacb2b7b87090809fe78ef1b36ecfd5d901bf6e51302a69fbf9861d340878",
+          ".ai/scripts/autonomy_driver.py": "fd614e443a0df88ae6a4852d0a80dee8154c8dcfbaea8d421be194541eb578b6",
+          ".ai/scripts/autonomy_hook.py": "8bed1b962710918b5e382ed28f075042a82a735420bf8adb835aaa6499dbf7a4",
+          ".ai/scripts/autonomy_progress.py": "1c28dcfff754f1b278177d688b931f407db9ca5b555cc96aa0129f08a099539b",
+          ".ai/scripts/autonomy_validation.py": "3906fe01deb00e3d4bec4d562c0dadf8efce3edef2c2ecca609b5ea1473c8e02",
+          ".ai/scripts/brownfield.py": "0b227e2ca782477788dcc81929930b6357d0cbd0eaeca7cb2d6a44d61d23439e",
+          ".ai/scripts/completion.py": "d885987ca9612d9239ca8eb79d565cc928decd7df2040f6aa3bc9e9f4fc27f15",
+          ".ai/scripts/eval_outcome.py": "e63938bfeb34d5788f26e2aa0f352aa5501b592a5de8cbd768aea820920074ef",
+          ".ai/scripts/eval_process.py": "b8e3d85a2bf1db4af8958505dc6c0b1596b085072ae16722527228db613564c2",
+          ".ai/scripts/eval_results.py": "8668b466179a8333cf67b53d973f7bdcccc2202a267f8a1980c8900d02d36b92",
+          ".ai/scripts/install.py": "8196e023d82c164e82549996c857750565c1e92b5efec3bf7282297c39d221d2",
+          ".ai/scripts/learning.py": "e748c6e00157dd3613370b907fe0e15775c772051008a10c1ba223d2caa0e256",
+          ".ai/scripts/ledger.py": "f9f409cc1e791f00ca0de5825b1ed565d80b3f6eaab96bab59111c7d25fa4944",
+          ".ai/scripts/lifecycle.py": "7529944d1488c0e239f62abbd32feeca3e837e18e004d52ec1f96b1e0bbf7c2a",
+          ".ai/scripts/lifecycle_eval.py": "40851f38cb83b53863b8adb4e37dfbf76a392e14e75a870859ce93594a3f27b2",
+          ".ai/scripts/okf.py": "3244581bff07d8a7c8086f72b51fba6664a4a30a6422a6b35965440430ce4819",
+          ".ai/scripts/pr_sync.py": "a5a12d0c588fdcac1fa9b958b59249f71be99cd651b326e82afc736ac2cc7981",
+          ".ai/scripts/project_context.py": "700783fa941f5aaee714900d22e80d2f231b1ed107e2c068181b823e489e86e1",
+          ".ai/scripts/repo.py": "04df995a722b8f897264175ea87b3762d8c0571c2d53057b2a058dc4f5feede5",
+          ".ai/scripts/review_evidence.py": "8ecdf7d70177f8d83e28fbeec66aff666db68e9a7d40548ebcb8d191fbc1fe58",
+          ".ai/scripts/review_guard.py": "09987e1581f5524629d20046fba0c3601a9224498c5562a26f5e100dd2063dfa",
+          ".ai/scripts/review_native.py": "0cf7634c1acdbd95a96c81a498989fe1659e4870f13d7c293be2247e7ce63773",
+          ".ai/scripts/run_tests.py": "80ff942bf39066df7609c38962bbfd0f5429d750a450af99fb1bd02a86bb4217",
+          ".ai/scripts/scan.py": "4c1bd7162e4141275bff7cc60ff7134f25f4c630a28cbd04226358d260fa0253",
+          ".ai/scripts/scratch.py": "a5f6349179d9fae06f81b74d0bd07a5326f131688c82cb4643661af42c63b74c",
+          ".ai/scripts/shell_guard.py": "6cb2f790830eb8b3904bb760d22e7a57e08d7bdef5eaa3a5df3f5b12ab339133",
+          ".ai/scripts/tests/disk_tmp.py": "bdb1bba9136c63ad4e243d86e2388a783b6f520de96c5f5c7759284932eadf18",
+          ".ai/scripts/tests/test_assurance.py": "625cb6a026d98f302ff58aea1eea75af6ccb0e27def76bc6c52c48c6e732c2ee",
+          ".ai/scripts/tests/test_assurance_attested.py": "a13fb28a63362e8a864e8e6578f04d93567848407ce6bf1081d2d3c01122e5d1",
+          ".ai/scripts/tests/test_assurance_inputs.py": "f5493ff420a8daf28dd4c329cc044cab872b8d9856c8067796c897336a5cb09f",
+          ".ai/scripts/tests/test_assurance_ordering.py": "153666168f8ec8ec1503753d34d181c59bc99c2375e86a82c2ad4e4476803250",
+          ".ai/scripts/tests/test_lifecycle_conformance.py": "01865fd036b703561e57b798eda013ffa4b038db1309512d6109b54951138b1b",
+          ".ai/scripts/timed_check.py": "69117027c50451ed134b523c3840ea9f27c9e8299e8969419947c6913bcdb335",
+          ".ai/scripts/validation_select.py": "fe278207aa63ea76bd674be90572351e1ac979237954687631074163c63c29d5",
+          ".ai/scripts/wait_check.py": "ec80b027714a52a3afcd4d81fa501b37fb36affed718c49876965dcabc4a12b1"
+        },
+        "roster": {
+          "N01": [
+            "test_assurance.ObligationSyntaxTests.test_valid_and_malformed_obligations"
+          ],
+          "N02": [
+            "test_assurance.CompatibilityTests.test_obligation_free_and_prose_capabilities_stay_green",
+            "test_assurance.CompatibilityTests.test_obligation_lines_keep_validate_clean",
+            "test_assurance.CompatibilityTests.test_repository_without_bundle_reports_nothing"
+          ],
+          "N03": [
+            "test_assurance.AssureRunTests.test_run_records_req_entry_with_declared_inputs",
+            "test_assurance.AssureRunTests.test_run_refuses_inside_lifecycle_run",
+            "test_assurance.AssureRunTests.test_run_refuses_unknown_id",
+            "test_assurance.AssureRunTests.test_run_refuses_without_active_task"
+          ],
+          "N04": [
+            "test_assurance.StatusTests.test_changed_command_is_unverified",
+            "test_assurance.StatusTests.test_deleted_input_is_stale",
+            "test_assurance.StatusTests.test_evidence_from_earlier_committed_record",
+            "test_assurance.StatusTests.test_fresh_evidence_is_verified",
+            "test_assurance.StatusTests.test_input_edit_is_stale_and_names_file",
+            "test_assurance.StatusTests.test_newer_failure_wins",
+            "test_assurance.StatusTests.test_unrelated_edit_stays_verified"
+          ],
+          "N05": [
+            "test_assurance.RuntimeTests.test_changed_executable_is_stale"
+          ],
+          "N06": [
+            "test_assurance.IntegrityTests.test_invalid_and_output_bearing_records_contribute_nothing",
+            "test_assurance.IntegrityTests.test_schema_valid_hand_written_record_is_not_detected"
+          ],
+          "N07": [
+            "test_assurance.UnscopedTests.test_any_commit_makes_it_stale",
+            "test_assurance.UnscopedTests.test_identical_tree_is_verified",
+            "test_assurance.UnscopedTests.test_uncommitted_source_edit_makes_it_stale"
+          ],
+          "N08": [
+            "test_assurance.ChangedTests.test_bad_base_is_refused",
+            "test_assurance.ChangedTests.test_matched_unmatched_and_unscoped"
+          ],
+          "N09": [
+            "test_assurance.ReportFormatTests.test_basis_for_manual_and_missing_evidence",
+            "test_assurance.ReportFormatTests.test_text_and_json_fields_without_output"
+          ],
+          "N10": [
+            "test_assurance.ExitCodeTests.test_exit_codes_and_read_only_report",
+            "test_assurance.ExitCodeTests.test_invalid_fails",
+            "test_assurance.ExitCodeTests.test_run_with_report_flags_is_refused",
+            "test_assurance.ExitCodeTests.test_strict_counts_undeclared"
+          ],
+          "N11": [
+            "test_lifecycle_conformance.Assurance.test_assurance_documented"
+          ]
+        },
+        "status": "M .ai/lifecycle.md\n M .ai/scripts/assurance.py\n M .ai/scripts/assurance_measure.py\n M .ai/scripts/lifecycle.py\n M .ai/scripts/tests/test_assurance_attested.py\n?? .ai/scripts/tests/test_assurance_ordering.py"
+      },
+      "id": "N06",
+      "new": "if False and problems:",
+      "old": "if problems:",
+      "path": ".ai/scripts/assurance.py",
+      "restored": true
+    },
+    {
+      "after": "44b342b407666c006c0854b3ebc7580b336ba2b0da6d257e6add355d977234e0",
+      "before": "f9f409cc1e791f00ca0de5825b1ed565d80b3f6eaab96bab59111c7d25fa4944",
+      "candidate_after": {
+        "branch": "claude/assurance-increment-7",
+        "head": "02dd97586873f24a604224aa5ad186a60c4104e7",
+        "pins": {
+          ".agentic.json": "7b178dde144127021927771857428a5fca27f4f490a8e40a8dabc883915eb548",
+          ".ai/lifecycle.md": "e8e13fde4ecced5cf8a9e63483972236c67d81b55806132775ad1d9074013e68",
+          ".ai/scripts/artifacts.py": "3b8eb6401da21debdc4b33141542572e3f570750dc1a8518f99c8a1da138ab0f",
+          ".ai/scripts/assurance.py": "f59b7187ca81fa1ce99fb98a1886c3afaefae71f414114b1f8252a69a201cab8",
+          ".ai/scripts/assurance_architecture_demo.py": "9f6135fa4f88f01cf89c79c17a41e1a6ca76413c49c715ad1d6321a5c00bbc18",
+          ".ai/scripts/assurance_demo.py": "464d3fbb14e90109ed4e689bcdc726ae88b62562517c380f6f129de94faf3529",
+          ".ai/scripts/assurance_inputs.py": "7faa37f1bc04b55511ce84ac3b97378a4e922b574c581cdb6c4b95c1c4a3b90b",
+          ".ai/scripts/assurance_measure.py": "656aacb2b7b87090809fe78ef1b36ecfd5d901bf6e51302a69fbf9861d340878",
+          ".ai/scripts/autonomy_driver.py": "fd614e443a0df88ae6a4852d0a80dee8154c8dcfbaea8d421be194541eb578b6",
+          ".ai/scripts/autonomy_hook.py": "8bed1b962710918b5e382ed28f075042a82a735420bf8adb835aaa6499dbf7a4",
+          ".ai/scripts/autonomy_progress.py": "1c28dcfff754f1b278177d688b931f407db9ca5b555cc96aa0129f08a099539b",
+          ".ai/scripts/autonomy_validation.py": "3906fe01deb00e3d4bec4d562c0dadf8efce3edef2c2ecca609b5ea1473c8e02",
+          ".ai/scripts/brownfield.py": "0b227e2ca782477788dcc81929930b6357d0cbd0eaeca7cb2d6a44d61d23439e",
+          ".ai/scripts/completion.py": "d885987ca9612d9239ca8eb79d565cc928decd7df2040f6aa3bc9e9f4fc27f15",
+          ".ai/scripts/eval_outcome.py": "e63938bfeb34d5788f26e2aa0f352aa5501b592a5de8cbd768aea820920074ef",
+          ".ai/scripts/eval_process.py": "b8e3d85a2bf1db4af8958505dc6c0b1596b085072ae16722527228db613564c2",
+          ".ai/scripts/eval_results.py": "8668b466179a8333cf67b53d973f7bdcccc2202a267f8a1980c8900d02d36b92",
+          ".ai/scripts/install.py": "8196e023d82c164e82549996c857750565c1e92b5efec3bf7282297c39d221d2",
+          ".ai/scripts/learning.py": "e748c6e00157dd3613370b907fe0e15775c772051008a10c1ba223d2caa0e256",
+          ".ai/scripts/ledger.py": "f9f409cc1e791f00ca0de5825b1ed565d80b3f6eaab96bab59111c7d25fa4944",
+          ".ai/scripts/lifecycle.py": "7529944d1488c0e239f62abbd32feeca3e837e18e004d52ec1f96b1e0bbf7c2a",
+          ".ai/scripts/lifecycle_eval.py": "40851f38cb83b53863b8adb4e37dfbf76a392e14e75a870859ce93594a3f27b2",
+          ".ai/scripts/okf.py": "3244581bff07d8a7c8086f72b51fba6664a4a30a6422a6b35965440430ce4819",
+          ".ai/scripts/pr_sync.py": "a5a12d0c588fdcac1fa9b958b59249f71be99cd651b326e82afc736ac2cc7981",
+          ".ai/scripts/project_context.py": "700783fa941f5aaee714900d22e80d2f231b1ed107e2c068181b823e489e86e1",
+          ".ai/scripts/repo.py": "04df995a722b8f897264175ea87b3762d8c0571c2d53057b2a058dc4f5feede5",
+          ".ai/scripts/review_evidence.py": "8ecdf7d70177f8d83e28fbeec66aff666db68e9a7d40548ebcb8d191fbc1fe58",
+          ".ai/scripts/review_guard.py": "09987e1581f5524629d20046fba0c3601a9224498c5562a26f5e100dd2063dfa",
+          ".ai/scripts/review_native.py": "0cf7634c1acdbd95a96c81a498989fe1659e4870f13d7c293be2247e7ce63773",
+          ".ai/scripts/run_tests.py": "80ff942bf39066df7609c38962bbfd0f5429d750a450af99fb1bd02a86bb4217",
+          ".ai/scripts/scan.py": "4c1bd7162e4141275bff7cc60ff7134f25f4c630a28cbd04226358d260fa0253",
+          ".ai/scripts/scratch.py": "a5f6349179d9fae06f81b74d0bd07a5326f131688c82cb4643661af42c63b74c",
+          ".ai/scripts/shell_guard.py": "6cb2f790830eb8b3904bb760d22e7a57e08d7bdef5eaa3a5df3f5b12ab339133",
+          ".ai/scripts/tests/disk_tmp.py": "bdb1bba9136c63ad4e243d86e2388a783b6f520de96c5f5c7759284932eadf18",
+          ".ai/scripts/tests/test_assurance.py": "625cb6a026d98f302ff58aea1eea75af6ccb0e27def76bc6c52c48c6e732c2ee",
+          ".ai/scripts/tests/test_assurance_attested.py": "a13fb28a63362e8a864e8e6578f04d93567848407ce6bf1081d2d3c01122e5d1",
+          ".ai/scripts/tests/test_assurance_inputs.py": "f5493ff420a8daf28dd4c329cc044cab872b8d9856c8067796c897336a5cb09f",
+          ".ai/scripts/tests/test_assurance_ordering.py": "153666168f8ec8ec1503753d34d181c59bc99c2375e86a82c2ad4e4476803250",
+          ".ai/scripts/tests/test_lifecycle_conformance.py": "01865fd036b703561e57b798eda013ffa4b038db1309512d6109b54951138b1b",
+          ".ai/scripts/timed_check.py": "69117027c50451ed134b523c3840ea9f27c9e8299e8969419947c6913bcdb335",
+          ".ai/scripts/validation_select.py": "fe278207aa63ea76bd674be90572351e1ac979237954687631074163c63c29d5",
+          ".ai/scripts/wait_check.py": "ec80b027714a52a3afcd4d81fa501b37fb36affed718c49876965dcabc4a12b1"
+        },
+        "roster": {
+          "N01": [
+            "test_assurance.ObligationSyntaxTests.test_valid_and_malformed_obligations"
+          ],
+          "N02": [
+            "test_assurance.CompatibilityTests.test_obligation_free_and_prose_capabilities_stay_green",
+            "test_assurance.CompatibilityTests.test_obligation_lines_keep_validate_clean",
+            "test_assurance.CompatibilityTests.test_repository_without_bundle_reports_nothing"
+          ],
+          "N03": [
+            "test_assurance.AssureRunTests.test_run_records_req_entry_with_declared_inputs",
+            "test_assurance.AssureRunTests.test_run_refuses_inside_lifecycle_run",
+            "test_assurance.AssureRunTests.test_run_refuses_unknown_id",
+            "test_assurance.AssureRunTests.test_run_refuses_without_active_task"
+          ],
+          "N04": [
+            "test_assurance.StatusTests.test_changed_command_is_unverified",
+            "test_assurance.StatusTests.test_deleted_input_is_stale",
+            "test_assurance.StatusTests.test_evidence_from_earlier_committed_record",
+            "test_assurance.StatusTests.test_fresh_evidence_is_verified",
+            "test_assurance.StatusTests.test_input_edit_is_stale_and_names_file",
+            "test_assurance.StatusTests.test_newer_failure_wins",
+            "test_assurance.StatusTests.test_unrelated_edit_stays_verified"
+          ],
+          "N05": [
+            "test_assurance.RuntimeTests.test_changed_executable_is_stale"
+          ],
+          "N06": [
+            "test_assurance.IntegrityTests.test_invalid_and_output_bearing_records_contribute_nothing",
+            "test_assurance.IntegrityTests.test_schema_valid_hand_written_record_is_not_detected"
+          ],
+          "N07": [
+            "test_assurance.UnscopedTests.test_any_commit_makes_it_stale",
+            "test_assurance.UnscopedTests.test_identical_tree_is_verified",
+            "test_assurance.UnscopedTests.test_uncommitted_source_edit_makes_it_stale"
+          ],
+          "N08": [
+            "test_assurance.ChangedTests.test_bad_base_is_refused",
+            "test_assurance.ChangedTests.test_matched_unmatched_and_unscoped"
+          ],
+          "N09": [
+            "test_assurance.ReportFormatTests.test_basis_for_manual_and_missing_evidence",
+            "test_assurance.ReportFormatTests.test_text_and_json_fields_without_output"
+          ],
+          "N10": [
+            "test_assurance.ExitCodeTests.test_exit_codes_and_read_only_report",
+            "test_assurance.ExitCodeTests.test_invalid_fails",
+            "test_assurance.ExitCodeTests.test_run_with_report_flags_is_refused",
+            "test_assurance.ExitCodeTests.test_strict_counts_undeclared"
+          ],
+          "N11": [
+            "test_lifecycle_conformance.Assurance.test_assurance_documented"
+          ]
+        },
+        "status": "M .ai/lifecycle.md\n M .ai/scripts/assurance.py\n M .ai/scripts/assurance_measure.py\n M .ai/scripts/lifecycle.py\n M .ai/scripts/tests/test_assurance_attested.py\n?? .ai/scripts/tests/test_assurance_ordering.py"
+      },
+      "id": "N07",
+      "new": "return True, f\"{name} declared no --inputs and the working tree changed since it ran (declare --inputs to reuse across edits)\"",
+      "old": "return False, f\"{name} declared no --inputs and the working tree changed since it ran (declare --inputs to reuse across edits)\"",
+      "path": ".ai/scripts/ledger.py",
+      "restored": true
+    }
+  ],
+  "traceback": "Traceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/validate-closeout-c1.py\", line 482, in campaign\n    require(report['outcome'] == 'MECHANICAL_PASS', report.get('error', 'campaign failed'))\n    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/validate-closeout-c1.py\", line 38, in require\n    raise ProofError(message)\nProofError: ProofError: wrong changed selection\n"
+}

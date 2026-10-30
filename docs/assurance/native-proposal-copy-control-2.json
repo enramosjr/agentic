@@ -1,0 +1,73 @@
+{
+  "artifact": {
+    "bundle": "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-fsfxnn1r",
+    "sha256": "617ce1486a3ad0e3fae4d729e49dde0248d559a90227745e6b7451f48a0af882",
+    "files": [
+      "docs/assurance/native-launch-2-review-enforcement.py",
+      "docs/assurance/run-native-2-review-enforcement.py",
+      "docs/assurance/test-native-preparation-2-review-enforcement.py"
+    ]
+  },
+  "command": [
+    "/usr/bin/python3",
+    "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/artifacts.py",
+    "run",
+    "--bundle",
+    "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-fsfxnn1r",
+    "--sha256",
+    "617ce1486a3ad0e3fae4d729e49dde0248d559a90227745e6b7451f48a0af882",
+    "--timeout",
+    "30",
+    "--",
+    "/usr/bin/python3",
+    "{artifact:docs/assurance/test-native-preparation-2-review-enforcement.py}",
+    "TrustPolicyTests.test_overlay_preserves_existing_state_without_editing_discovery"
+  ],
+  "confirmed": true,
+  "exit": 1,
+  "output": "F\n======================================================================\nFAIL: test_overlay_preserves_existing_state_without_editing_discovery (__main__.TrustPolicyTests.test_overlay_preserves_existing_state_without_editing_discovery)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-fsfxnn1r/docs/assurance/test-native-preparation-2-review-enforcement.py\", line 64, in test_overlay_preserves_existing_state_without_editing_discovery\n    self.assertEqual(self.preflight, original)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: {'_ho[519 chars]old'}, 'fixture:session_start:0:0': {'trusted_[80 chars]}}}}} != {'_ho[519 chars]old'}}}}}\nDiff is 1224 characters long. Set self.maxDiff to None to see it.\n\n----------------------------------------------------------------------\nRan 1 test in 0.001s\n\nFAILED (failures=1)\ntiming: {\"elapsed_seconds\": 0.114, \"exit_code\": 1, \"finished_at\": \"2026-10-28T20:34:03.486664+00:00\", \"label\": \"artifact-acceptance\", \"outcome\": \"FAIL\", \"started_at\": \"2026-10-28T20:34:03.373029+00:00\"}\n",
+  "killed": true,
+  "baseline_reused": {
+    "bundle": "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-fxynjk8t",
+    "sha256": "29e49f1e931c0971182d783cc3ddcb3a5448390c8accb2aa13732b32ae5bfa7a",
+    "files": [
+      "docs/assurance/native-launch-2-review-enforcement.py",
+      "docs/assurance/run-native-2-review-enforcement.py",
+      "docs/assurance/test-native-preparation-2-review-enforcement.py"
+    ]
+  },
+  "strict_trust_control_reused": {
+    "name": "trusted-runtime-check-omitted",
+    "confirmed": true,
+    "artifact": {
+      "bundle": "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-i01qg_8k",
+      "sha256": "b03b7956b40a8e8320829b2f8f96cf5225ea87d9c8c7d6f94bba4371eaa841b9",
+      "files": [
+        "docs/assurance/native-launch-2-review-enforcement.py",
+        "docs/assurance/run-native-2-review-enforcement.py",
+        "docs/assurance/test-native-preparation-2-review-enforcement.py"
+      ]
+    },
+    "killed": true,
+    "command": [
+      "/usr/bin/python3",
+      "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/artifacts.py",
+      "run",
+      "--bundle",
+      "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-i01qg_8k",
+      "--sha256",
+      "b03b7956b40a8e8320829b2f8f96cf5225ea87d9c8c7d6f94bba4371eaa841b9",
+      "--timeout",
+      "30",
+      "--",
+      "/usr/bin/python3",
+      "{artifact:docs/assurance/test-native-preparation-2-review-enforcement.py}",
+      "TrustPolicyTests.test_trust_requires_exact_native_definitions_and_actual_trusted_reply"
+    ],
+    "exit": 1,
+    "output": "F\n======================================================================\nFAIL: test_trust_requires_exact_native_definitions_and_actual_trusted_reply (__main__.TrustPolicyTests.test_trust_requires_exact_native_definitions_and_actual_trusted_reply)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-i01qg_8k/docs/assurance/test-native-preparation-2-review-enforcement.py\", line 40, in test_trust_requires_exact_native_definitions_and_actual_trusted_reply\n    with self.assertRaisesRegex(ValueError, 'trust unavailable'):\n         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: ValueError not raised\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (failures=1)\ntiming: {\"elapsed_seconds\": 0.114, \"exit_code\": 1, \"finished_at\": \"2026-10-28T20:33:02.536593+00:00\", \"label\": \"artifact-acceptance\", \"outcome\": \"FAIL\", \"started_at\": \"2026-10-28T20:33:02.423029+00:00\"}\n"
+  },
+  "prior_redundant_definition_guard_control": "retained not killed; other completeness checks still refuse",
+  "native_processes_launched": 0,
+  "model_calls": 0
+}

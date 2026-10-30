@@ -1,0 +1,762 @@
+{
+  "source_tree": "a9e58f56be695f860d87a470fdf18b038e698c18a5982703bab939b088e7f409",
+  "command": [
+    "python3",
+    ".ai/scripts/lifecycle.py",
+    "run",
+    "assurance-2-real-agent",
+    "--timeout",
+    "670",
+    "--",
+    "python3",
+    "docs/assurance/run-native-2-review-enforcement.py",
+    "--authorized-allocation-and-scoped-trust"
+  ],
+  "executions": 1,
+  "exit": 1,
+  "namespace": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v5",
+  "limits": {
+    "agent_seconds": 600,
+    "campaign_wall_seconds": 660,
+    "per_cell_seconds": 300
+  },
+  "agents": {
+    "claude": {
+      "results": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v5/claude-results.json",
+      "totals": {
+        "PASS": 1,
+        "FAIL": 0,
+        "ERROR": 0,
+        "NOT_RUN": 0,
+        "RUNNING": 0,
+        "started": 1,
+        "pass_rate": 1.0,
+        "complete": true
+      },
+      "qualification": {
+        "qualified": true,
+        "reasons": []
+      },
+      "budget": {
+        "max_agent_seconds": 300.0,
+        "max_wall_seconds": 330.0,
+        "timeout": 300.0,
+        "start_epoch": 1793225169.6502156,
+        "deadline_epoch": 1793225499.6502156,
+        "charged_seconds": 91.12810549297137,
+        "reserved_seconds": 0
+      },
+      "attempts": [
+        {
+          "attempt_id": "df2e94f296c44ac0bf3eec182458cdc5",
+          "status": "PASS",
+          "phase": "complete",
+          "elapsed_seconds": 91.8917657790007,
+          "charged_seconds": 91.12810549297137,
+          "reserved_seconds": 300.0,
+          "exit_code": 0,
+          "reasons": []
+        }
+      ],
+      "observed_model": "claude-sonnet-5-5",
+      "event_counts": {
+        "SessionStart": 1,
+        "PreToolUse": 33,
+        "PostToolUse": 32,
+        "SubagentStart": 1,
+        "SubagentStop": 1,
+        "Stop": 1
+      },
+      "native_sessions": [
+        "bb17d956-bfb8-4eec-b0d8-b8f57d1a5c97"
+      ],
+      "preflight": {
+        "separate_preflight_file": false
+      },
+      "final_assistant_message": null,
+      "native_usage": null,
+      "lifecycle_stages": [
+        "intent",
+        "plan",
+        "review",
+        "verify"
+      ],
+      "native_registered_sessions": {
+        "claude:bb17d956-bfb8-4eec-b0d8-b8f57d1a5c97": {
+          "adapter": "claude",
+          "configuration": "c6039209c37f687c09a61232f12a49bbabfe7bf60b4d8519f3213e57798c77d1",
+          "root": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v5/git-metadata/okf-scratch/eval-attempt-mrg36_n0/repo",
+          "runtime": {
+            "birth": "42919658",
+            "pid": 505849
+          },
+          "session": "bb17d956-bfb8-4eec-b0d8-b8f57d1a5c97"
+        }
+      },
+      "writers_at_retention": {},
+      "interval_phase": "completed",
+      "journal_request": {
+        "adapter": "claude",
+        "pending_sha256": "427bf90fc1f638b6e3df4e0e8ee412f4ce0ffd155fceb6721f5d5772ebbbc27e",
+        "phase": "awaiting-native-review",
+        "report": "knowledge/history/reviews/native-review.md",
+        "session": "bb17d956-bfb8-4eec-b0d8-b8f57d1a5c97",
+        "task": "20261028T220626Z-master"
+      },
+      "mechanical_binding": {
+        "native_review": {
+          "adapter": "claude",
+          "capture_sha256": "1aa41357d4cded6427398a1b931fdf1da5212a1c87256de7afbcc9aab69d2224",
+          "child": "a9593c0b452281b45",
+          "completion_sha256": "a655c6aa46e7f61faa8aabc74d9f2ff182ba8423d5a15282486ef7e22f7fc1b9",
+          "id": "51c8a4bb530a420994ed673891829f9b",
+          "report_sha256": "75528311c206c6cd24c7f18579173c0d56516ba40a77b659aee2c7600f2f3c6b",
+          "session": "bb17d956-bfb8-4eec-b0d8-b8f57d1a5c97"
+        },
+        "verify": {
+          "at": "2026-10-28T22:07:34Z",
+          "level": "L2",
+          "note": "converge:GREET-R2 exit=0 tree=8210cc3; converge:GREET-R1 exit=0 tree=8210cc3; unit-greeting exit=0 tree=8210cc3; okf-records exit=0 tree=8210cc3"
+        },
+        "saved_body_sha256": "75528311c206c6cd24c7f18579173c0d56516ba40a77b659aee2c7600f2f3c6b",
+        "captured_body_sha256": "75528311c206c6cd24c7f18579173c0d56516ba40a77b659aee2c7600f2f3c6b",
+        "expected_body_sha256": "75528311c206c6cd24c7f18579173c0d56516ba40a77b659aee2c7600f2f3c6b",
+        "interval_phase": "completed",
+        "interval_pins": {
+          "artifacts": {
+            "intent": {
+              "approved_by": "human:eval",
+              "at": "2026-10-28T22:06:42Z",
+              "level": "L2",
+              "ref": "knowledge/specifications/named-greeting.md",
+              "sha256": "6ff7afb7abd1a11e4b12f2f859966b80892b025fb59cb83ed8a7911b00f9de43"
+            },
+            "plan": {
+              "at": "2026-10-28T22:06:42Z",
+              "level": "L2",
+              "ref": "knowledge/history/named-greeting-plan.md",
+              "sha256": "f61b5ce7670bc914dd3a2fe5e4cdd97f96fbd5ad48ba389bd8f793c111a9a415"
+            }
+          },
+          "converge": {
+            "at": "2026-10-28T22:07:02Z",
+            "results": [
+              {
+                "cmd": "python3 -m unittest test_greeting",
+                "exit": 0,
+                "id": "GREET-R2",
+                "status": "PASS"
+              },
+              {
+                "cmd": "python3 -m unittest test_greeting",
+                "exit": 0,
+                "id": "GREET-R1",
+                "status": "PASS"
+              }
+            ],
+            "review_execution": "d5deccdfe6ef4e81976f72c6bef0ebf5",
+            "spec": "knowledge/specifications/named-greeting.md",
+            "spec_sha256": "6ff7afb7abd1a11e4b12f2f859966b80892b025fb59cb83ed8a7911b00f9de43",
+            "tree": "8210cc36405bc1a495bad895d1c81e7e8f90da2f58d110aa842d45c9ba7133ff"
+          },
+          "native_session": {
+            "adapter": "claude",
+            "configuration": "c6039209c37f687c09a61232f12a49bbabfe7bf60b4d8519f3213e57798c77d1",
+            "root": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v5/git-metadata/okf-scratch/eval-attempt-mrg36_n0/repo",
+            "runtime": {
+              "birth": "42919658",
+              "pid": 505849
+            },
+            "session": "bb17d956-bfb8-4eec-b0d8-b8f57d1a5c97"
+          },
+          "redgreen": [
+            {
+              "cmd": "python3 -m unittest test_greeting",
+              "green": {
+                "at": "2026-10-28T22:06:45Z",
+                "exit": 0,
+                "work": "26d623dc1cfb2abe8c1ec0100749e92f6ffd5599"
+              },
+              "red": {
+                "at": "2026-10-28T22:06:42Z",
+                "exit": 1,
+                "tail": "  File \"/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v5/git-metadata/okf-scratch/eval-attempt-mrg36_n0/repo/test_greeting.py\", line 6, in test_name\n    self.assertEqual(greet('Ada'), 'Hello, Ada')\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'hello' != 'Hello, Ada'\n- hello\n+ Hello, Ada\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (failures=1)",
+                "work": "93b0fa8ff55063c14650063dff02e704b3e7aa6a"
+              }
+            }
+          ],
+          "report_executable": false,
+          "report_metadata": "---\ntype: Review\ntitle: Native review\ndescription: \"Pending native independent review; no approval yet.\"\ntags: []\nstatus: draft\nevidence: project-documentation\ngenerated: { by: agent/unknown, at: 2026-10-28T22:06:51Z }\n---",
+          "source": {
+            ".agents/skills": {
+              "kind": "symlink",
+              "target": "../.claude/skills"
+            },
+            ".ai/README.md": {
+              "executable": true,
+              "kind": "file",
+              "sha256": "035a10b039853ee373a36da88df94c24eadd85d8ddb61bf6be08cf0dad9d682b"
+            },
+            ".ai/VERSION": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "e9dd8507f4bf0c6f42458e41aea833ad0bd3f6127272335eee9bf4d58541ed67"
+            },
+            ".ai/agents-reference.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "49b52229049d29b0d4a49391e9fc4b7ad777557f295563f685741531ce84b1a5"
+            },
+            ".ai/agents/analyst.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "089bf583a7869eb1d52132db5f74f12c6795c93bc5825a3fc0505d31d0d846d4"
+            },
+            ".ai/agents/implementer.md": {
+              "executable": true,
+              "kind": "file",
+              "sha256": "6d159942b137d34e697856ff23a07a90a1ba5aedae3fb49400e8da72f0c43002"
+            },
+            ".ai/agents/orchestrator.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "ad8e9677106f91f14e3e173f4934f64b62cace7e12e7b15e88fcf454985f7b02"
+            },
+            ".ai/agents/planner.md": {
+              "executable": true,
+              "kind": "file",
+              "sha256": "70ecd652df485a50161695f98a3f516bc50df9b861b422343cdbf02d587ef31d"
+            },
+            ".ai/agents/reviewer.md": {
+              "executable": true,
+              "kind": "file",
+              "sha256": "ffd9a9361aa4710ee5398761ab3300e13cbd326f1e1568223045eab1eee19b8a"
+            },
+            ".ai/autonomous-execution.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "5c47aabc368468d848cb85c15e423bf97ef088718c580f8c5c7c4c78b619e504"
+            },
+            ".ai/docs/install-and-upgrade.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "c6653f8cbd153ca07445265f32589b8a97da46febf51e5dddc3738bd715cb897"
+            },
+            ".ai/docs/learning-loop-playbook.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "ea22a985f5e7dd3e694230f42a5594fcb1957124794986ee4739bdda4daf0f21"
+            },
+            ".ai/docs/learning-loop.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "ab3fe267f79374b7af4577aac5b8ddec00b1f0ce4cded176c1caea637b04eda8"
+            },
+            ".ai/docs/lifecycle.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "782c7349577259a37bffd63c27e58ce4b0141ceb3fb74d140f7cdd0d89ca182c"
+            },
+            ".ai/lifecycle.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "6968e687a5e280129b6dde3578738678d954ce88f1a3cedc20a52ffa4f66cc90"
+            },
+            ".ai/personas/csharp-principal-engineer.md": {
+              "executable": true,
+              "kind": "file",
+              "sha256": "ced2bbeee511b0ac818ab0e5fb882c874a754aeac4b605272b5f2ec3837272e4"
+            },
+            ".ai/personas/dart-flutter-principal-engineer.md": {
+              "executable": true,
+              "kind": "file",
+              "sha256": "1608349200c47663ab708ba4da67ef676941a28db6f37ac32c6d76400a6cd9e7"
+            },
+            ".ai/personas/go-principal-engineer.md": {
+              "executable": true,
+              "kind": "file",
+              "sha256": "bbe07992692d1adaa0ea5aaab5dfacace52739f42c04b1b8642b5558e2ca9c8d"
+            },
+            ".ai/personas/javascript-typescript-principal-engineer.md": {
+              "executable": true,
+              "kind": "file",
+              "sha256": "cef29caaf8af70aac1184d37974d891413682ea18fe5d0422e4edf7c16f31764"
+            },
+            ".ai/personas/python-principal-engineer.md": {
+              "executable": true,
+              "kind": "file",
+              "sha256": "8c271a37fc6e065edde0f6add386a3f1ed4586885b0ebe927b0e0cbae328bc29"
+            },
+            ".ai/personas/rust-principal-engineer.md": {
+              "executable": true,
+              "kind": "file",
+              "sha256": "60f58b00562501db6b814d4c39cb00210b537df8ae47a6b2201fe8b5870b486e"
+            },
+            ".ai/personas/swift-swiftui-principal-engineer.md": {
+              "executable": true,
+              "kind": "file",
+              "sha256": "7768706936f2da71d17d2f5ee86e3f817071461b32f1e5edcff716eda664a66d"
+            },
+            ".ai/scripts/artifacts.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "3b8eb6401da21debdc4b33141542572e3f570750dc1a8518f99c8a1da138ab0f"
+            },
+            ".ai/scripts/assurance.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "ce815b7a4f9c65779ccbab7fbd0db244432011b1140aeedbec21f9559ad86579"
+            },
+            ".ai/scripts/assurance_demo.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "464d3fbb14e90109ed4e689bcdc726ae88b62562517c380f6f129de94faf3529"
+            },
+            ".ai/scripts/assurance_measure.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "3399165016c9b05f5e58f7b952f0bd2095b42c3af2a6ad562a17ccfa3b9c9f33"
+            },
+            ".ai/scripts/autonomy_driver.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "fd614e443a0df88ae6a4852d0a80dee8154c8dcfbaea8d421be194541eb578b6"
+            },
+            ".ai/scripts/autonomy_hook.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "8bed1b962710918b5e382ed28f075042a82a735420bf8adb835aaa6499dbf7a4"
+            },
+            ".ai/scripts/autonomy_progress.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "1c28dcfff754f1b278177d688b931f407db9ca5b555cc96aa0129f08a099539b"
+            },
+            ".ai/scripts/autonomy_validation.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "3906fe01deb00e3d4bec4d562c0dadf8efce3edef2c2ecca609b5ea1473c8e02"
+            },
+            ".ai/scripts/brownfield.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "0b227e2ca782477788dcc81929930b6357d0cbd0eaeca7cb2d6a44d61d23439e"
+            },
+            ".ai/scripts/completion.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "d885987ca9612d9239ca8eb79d565cc928decd7df2040f6aa3bc9e9f4fc27f15"
+            },
+            ".ai/scripts/eval_outcome.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "e63938bfeb34d5788f26e2aa0f352aa5501b592a5de8cbd768aea820920074ef"
+            },
+            ".ai/scripts/eval_process.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "b8e3d85a2bf1db4af8958505dc6c0b1596b085072ae16722527228db613564c2"
+            },
+            ".ai/scripts/eval_results.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "8668b466179a8333cf67b53d973f7bdcccc2202a267f8a1980c8900d02d36b92"
+            },
+            ".ai/scripts/install.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "8196e023d82c164e82549996c857750565c1e92b5efec3bf7282297c39d221d2"
+            },
+            ".ai/scripts/learning.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "e748c6e00157dd3613370b907fe0e15775c772051008a10c1ba223d2caa0e256"
+            },
+            ".ai/scripts/ledger.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "f9f409cc1e791f00ca0de5825b1ed565d80b3f6eaab96bab59111c7d25fa4944"
+            },
+            ".ai/scripts/lifecycle.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "dcf47ce3ddd166cb9f3ca420bba1a68905a6345d2468de8bd603cbbf2992f872"
+            },
+            ".ai/scripts/lifecycle_eval.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "40851f38cb83b53863b8adb4e37dfbf76a392e14e75a870859ce93594a3f27b2"
+            },
+            ".ai/scripts/okf.py": {
+              "executable": true,
+              "kind": "file",
+              "sha256": "3244581bff07d8a7c8086f72b51fba6664a4a30a6422a6b35965440430ce4819"
+            },
+            ".ai/scripts/pr_sync.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "a5a12d0c588fdcac1fa9b958b59249f71be99cd651b326e82afc736ac2cc7981"
+            },
+            ".ai/scripts/project_context.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "700783fa941f5aaee714900d22e80d2f231b1ed107e2c068181b823e489e86e1"
+            },
+            ".ai/scripts/repo.py": {
+              "executable": true,
+              "kind": "file",
+              "sha256": "04df995a722b8f897264175ea87b3762d8c0571c2d53057b2a058dc4f5feede5"
+            },
+            ".ai/scripts/review_evidence.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "8ecdf7d70177f8d83e28fbeec66aff666db68e9a7d40548ebcb8d191fbc1fe58"
+            },
+            ".ai/scripts/review_guard.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "8e700305d7645b5218df6861740cfdb586fc422789cfb474500c7ae7ab2d83bd"
+            },
+            ".ai/scripts/review_native.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "e834885036864ddb2504eb52d3641e72245ef89f29f08256b081990beb355a08"
+            },
+            ".ai/scripts/run_tests.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "80ff942bf39066df7609c38962bbfd0f5429d750a450af99fb1bd02a86bb4217"
+            },
+            ".ai/scripts/scan.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "4c1bd7162e4141275bff7cc60ff7134f25f4c630a28cbd04226358d260fa0253"
+            },
+            ".ai/scripts/scratch.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "a5f6349179d9fae06f81b74d0bd07a5326f131688c82cb4643661af42c63b74c"
+            },
+            ".ai/scripts/shell_guard.py": {
+              "executable": true,
+              "kind": "file",
+              "sha256": "6cb2f790830eb8b3904bb760d22e7a57e08d7bdef5eaa3a5df3f5b12ab339133"
+            },
+            ".ai/scripts/timed_check.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "69117027c50451ed134b523c3840ea9f27c9e8299e8969419947c6913bcdb335"
+            },
+            ".ai/scripts/validation_select.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "fe278207aa63ea76bd674be90572351e1ac979237954687631074163c63c29d5"
+            },
+            ".ai/scripts/wait_check.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "ec80b027714a52a3afcd4d81fa501b37fb36affed718c49876965dcabc4a12b1"
+            },
+            ".ai/validation-policy.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "7c52be2c2b5e7320f4b17e18514862e2ae6d601272c53c96a38ad5167a29a401"
+            },
+            ".claude/agents/analyst.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "0928c800c034754f7bd56398b2162181e5024b53331bd8e0209daba84b6984ae"
+            },
+            ".claude/agents/implementer.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "543f9b143e8f688eb53b7df0b885b93a8946cf00ae13153b8c7de6a5ef1aebfa"
+            },
+            ".claude/agents/planner.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "51ac38bba96d264cc30b1bc9fbba1c16b8fe8a0d6738aa8fd5c84487c95b704f"
+            },
+            ".claude/agents/reviewer.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "1195bc0e7f28eb3721c0194cc0605e2d303781e702ab2f5811141839db84c5c7"
+            },
+            ".claude/settings.json": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "c6039209c37f687c09a61232f12a49bbabfe7bf60b4d8519f3213e57798c77d1"
+            },
+            ".claude/skills/debug/SKILL.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "df59357fdf9e06ad22611750a99ef36824cf74136257c73d1a0c3ea5025fcbed"
+            },
+            ".claude/skills/implement/SKILL.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "9d6aef4d110986e619f9bfc948d7c18d01a3041ae24a2cd32d73c65d68b23c9c"
+            },
+            ".claude/skills/onboard/SKILL.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "7f705506c4d25bef1f63783e29398df78850305b5b041e823179045b743d681f"
+            },
+            ".claude/skills/plan/SKILL.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "797b2b41f1fb5e4d52c73a9ca33a15aedc463bbce49a928c495715a05ee01ab9"
+            },
+            ".claude/skills/review/SKILL.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "e801b06e37f4f13aea9e8afb3a2ec410e92ecbe68a1b2c7040bde535c4f0adbc"
+            },
+            ".claude/skills/ship/SKILL.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "735bacffa9acbb2b95c2e2dcbdb33b785aee1f8db8999d9bcfead93db0138975"
+            },
+            ".claude/skills/spec/SKILL.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "1535cfd43718c8f197539428497d3fa5b304d1c5a3caf219d0c4d071100ea01f"
+            },
+            ".codex/agents/analyst.toml": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "c10cdc3fbf9655d2d45b5b88315c4d75aeb79bf454a3e8e8aea7141e0c233081"
+            },
+            ".codex/agents/implementer.toml": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "c9298c590ab83f9552adee5bec6c49d4eadec2e7fea5fd47635fab7527f869be"
+            },
+            ".codex/agents/planner.toml": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "370eb39591945f957481911e341d163f75d8de57a6aff709efa2c5368aa87ca5"
+            },
+            ".codex/agents/reviewer.toml": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "10891b9d9c725de742528bda3ac84d1c9d4c1c73b5e3c38aba2c8181543d7fbd"
+            },
+            ".codex/hooks.json": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "6500970a9566e3308278971e1167e046b7c8663b0b40b8f33b0169a3a53d424c"
+            },
+            ".cursor/hooks.json": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "27b2f5b0e90435d0fd23a59b864bb1dbe7ce4bd497e3957c97df592c93eea806"
+            },
+            "AGENTS.md": {
+              "executable": true,
+              "kind": "file",
+              "sha256": "bcb2000926f151fe6344e4f10e486ac224803e8dbc60bc3975d0a17e4254e55b"
+            },
+            "CLAUDE.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "5cc0519814c20a85b650081248e3a2dfb86a301d8d067e97368d78aab59d4527"
+            },
+            "THIRD_PARTY_NOTICES.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "3a84c49d378f701568ef315e1e18fd081c2c221899ebcebeff31da0c4dc01c92"
+            },
+            "knowledge/capabilities/greeting.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "3e6777953d19c9c12b2043fe12909404f09a9ed866daff4abdf84214eb6585d3"
+            },
+            "knowledge/capabilities/index.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "6eebe25ba0f57eb65d834330980329dd5e05f476a19ab0c78f0c508c7a3a8c22"
+            },
+            "knowledge/concepts/index.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "f686c7286b202b561420607117b702a3e437654cbaa6c7214921d9f8f5a7d5a8"
+            },
+            "knowledge/history/index.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "441cc6af7e9e5d3852c701cc52236df468d8e4739660a09f7ca944e358378e17"
+            },
+            "knowledge/history/lifecycle/index.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "d2668ef1d5b1c867a22ad50b6b9c05938ca6d8e9f9cbbb9b62607d836710b479"
+            },
+            "knowledge/history/named-greeting-plan.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "3eee512a4877d6abddf635276be073e12d2c3abc365ae7af1f28b5b6dd98103f"
+            },
+            "knowledge/history/reviews/index.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "49347bd0cfbbb0952896be51fb47cda56db4586036f3ecdf0d1e811848e94dea"
+            },
+            "knowledge/index.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "395f4a60a97b7294e7f666fbf97a3f823e701a6de46fd03cf0805092da315c4d"
+            },
+            "knowledge/log.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "06db4343afc14df65fd791c01e412789e466c32ba51ec83a40d52861eb859fe6"
+            },
+            "knowledge/playbooks/index.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "a3270972821dd19154e11c96896675d30dc6e4ee8a03631bf093e6afc387d9a6"
+            },
+            "knowledge/project/index.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "34ed0b443e65f1edf65b45929eda6836fcf814fbb56c177ac2e5aa7a3c24db07"
+            },
+            "knowledge/specifications/index.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "7ac37dc1c1510953871bf0cd61f437de4b260d33a776632488c4fa81ea1e72fa"
+            },
+            "knowledge/specifications/named-greeting.md": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "21351972048529ad8ee796176e593035cf2bd70cde5b75a87f3919abe98206d7"
+            },
+            "test_greeting.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "04e9ec383746ddba6f9fc5e0cb0f0ef9a89253785bfdafea1ce8d50812d21275"
+            },
+            "util.py": {
+              "executable": false,
+              "kind": "file",
+              "sha256": "b5396d83626f1527aed1524c8cae76c238127c411423c44f90575ca158cfefc1"
+            }
+          },
+          "task_contract": {
+            "kind": "feature",
+            "task": "20261028T220626Z-master",
+            "tier": "L2",
+            "user_set": true
+          }
+        },
+        "qualified_final_state": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v5/retained/claude/qualified-final-state.json",
+        "body_hashes_match": true
+      },
+      "raw_stream": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v5/retained/claude/live-capture/native-stream.jsonl",
+      "raw_events": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v5/retained/claude/live-capture/events.jsonl",
+      "retained_state": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v5/retained/claude/mechanical-capture"
+    },
+    "codex": {
+      "results": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v5/codex-results.json",
+      "totals": {
+        "PASS": 0,
+        "FAIL": 0,
+        "ERROR": 1,
+        "NOT_RUN": 0,
+        "RUNNING": 0,
+        "started": 1,
+        "pass_rate": 0.0,
+        "complete": true
+      },
+      "qualification": {
+        "qualified": false,
+        "reasons": [
+          "unobserved or substituted model identity",
+          "execution or measurement errors"
+        ]
+      },
+      "budget": {
+        "max_agent_seconds": 300.0,
+        "max_wall_seconds": 330.0,
+        "timeout": 300.0,
+        "start_epoch": 1793225261.7653854,
+        "deadline_epoch": 1793225591.7653854,
+        "charged_seconds": 40.46048243303085,
+        "reserved_seconds": 0
+      },
+      "attempts": [
+        {
+          "attempt_id": "dba8c22ba6f3464e842e7077ef7d7994",
+          "status": "ERROR",
+          "phase": "agent",
+          "elapsed_seconds": 40.87811487202998,
+          "charged_seconds": 40.46048243303085,
+          "reserved_seconds": 300.0,
+          "exit_code": 2,
+          "reasons": [
+            "agent failed: command exit 2"
+          ]
+        }
+      ],
+      "observed_model": null,
+      "event_counts": {
+        "SessionStart": 1,
+        "PreToolUse": 27,
+        "PostToolUse": 26,
+        "Stop": 1
+      },
+      "native_sessions": [
+        "01a1848e-0b86-72f0-af8d-5d77f3dccafb"
+      ],
+      "preflight": {
+        "path": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v5/retained/codex/live-capture/preflight.json",
+        "exact_handlers": 15,
+        "configuration_sha256": "f05d96acc93ed2925817c41836f1e4c63504e1a19af532298e95a5a59aca564e",
+        "meaning": "Written after native trusted-handler/configuration assertions; separate from reviewer event proof."
+      },
+      "final_assistant_message": "Stopped because the lifecycle hook refused `git switch -c named-greeting`: \u201cGit metadata owner is unsupported or ambiguous; use an ordinary checkout/index.\u201d\n\nRecorded L2 intent approval as `human:eval` and created a draft plan. Implementation and review remain incomplete. `util.py` and `test_greeting.py` are unchanged. No commit, push, or PR was created.",
+      "native_usage": {
+        "input_tokens": 205808,
+        "cached_input_tokens": 173312,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 1390,
+        "reasoning_output_tokens": 69
+      },
+      "lifecycle_stages": [
+        "intent"
+      ],
+      "native_registered_sessions": {
+        "codex:01a1848e-0b86-72f0-af8d-5d77f3dccafb": {
+          "adapter": "codex",
+          "configuration": "6500970a9566e3308278971e1167e046b7c8663b0b40b8f33b0169a3a53d424c",
+          "root": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v5/git-metadata/okf-scratch/eval-attempt-pk33hhdt/repo",
+          "runtime": {
+            "birth": "42929027",
+            "pid": 508920
+          },
+          "session": "01a1848e-0b86-72f0-af8d-5d77f3dccafb"
+        }
+      },
+      "writers_at_retention": {},
+      "interval_phase": null,
+      "journal_request": null,
+      "mechanical_binding": null,
+      "raw_stream": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v5/retained/codex/live-capture/native-stream.jsonl",
+      "raw_events": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v5/retained/codex/live-capture/events.jsonl",
+      "retained_state": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v5/retained/codex/mechanical-capture"
+    }
+  },
+  "charged_agent_seconds": 131.58858792600222,
+  "retries": 0,
+  "source_edits": false,
+  "persistent_trust_changes_by_validator": false,
+  "strict_results_check": {
+    "claude": "PASS",
+    "codex": "FAIL: unqualified execution/provenance"
+  },
+  "codex_actual_blocker": "Native-stream line65: lifecycle PreToolUse refused git switch -c named-greeting: Git metadata owner is unsupported or ambiguous; use an ordinary checkout/index.",
+  "codex_launcher_stderr_limit": "Native stream retains the CLI final message, not launcher stderr. Evaluator excerpt truncates first4096bytes; launch control/output was cleaned. No exact final launcher refusal text can be quoted from retained output.",
+  "outer_log": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/mechanical-native-2-v5.log",
+  "outer_exit_file": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/mechanical-native-2-v5.log.exit"
+}

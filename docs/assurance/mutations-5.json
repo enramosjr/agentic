@@ -1,0 +1,68 @@
+{
+  "operator_sha256": "8ced1cc7564f3e45883dc33abd7562fa9f381ed926f513fc830fcfefc688e69c",
+  "source_sha256": {
+    ".ai/scripts/assurance_inputs.py": "30ae62543ea43dab44365c4e1acbf61313c99236ebbc835f3845c04fb900593c",
+    ".ai/scripts/tests/test_assurance_inputs.py": "5b0073690c86d7d9c4185aa1ff69868c956ccd250dc30c5ecd6830703b6e397b",
+    ".ai/scripts/tests/test_run_tests.py": "f96970ecb194471be69af25215daf2a12b1de6d6e3c49497199d7ea542f11171"
+  },
+  "controls": [
+    {
+      "command": [
+        "DependencyCoverageTests"
+      ],
+      "exit": 1,
+      "output": "F\n======================================================================\nFAIL: test_profile_covers_handwritten_four_file_read_oracle (__main__.DependencyCoverageTests.test_profile_covers_handwritten_four_file_read_oracle)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp413sx3bu/missing-runner/.ai/scripts/tests/test_assurance_inputs.py\", line 168, in test_profile_covers_handwritten_four_file_read_oracle\n    self.assertEqual(value['inputs'], READS)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: Lists differ: ['.ai[58 chars]_tmp.py', '.ai/scripts/scratch.py'] != ['.ai[58 chars]_tmp.py', '.ai/scripts/scratch.py', '.ai/scripts/run_tests.py']\n\nSecond list contains 1 additional elements.\nFirst extra element 3:\n'.ai/scripts/run_tests.py'\n\n  ['.ai/scripts/tests/test_run_tests.py',\n   '.ai/scripts/tests/disk_tmp.py',\n-  '.ai/scripts/scratch.py']\n?                          ^\n\n+  '.ai/scripts/scratch.py',\n?                          ^\n\n+  '.ai/scripts/run_tests.py']\n\n----------------------------------------------------------------------\nRan 1 test in 0.046s\n\nFAILED (failures=1)\n",
+      "name": "missing-runner",
+      "confirmed": true,
+      "before_sha256": "30ae62543ea43dab44365c4e1acbf61313c99236ebbc835f3845c04fb900593c",
+      "after_sha256": "a4b22561877761aaedd0f139081349f3bc317c8d78cba236ca61e432c0902c5f",
+      "killed": true
+    },
+    {
+      "command": [
+        "DependencyCoverageTests"
+      ],
+      "exit": 1,
+      "output": "F\n======================================================================\nFAIL: test_profile_covers_handwritten_four_file_read_oracle (__main__.DependencyCoverageTests.test_profile_covers_handwritten_four_file_read_oracle)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp413sx3bu/missing-helper/.ai/scripts/tests/test_assurance_inputs.py\", line 168, in test_profile_covers_handwritten_four_file_read_oracle\n    self.assertEqual(value['inputs'], READS)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: Lists differ: ['.ai[43 chars]ipts/scratch.py', '.ai/scripts/run_tests.py'] != ['.ai[43 chars]ipts/tests/disk_tmp.py', '.ai/scripts/scratch.[27 chars].py']\n\nFirst differing element 1:\n'.ai/scripts/scratch.py'\n'.ai/scripts/tests/disk_tmp.py'\n\nSecond list contains 1 additional elements.\nFirst extra element 3:\n'.ai/scripts/run_tests.py'\n\n  ['.ai/scripts/tests/test_run_tests.py',\n+  '.ai/scripts/tests/disk_tmp.py',\n   '.ai/scripts/scratch.py',\n   '.ai/scripts/run_tests.py']\n\n----------------------------------------------------------------------\nRan 1 test in 0.047s\n\nFAILED (failures=1)\n",
+      "name": "missing-helper",
+      "confirmed": true,
+      "before_sha256": "30ae62543ea43dab44365c4e1acbf61313c99236ebbc835f3845c04fb900593c",
+      "after_sha256": "7ea3b8334d9b3d557798192a70cca3dee31edf4e0c8cc2423d03b6d4308fb1b9",
+      "killed": true
+    },
+    {
+      "command": [
+        "EndToEndTests"
+      ],
+      "exit": 1,
+      "output": "FF\n======================================================================\nFAIL: test_adopter_explicit_scope_freshness_and_identity (__main__.EndToEndTests.test_adopter_explicit_scope_freshness_and_identity)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp413sx3bu/empty-discovery/.ai/scripts/tests/test_assurance_inputs.py\", line 308, in test_adopter_explicit_scope_freshness_and_identity\n    before = self.preflight()\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp413sx3bu/empty-discovery/.ai/scripts/tests/test_assurance_inputs.py\", line 113, in preflight\n    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 5 != 0 : \n----------------------------------------------------------------------\nRan 0 tests in 0.000s\n\nNO TESTS RAN\n\n\n======================================================================\nFAIL: test_framework_real_runner_reuse_and_each_input_invalidation (__main__.EndToEndTests.test_framework_real_runner_reuse_and_each_input_invalidation)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp413sx3bu/empty-discovery/.ai/scripts/tests/test_assurance_inputs.py\", line 277, in test_framework_real_runner_reuse_and_each_input_invalidation\n    before = self.preflight()\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp413sx3bu/empty-discovery/.ai/scripts/tests/test_assurance_inputs.py\", line 113, in preflight\n    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 5 != 0 : \n----------------------------------------------------------------------\nRan 0 tests in 0.000s\n\nNO TESTS RAN\n\n\n----------------------------------------------------------------------\nRan 2 tests in 0.339s\n\nFAILED (failures=2)\n",
+      "name": "empty-discovery",
+      "confirmed": true,
+      "before_sha256": "f96970ecb194471be69af25215daf2a12b1de6d6e3c49497199d7ea542f11171",
+      "after_sha256": "13a752b52f687dd2c4fba6049911245864a300ad2522c125f6aec347a0fd2db0",
+      "killed": false
+    },
+    {
+      "command": [
+        "ProfileTests"
+      ],
+      "exit": 1,
+      "output": ".FF\n======================================================================\nFAIL: test_exact_command_and_root_only (__main__.ProfileTests.test_exact_command_and_root_only) (argv=['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests', '-p', 'test_run_tests.py', '-v'])\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp413sx3bu/loose-command/.ai/scripts/tests/test_assurance_inputs.py\", line 145, in test_exact_command_and_root_only\n    self.refused(argv=argv)\n    ~~~~~~~~~~~~^^^^^^^^^^^\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp413sx3bu/loose-command/.ai/scripts/tests/test_assurance_inputs.py\", line 89, in refused\n    self.assertEqual(result.returncode, 2, result.stdout + result.stderr)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 0 != 2 : {\"schema_version\": 1, \"ok\": true, \"profile_id\": \"python-runner-test\", \"argv\": [\"python3\", \"-m\", \"unittest\", \"discover\", \"-s\", \".ai/scripts/tests\", \"-p\", \"test_run_tests.py\", \"-v\"], \"inputs\": [\".ai/scripts/tests/test_run_tests.py\", \".ai/scripts/tests/disk_tmp.py\", \".ai/scripts/scratch.py\", \".ai/scripts/run_tests.py\"], \"inputs_line\": \"  - Inputs: `.ai/scripts/tests/test_run_tests.py` `.ai/scripts/tests/disk_tmp.py` `.ai/scripts/scratch.py` `.ai/scripts/run_tests.py`\", \"lifecycle_inputs_argv\": [\"--inputs\", \".ai/scripts/tests/test_run_tests.py\", \".ai/scripts/tests/disk_tmp.py\", \".ai/scripts/scratch.py\", \".ai/scripts/run_tests.py\"], \"rationale\": {\".ai/scripts/tests/test_run_tests.py\": \"Selected test module, including its generated fixture source.\", \".ai/scripts/tests/disk_tmp.py\": \"Imported fixture temporary-directory helper.\", \".ai/scripts/scratch.py\": \"Transitive helper used to validate disk-backed temporary storage.\", \".ai/scripts/run_tests.py\": \"Subprocess script exercised by the selected test.\"}, \"limitations\": [\"Declared repository input scope; review required when command reads or dependencies change.\", \"This is not complete read discovery, approval, or VERIFIED evidence; adoption is explicit.\", \"Runtime environment, executable, temporary storage and mount state remain outside this file-scope claim.\", \"Ignored files and external mutable data are not covered; unresolved application-data reads require retaining current scope.\", \"Full-suite coverage and existing inference, evidence matching and gates remain unchanged.\"], \"review_required\": true}\n\n\n======================================================================\nFAIL: test_exact_command_and_root_only (__main__.ProfileTests.test_exact_command_and_root_only) (argv=['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests', '-p', 'test_ledger.py'])\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp413sx3bu/loose-command/.ai/scripts/tests/test_assurance_inputs.py\", line 145, in test_exact_command_and_root_only\n    self.refused(argv=argv)\n    ~~~~~~~~~~~~^^^^^^^^^^^\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp413sx3bu/loose-command/.ai/scripts/tests/test_assurance_inputs.py\", line 89, in refused\n    self.assertEqual(result.returncode, 2, result.stdout + result.stderr)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 0 != 2 : {\"schema_version\": 1, \"ok\": true, \"profile_id\": \"python-runner-test\", \"argv\": [\"python3\", \"-m\", \"unittest\", \"discover\", \"-s\", \".ai/scripts/tests\", \"-p\", \"test_ledger.py\"], \"inputs\": [\".ai/scripts/tests/test_run_tests.py\", \".ai/scripts/tests/disk_tmp.py\", \".ai/scripts/scratch.py\", \".ai/scripts/run_tests.py\"], \"inputs_line\": \"  - Inputs: `.ai/scripts/tests/test_run_tests.py` `.ai/scripts/tests/disk_tmp.py` `.ai/scripts/scratch.py` `.ai/scripts/run_tests.py`\", \"lifecycle_inputs_argv\": [\"--inputs\", \".ai/scripts/tests/test_run_tests.py\", \".ai/scripts/tests/disk_tmp.py\", \".ai/scripts/scratch.py\", \".ai/scripts/run_tests.py\"], \"rationale\": {\".ai/scripts/tests/test_run_tests.py\": \"Selected test module, including its generated fixture source.\", \".ai/scripts/tests/disk_tmp.py\": \"Imported fixture temporary-directory helper.\", \".ai/scripts/scratch.py\": \"Transitive helper used to validate disk-backed temporary storage.\", \".ai/scripts/run_tests.py\": \"Subprocess script exercised by the selected test.\"}, \"limitations\": [\"Declared repository input scope; review required when command reads or dependencies change.\", \"This is not complete read discovery, approval, or VERIFIED evidence; adoption is explicit.\", \"Runtime environment, executable, temporary storage and mount state remain outside this file-scope claim.\", \"Ignored files and external mutable data are not covered; unresolved application-data reads require retaining current scope.\", \"Full-suite coverage and existing inference, evidence matching and gates remain unchanged.\"], \"review_required\": true}\n\n\n----------------------------------------------------------------------\nRan 2 tests in 0.224s\n\nFAILED (failures=2)\n",
+      "name": "loose-command",
+      "confirmed": true,
+      "before_sha256": "30ae62543ea43dab44365c4e1acbf61313c99236ebbc835f3845c04fb900593c",
+      "after_sha256": "13ade50caea2045ad3d2528e6a5b56d00f0b11e0f811f43c90a07a0b3982dbea",
+      "killed": true
+    }
+  ],
+  "baseline": {
+    "command": [
+      "DependencyCoverageTests",
+      "ProfileTests",
+      "EndToEndTests"
+    ],
+    "exit": 0,
+    "output": ".....\n----------------------------------------------------------------------\nRan 5 tests in 2.110s\n\nOK\n"
+  },
+  "passed": false
+}

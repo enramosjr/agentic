@@ -1,0 +1,37 @@
+test_physical_witness_cannot_admit_foreign_metadata_selectors (test_review_enforcement.ReadOnlyTests.test_physical_witness_cannot_admit_foreign_metadata_selectors) ... 
+  test_physical_witness_cannot_admit_foreign_metadata_selectors (test_review_enforcement.ReadOnlyTests.test_physical_witness_cannot_admit_foreign_metadata_selectors) (command='git --git-dir=/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp05665gi8/git-metadata --work-tree=/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp05665gi8/repo switch -c foreign') ... FAIL
+  test_physical_witness_cannot_admit_foreign_metadata_selectors (test_review_enforcement.ReadOnlyTests.test_physical_witness_cannot_admit_foreign_metadata_selectors) (command='env GIT_DIR=/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp05665gi8/git-metadata GIT_WORK_TREE=/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp05665gi8/repo git switch -c foreign') ... FAIL
+  test_physical_witness_cannot_admit_foreign_metadata_selectors (test_review_enforcement.ReadOnlyTests.test_physical_witness_cannot_admit_foreign_metadata_selectors) (command='git switch -c foreign') ... FAIL
+
+======================================================================
+FAIL: test_physical_witness_cannot_admit_foreign_metadata_selectors (test_review_enforcement.ReadOnlyTests.test_physical_witness_cannot_admit_foreign_metadata_selectors) (command='git --git-dir=/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp05665gi8/git-metadata --work-tree=/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp05665gi8/repo switch -c foreign')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-targw9m1/.ai/scripts/tests/test_review_enforcement.py", line 673, in test_physical_witness_cannot_admit_foreign_metadata_selectors
+    with self.assertRaisesRegex(guard.ReviewError, 'foreign owner checked'):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ReviewError not raised
+
+======================================================================
+FAIL: test_physical_witness_cannot_admit_foreign_metadata_selectors (test_review_enforcement.ReadOnlyTests.test_physical_witness_cannot_admit_foreign_metadata_selectors) (command='env GIT_DIR=/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp05665gi8/git-metadata GIT_WORK_TREE=/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp05665gi8/repo git switch -c foreign')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-targw9m1/.ai/scripts/tests/test_review_enforcement.py", line 673, in test_physical_witness_cannot_admit_foreign_metadata_selectors
+    with self.assertRaisesRegex(guard.ReviewError, 'foreign owner checked'):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ReviewError not raised
+
+======================================================================
+FAIL: test_physical_witness_cannot_admit_foreign_metadata_selectors (test_review_enforcement.ReadOnlyTests.test_physical_witness_cannot_admit_foreign_metadata_selectors) (command='git switch -c foreign')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-targw9m1/.ai/scripts/tests/test_review_enforcement.py", line 673, in test_physical_witness_cannot_admit_foreign_metadata_selectors
+    with self.assertRaisesRegex(guard.ReviewError, 'foreign owner checked'):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ReviewError not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 0.233s
+
+FAILED (failures=3)
+timing: {"elapsed_seconds": 0.364, "exit_code": 1, "finished_at": "2026-10-28T23:35:14.867737+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T23:35:14.503642+00:00"}

@@ -1,0 +1,20 @@
+{
+  "source_tree": "a9e58f56be695f860d87a470fdf18b038e698c18a5982703bab939b088e7f409",
+  "source_head": "9efcfb7939cd6818f28caab48d3dadf4b2d69f4a",
+  "operator_artifact": {
+    "bundle": "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-3_km30s8",
+    "sha256": "0d897df0486aacb989fb7c181f14e7ee9ab9464f29af59d63cb7043e51a29163",
+    "files": [
+      "docs/assurance/native-launch-2-review-enforcement.py",
+      "docs/assurance/prepare-native-2-review-enforcement.py",
+      "docs/assurance/run-native-2-review-enforcement.py",
+      "docs/assurance/test-native-preparation-2-review-enforcement.py"
+    ]
+  },
+  "all_source_operator_binary_command_pins": "PASS",
+  "fresh_attempts": true,
+  "Claude_Codex_app_server_processes": 0,
+  "model_calls": 0,
+  "native_trust_and_capture": "UNVERIFIED",
+  "requires_new_allocation_and_scoped_trust": true
+}

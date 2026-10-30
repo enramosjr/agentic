@@ -1,0 +1,116 @@
+[
+  {
+    "scenario": "feature-l2",
+    "reviewer_transcript": "/home/enramosjr/.claude/projects/-home-enramosjr-Projects-agentic-assurance-7-docs-assurance-operator-2-report-contract-git-metadata-okf-scratch-eval-attempt-9twxzzgh-repo/a95ae633-14e8-4836-8fb0-b0f44b66dc31/subagents/agent-a140ed91b6f7b9fb7.jsonl",
+    "before_pins": {
+      "source": "605fda286282fa1c92b4a15ee0e17f7c7ce0fbfe9a5d161e5cd7de61d70cfc60",
+      "spec": "8db9b37995e53e8e78257d3f82e043cc3ab6ad6aa421efbdd27efc36847e5e28",
+      "plan": "ce6ad6d7e636e8391aad69ea97563aa7ada0da892dd95b3a88668c320c20e9b2",
+      "convergence": "4c2a58603b8635356bd286aafdacfc975f9102b2b7ede903aa0b62dde1713c6e"
+    },
+    "after_pins": {
+      "source": "605fda286282fa1c92b4a15ee0e17f7c7ce0fbfe9a5d161e5cd7de61d70cfc60",
+      "spec": "8db9b37995e53e8e78257d3f82e043cc3ab6ad6aa421efbdd27efc36847e5e28",
+      "plan": "ce6ad6d7e636e8391aad69ea97563aa7ada0da892dd95b3a88668c320c20e9b2",
+      "convergence": "4c2a58603b8635356bd286aafdacfc975f9102b2b7ede903aa0b62dde1713c6e"
+    },
+    "reviewed_pins": {
+      "source": "605fda286282fa1c92b4a15ee0e17f7c7ce0fbfe9a5d161e5cd7de61d70cfc60",
+      "spec": "8db9b37995e53e8e78257d3f82e043cc3ab6ad6aa421efbdd27efc36847e5e28",
+      "plan": "ce6ad6d7e636e8391aad69ea97563aa7ada0da892dd95b3a88668c320c20e9b2",
+      "convergence": "4c2a58603b8635356bd286aafdacfc975f9102b2b7ede903aa0b62dde1713c6e"
+    },
+    "observed_writes": [],
+    "final_convergence_digest": "4c2a58603b8635356bd286aafdacfc975f9102b2b7ede903aa0b62dde1713c6e",
+    "command_chronology": [
+      {
+        "session": "parent",
+        "at": "2026-10-28T15:48:45.707Z",
+        "command": "python3 .ai/scripts/lifecycle.py audit; python3 .ai/scripts/lifecycle.py converge knowledge/specifications/cli-json-flag.md"
+      },
+      {
+        "session": "parent",
+        "at": "2026-10-28T15:49:46.436Z",
+        "command": "python3 .ai/scripts/lifecycle.py stage review --ref knowledge/history/cli-json-flag-review.md"
+      },
+      {
+        "session": "parent",
+        "at": "2026-10-28T15:49:50.103Z",
+        "command": "python3 .ai/scripts/lifecycle.py stage verify"
+      },
+      {
+        "session": "parent",
+        "at": "2026-10-28T15:50:03.196Z",
+        "command": "python3 .ai/scripts/lifecycle.py stage verify"
+      }
+    ]
+  },
+  {
+    "scenario": "control-delta",
+    "reviewer_transcript": "/home/enramosjr/.claude/projects/-home-enramosjr-Projects-agentic-assurance-7-docs-assurance-operator-2-report-contract-git-metadata-okf-scratch-eval-attempt-vumqidc2-repo/890bfd9b-df3f-4c3e-898d-0329764eb97e/subagents/agent-ab779848649b4801d.jsonl",
+    "before_pins": {
+      "source": "26443741d02f1f86c41e739a8a6b102998d417ad3e91061fdb5b4f05c7a76645",
+      "spec": "6ff7afb7abd1a11e4b12f2f859966b80892b025fb59cb83ed8a7911b00f9de43",
+      "plan": "d781ee0b43358b635cc1e6b4d4c1853f74e866dd9eff52f34c6e8562981f4d47",
+      "convergence": "647ee23a1e405a392c53ab73b9cff727bd0a105276a8f17abce7a0e5590a243f"
+    },
+    "after_pins": {
+      "source": "26443741d02f1f86c41e739a8a6b102998d417ad3e91061fdb5b4f05c7a76645",
+      "spec": "6ff7afb7abd1a11e4b12f2f859966b80892b025fb59cb83ed8a7911b00f9de43",
+      "plan": "d781ee0b43358b635cc1e6b4d4c1853f74e866dd9eff52f34c6e8562981f4d47",
+      "convergence": "2d4115f68c9e657c3e334503322165f49fc92884049a298c96239d2655e7ba7d"
+    },
+    "reviewed_pins": {
+      "source": "26443741d02f1f86c41e739a8a6b102998d417ad3e91061fdb5b4f05c7a76645",
+      "spec": "6ff7afb7abd1a11e4b12f2f859966b80892b025fb59cb83ed8a7911b00f9de43",
+      "plan": "d781ee0b43358b635cc1e6b4d4c1853f74e866dd9eff52f34c6e8562981f4d47",
+      "convergence": "647ee23a1e405a392c53ab73b9cff727bd0a105276a8f17abce7a0e5590a243f"
+    },
+    "observed_writes": [
+      "workspace mutation during reviewer interval (including Markdown and knowledge)"
+    ],
+    "final_convergence_digest": "30be18bf4110050e3dfdc5127900bf89fed8c2c5ad4713fc3b67d58900c8b99e",
+    "command_chronology": [
+      {
+        "session": "parent",
+        "at": "2026-10-28T15:50:45.823Z",
+        "command": "python3 .ai/scripts/lifecycle.py merge knowledge/specifications/named-greeting.md && python3 .ai/scripts/lifecycle.py converge; python3 .ai/scripts/okf.py log \"Applied named-greeting delta to capabilities/greeting.md (GREET-R1 modified, GREET-R2 added); util.py greet returns 'Hello, ' + name. python3 -m unittest test_greeting -> PASS (red then green).\"; python3 .ai/scripts/okf.py affected"
+      },
+      {
+        "session": "parent",
+        "at": "2026-10-28T15:50:47.837Z",
+        "command": "python3 .ai/scripts/lifecycle.py converge knowledge/specifications/named-greeting.md; python3 .ai/scripts/okf.py records"
+      },
+      {
+        "session": "reviewer",
+        "at": "2026-10-28T15:51:10.446Z",
+        "command": "python3 .ai/scripts/lifecycle.py converge 2>&1 | tail -10"
+      },
+      {
+        "session": "reviewer",
+        "at": "2026-10-28T15:51:12.104Z",
+        "command": "python3 .ai/scripts/lifecycle.py converge knowledge/specifications/named-greeting.md 2>&1 | tail -10; git status --short test_greeting.py"
+      },
+      {
+        "session": "parent",
+        "at": "2026-10-28T15:51:24.155Z",
+        "command": "python3 .ai/scripts/lifecycle.py stage review --help | head -3; python3 .ai/scripts/lifecycle.py stage review --note \"independent reviewer: Approved, 2 Low non-blocking\" 2>&1 | tail -5"
+      },
+      {
+        "session": "parent",
+        "at": "2026-10-28T15:51:29.698Z",
+        "command": "python3 .ai/scripts/lifecycle.py stage review --ref knowledge/project/named-greeting-review.md 2>&1 | tail -3; python3 .ai/scripts/lifecycle.py retrospect --no-new-lessons \"bounded delta applied cleanly; no new lessons\" 2>&1 | tail -3; python3 .ai/scripts/lifecycle.py run unit -- python3 -m unittest test_greeting 2>&1 | tail -3; python3 .ai/scripts/lifecycle.py stage verify 2>&1 | tail -8"
+      },
+      {
+        "session": "parent",
+        "at": "2026-10-28T15:51:34.163Z",
+        "command": "python3 .ai/scripts/lifecycle.py merge knowledge/specifications/named-greeting.md 2>&1 | tail -5; python3 .ai/scripts/lifecycle.py stage verify 2>&1 | tail -8"
+      },
+      {
+        "session": "parent",
+        "at": "2026-10-28T15:51:39.019Z",
+        "command": "python3 .ai/scripts/okf.py records 2>&1 | tail -4; python3 .ai/scripts/lifecycle.py converge knowledge/specifications/named-greeting.md | tail -1; git status --short; git diff knowledge/capabilities/greeting.md | head -40"
+      }
+    ]
+  }
+]

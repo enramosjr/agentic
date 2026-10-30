@@ -1,0 +1,18 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "-I",
+    "-B",
+    "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/validate-closeout-c1.py",
+    "--worker",
+    "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/closeout-c1-validation-results/.work/N06-baseline/repo",
+    "test_assurance.IntegrityTests",
+    "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/closeout-c1-validation-results/N06-baseline-tests.json"
+  ],
+  "cwd": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/closeout-c1-validation-results/.work/N06-baseline/repo",
+  "duration": 0.6270272760011721,
+  "exit": 0,
+  "stderr": "",
+  "stdout": "",
+  "timeout": false
+}

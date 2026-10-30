@@ -1,0 +1,16 @@
+test_abandoned_native_child_identity_cannot_be_reused (test_review_enforcement.RecoveryTests.test_abandoned_native_child_identity_cannot_be_reused) ... FAIL
+
+======================================================================
+FAIL: test_abandoned_native_child_identity_cannot_be_reused (test_review_enforcement.RecoveryTests.test_abandoned_native_child_identity_cannot_be_reused)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-rg5p_t5m/.ai/scripts/tests/test_review_enforcement.py", line 959, in test_abandoned_native_child_identity_cannot_be_reused
+    with self.assertRaisesRegex(guard.ReviewError, 'reus'):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ReviewError not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 1.713s
+
+FAILED (failures=1)
+timing: {"elapsed_seconds": 1.816, "exit_code": 1, "finished_at": "2026-10-28T23:09:16.879536+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T23:09:15.063328+00:00"}

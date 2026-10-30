@@ -1,0 +1,16 @@
+test_dead_owner_cannot_release_a_live_borrower (test_review_enforcement.RecoveryTests.test_dead_owner_cannot_release_a_live_borrower) ... FAIL
+
+======================================================================
+FAIL: test_dead_owner_cannot_release_a_live_borrower (test_review_enforcement.RecoveryTests.test_dead_owner_cannot_release_a_live_borrower)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-34866ye6/.ai/scripts/tests/test_review_enforcement.py", line 875, in test_dead_owner_cannot_release_a_live_borrower
+    with self.assertRaisesRegex(guard.ReviewError, 'borrower'):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ReviewError not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 0.288s
+
+FAILED (failures=1)
+timing: {"elapsed_seconds": 0.414, "exit_code": 1, "finished_at": "2026-10-28T22:24:39.814953+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T22:24:39.401005+00:00"}

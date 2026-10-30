@@ -1,0 +1,7 @@
+{
+  "after": "8ac5fb36cf392a29ec146adf1f59430cfa3d6c245bdaff2af93feed0864e6619",
+  "before": "f59b7187ca81fa1ce99fb98a1886c3afaefae71f414114b1f8252a69a201cab8",
+  "new": "SCHEMA_VERSION = 2",
+  "old": "SCHEMA_VERSION = 1",
+  "path": ".ai/scripts/assurance.py"
+}

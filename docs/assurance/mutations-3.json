@@ -1,0 +1,49 @@
+{
+  "source": {
+    "assurance.py": "180418607eec61283585992f7f3f1bc405bfbbe6677a287f0e8ce0c83724ff3d",
+    "lifecycle.py": "92026658112667d172570a685582dd999996109c509b0425fd0c7a4465dc0be6",
+    "assurance_architecture_demo.py": "9f6135fa4f88f01cf89c79c17a41e1a6ca76413c49c715ad1d6321a5c00bbc18",
+    "tests/test_assurance_architecture.py": "0ce6b337ebb66a051f0cfbf8027d2cdc78528826fb68d6a4265a47cb769785a6"
+  },
+  "controls": [
+    {
+      "name": "containment",
+      "test": "ReferenceTests.test_duplicates_late_lines_and_escaping_symlink",
+      "confirmed": true,
+      "variant_sha256": "2dd390c18d8f116478253bb8ef43fce1703c8d6afd08c2e216af9f6e3848b96e",
+      "exit": 1,
+      "killed": true,
+      "output": "F\n======================================================================\nFAIL: test_duplicates_late_lines_and_escaping_symlink (__main__.ReferenceTests.test_duplicates_late_lines_and_escaping_symlink) (line='  - Governed-by: [escape](../project/decisions/escape.md)\\n')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/architecture-controls-1t5e7sh4/kit/.ai/scripts/tests/test_assurance_architecture.py\", line 122, in test_duplicates_late_lines_and_escaping_symlink\n    self.assertEqual(self.status('CALC-R1')['status'], 'INVALID')\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'UNVERIFIED' != 'INVALID'\n- UNVERIFIED\n+ INVALID\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.728s\n\nFAILED (failures=1)\n"
+    },
+    {
+      "name": "manual-metadata",
+      "test": "ReportTests.test_governance_on_every_status_preserves_existing_fields",
+      "confirmed": true,
+      "variant_sha256": "e0219d749263a175b24d4996b6b2ebdaedb60eb432b41d5414f71b52feb67af0",
+      "exit": 1,
+      "killed": true,
+      "output": "E\n======================================================================\nERROR: test_governance_on_every_status_preserves_existing_fields (__main__.ReportTests.test_governance_on_every_status_preserves_existing_fields) (status='MANUAL')\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/architecture-controls-1t5e7sh4/kit/.ai/scripts/tests/test_assurance_architecture.py\", line 153, in test_governance_on_every_status_preserves_existing_fields\n    self.assert_governance(item)\n    ~~~~~~~~~~~~~~~~~~~~~~^^^^^^\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/architecture-controls-1t5e7sh4/kit/.ai/scripts/tests/test_assurance_architecture.py\", line 35, in assert_governance\n    self.assertEqual(item['governed_by'], expected)\n                     ~~~~^^^^^^^^^^^^^^^\nKeyError: 'governed_by'\n\n----------------------------------------------------------------------\nRan 1 test in 3.757s\n\nFAILED (errors=1)\n"
+    },
+    {
+      "name": "implicit-input",
+      "test": "FreshnessTests.test_adr_is_an_input_only_when_explicitly_declared",
+      "confirmed": true,
+      "variant_sha256": "7461bc24c7d61c384e7876ff0782e9cfbd98cfd57671ba227c9c2dbf2491fe77",
+      "exit": 1,
+      "killed": true,
+      "output": "FF\n======================================================================\nFAIL: test_adr_is_an_input_only_when_explicitly_declared (__main__.FreshnessTests.test_adr_is_an_input_only_when_explicitly_declared) (include=False)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/architecture-controls-1t5e7sh4/kit/.ai/scripts/tests/test_assurance_architecture.py\", line 183, in test_adr_is_an_input_only_when_explicitly_declared\n    self.assertEqual(entry['inputs'], expected)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: Lists differ: ['che[14 chars]*', 'knowledge/project/decisions/layers.md', '[28 chars]/**'] != ['che[14 chars]*', '!knowledge/history/lifecycle/**']\n\nFirst differing element 2:\n'knowledge/project/decisions/layers.md'\n'!knowledge/history/lifecycle/**'\n\nFirst list contains 1 additional elements.\nFirst extra element 3:\n'!knowledge/history/lifecycle/**'\n\n- ['check.py',\n-  'src/**',\n-  'knowledge/project/decisions/layers.md',\n-  '!knowledge/history/lifecycle/**']\n+ ['check.py', 'src/**', '!knowledge/history/lifecycle/**']\n? ++++++++++++++++++++++\n\n\n======================================================================\nFAIL: test_adr_is_an_input_only_when_explicitly_declared (__main__.FreshnessTests.test_adr_is_an_input_only_when_explicitly_declared) (include=True)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/architecture-controls-1t5e7sh4/kit/.ai/scripts/tests/test_assurance_architecture.py\", line 183, in test_adr_is_an_input_only_when_explicitly_declared\n    self.assertEqual(entry['inputs'], expected)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: Lists differ: ['che[55 chars]d', 'knowledge/project/decisions/layers.md', '[28 chars]/**'] != ['che[55 chars]d', '!knowledge/history/lifecycle/**']\n\nFirst differing element 3:\n'knowledge/project/decisions/layers.md'\n'!knowledge/history/lifecycle/**'\n\nFirst list contains 1 additional elements.\nFirst extra element 4:\n'!knowledge/history/lifecycle/**'\n\n  ['check.py',\n   'src/**',\n   'knowledge/project/decisions/layers.md',\n-  'knowledge/project/decisions/layers.md',\n   '!knowledge/history/lifecycle/**']\n\n----------------------------------------------------------------------\nRan 1 test in 0.947s\n\nFAILED (failures=2)\n"
+    },
+    {
+      "name": "invalid-delta-evidence",
+      "test": "IntegrationTests.test_invalid_delta_publishes_no_requirement_evidence",
+      "confirmed": true,
+      "variant_sha256": "b4c538b6258e64ea2efbe72d38af10cfef72a6862e547648e754b88570ab2465",
+      "exit": 1,
+      "killed": true,
+      "output": "F\n======================================================================\nFAIL: test_invalid_delta_publishes_no_requirement_evidence (__main__.IntegrationTests.test_invalid_delta_publishes_no_requirement_evidence)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/architecture-controls-1t5e7sh4/kit/.ai/scripts/tests/test_assurance_architecture.py\", line 267, in test_invalid_delta_publishes_no_requirement_evidence\n    self.assertEqual(self.req_entries(), [])\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: Lists differ: [{'argv': ['python3', 'count.py'], 'at': '[620 chars]3a'}] != []\n\nFirst list contains 1 additional elements.\nFirst extra element 0:\n{'argv': ['python3', 'count.py'], 'at': '2026-10-29T00:34:35Z', 'duration': 0.054, 'exit': 0, 'head': '1e1ac9e0f5cf733b517e981456068fa3fc0ccc9e', 'input_files': {'count.py': 'bc3941da2b24a043dcaea11c2e46f6c202b02a5bde693926d6501dcf0cb1cb85', 'src/calc.py': 'bdc521112b1428d943d7c2f510faf0b3456678f67a7c8604576fab28e85f5b7c'}, 'inputs': ['count.py', 'src/**', '!knowledge/history/lifecycle/**'], 'inputs_sha256': '0b26609b408a84a15212c059fe73e9aca8ff6937cc701fe36854047f6cda2cb0', 'label': 'req:CALC-R1', 'runtime_sha256': '693e32ca7e95cf3c681cb19295ec216dcfbb7efca1df81949fbcffc0b39f02a5', 'tree': '3a002e5a59e5f5f97894dbe4fa4d0685588ea92a2b3effe3eee2652950cf3d3a'}\n\nDiff is 735 characters long. Set self.maxDiff to None to see it.\n\n----------------------------------------------------------------------\nRan 1 test in 0.925s\n\nFAILED (failures=1)\n"
+    }
+  ],
+  "operator_sha256": "613a64624b8985397eaceb442402b202882ac9fc97aa9f915a01bc06597ba03f",
+  "baseline_exit": 0,
+  "disabled-checker": "Covered by ConstraintFlowTests.test_disabled_checker_cannot_pass_the_demo; bytes confirmed before execution."
+}

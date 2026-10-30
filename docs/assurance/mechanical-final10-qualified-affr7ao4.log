@@ -1,0 +1,16 @@
+test_partial_commit_hook_cannot_bypass_the_reviewed_full_index (test_review_enforcement.FreshnessTests.test_partial_commit_hook_cannot_bypass_the_reviewed_full_index) ... FAIL
+
+======================================================================
+FAIL: test_partial_commit_hook_cannot_bypass_the_reviewed_full_index (test_review_enforcement.FreshnessTests.test_partial_commit_hook_cannot_bypass_the_reviewed_full_index)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-affr7ao4/.ai/scripts/tests/test_review_enforcement.py", line 337, in test_partial_commit_hook_cannot_bypass_the_reviewed_full_index
+    self.assertIn('full index', result.stdout)
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'full index' not found in ''
+
+----------------------------------------------------------------------
+Ran 1 test in 2.434s
+
+FAILED (failures=1)
+timing: {"elapsed_seconds": 2.517, "exit_code": 1, "finished_at": "2026-10-28T23:35:11.776243+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T23:35:09.259174+00:00"}

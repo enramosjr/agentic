@@ -1,0 +1,27 @@
+test_physical_witness_cannot_admit_foreign_metadata_selectors (test_review_enforcement.ReadOnlyTests.test_physical_witness_cannot_admit_foreign_metadata_selectors) ... 
+  test_physical_witness_cannot_admit_foreign_metadata_selectors (test_review_enforcement.ReadOnlyTests.test_physical_witness_cannot_admit_foreign_metadata_selectors) (command='env GIT_DIR=/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpnckpvum0/git-metadata GIT_WORK_TREE=/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpnckpvum0/repo git switch -c foreign') ... FAIL
+  test_physical_witness_cannot_admit_foreign_metadata_selectors (test_review_enforcement.ReadOnlyTests.test_physical_witness_cannot_admit_foreign_metadata_selectors) (command='git switch -c foreign') ... FAIL
+
+======================================================================
+FAIL: test_physical_witness_cannot_admit_foreign_metadata_selectors (test_review_enforcement.ReadOnlyTests.test_physical_witness_cannot_admit_foreign_metadata_selectors) (command='env GIT_DIR=/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpnckpvum0/git-metadata GIT_WORK_TREE=/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpnckpvum0/repo git switch -c foreign')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-oaj045ik/.ai/scripts/tests/test_review_enforcement.py", line 615, in test_physical_witness_cannot_admit_foreign_metadata_selectors
+    with self.assertRaisesRegex(guard.ReviewError, 'foreign owner checked'):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ReviewError not raised
+
+======================================================================
+FAIL: test_physical_witness_cannot_admit_foreign_metadata_selectors (test_review_enforcement.ReadOnlyTests.test_physical_witness_cannot_admit_foreign_metadata_selectors) (command='git switch -c foreign')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-oaj045ik/.ai/scripts/tests/test_review_enforcement.py", line 615, in test_physical_witness_cannot_admit_foreign_metadata_selectors
+    with self.assertRaisesRegex(guard.ReviewError, 'foreign owner checked'):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ReviewError not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 0.231s
+
+FAILED (failures=2)
+timing: {"elapsed_seconds": 0.364, "exit_code": 1, "finished_at": "2026-10-28T23:09:27.278482+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T23:09:26.914477+00:00"}

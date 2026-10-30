@@ -1,0 +1,9 @@
+{
+  "after": "878d45d8d00b620ea06a8d05efc7d3f79db5ac8871459997e720dcaa94f66856",
+  "before": "7529944d1488c0e239f62abbd32feeca3e837e18e004d52ec1f96b1e0bbf7c2a",
+  "id": "N03",
+  "new": "f\"req:BROKEN-{obligation.id}\"",
+  "old": "f\"req:{obligation.id}\"",
+  "path": ".ai/scripts/lifecycle.py",
+  "restored": false
+}

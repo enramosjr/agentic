@@ -1,0 +1,13 @@
+run assurance-2-real-agent: exit=1 tree=a491524
+      - inherited fixture behavior failed: invalid JSON greeting
+    FAIL control-delta repeat 1
+      - stage 'plan' was not recorded
+      - stage 'review' was not recorded
+      - stage 'verify' was not recorded
+      - no changed file matches 'util.py'
+      - completion requires plan
+      - completion requires review
+      - completion requires verify
+      - missing convergence for the approved spec
+      - check delta failed: command exit 1
+    0/2 passed

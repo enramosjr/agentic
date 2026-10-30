@@ -1,0 +1,31 @@
+test_pending_activation_still_requires_complete_observed_identity_and_configuration (test_review_enforcement.ActivationTests.test_pending_activation_still_requires_complete_observed_identity_and_configuration) ... 
+  test_pending_activation_still_requires_complete_observed_identity_and_configuration (test_review_enforcement.ActivationTests.test_pending_activation_still_requires_complete_observed_identity_and_configuration) (runtime=None) ... FAIL
+test_pending_activation_still_requires_complete_observed_identity_and_configuration (test_review_enforcement.ActivationTests.test_pending_activation_still_requires_complete_observed_identity_and_configuration) ... FAIL
+
+======================================================================
+FAIL: test_pending_activation_still_requires_complete_observed_identity_and_configuration (test_review_enforcement.ActivationTests.test_pending_activation_still_requires_complete_observed_identity_and_configuration) (runtime=None)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-07lbpwpn/.ai/scripts/tests/test_review_enforcement.py", line 143, in test_pending_activation_still_requires_complete_observed_identity_and_configuration
+    with self.assertRaises(guard.ReviewError):
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+AssertionError: ReviewError not raised
+
+======================================================================
+FAIL: test_pending_activation_still_requires_complete_observed_identity_and_configuration (test_review_enforcement.ActivationTests.test_pending_activation_still_requires_complete_observed_identity_and_configuration)
+----------------------------------------------------------------------
+review_guard.ReviewError: task already opted in; explicitly abandon/restart
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-07lbpwpn/.ai/scripts/tests/test_review_enforcement.py", line 147, in test_pending_activation_still_requires_complete_observed_identity_and_configuration
+    with self.assertRaisesRegex(guard.ReviewError, 'configuration'):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: "configuration" does not match "task already opted in; explicitly abandon/restart"
+
+----------------------------------------------------------------------
+Ran 1 test in 1.385s
+
+FAILED (failures=2)
+timing: {"elapsed_seconds": 1.516, "exit_code": 1, "finished_at": "2026-10-28T23:09:28.957396+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T23:09:27.441765+00:00"}

@@ -1,0 +1,71 @@
+{
+  "created_at": "2026-10-28T23:38:21.793747+00:00",
+  "source_tree": "3956d6137128443aaf5e0c4082ed9d4ff82f342091c76d818fdc6769246e6afd",
+  "baseline_tests": 68,
+  "controls": 39,
+  "controls_killed": 39,
+  "artifact_bundle": "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-sp1dk82n",
+  "artifact_sha256": "fe2fcdd5eb9ac87a368b0c0073d202b0928d84e1ec54cb1cb82574be236853c0",
+  "declared_files": 143,
+  "framework": {
+    "exit": 0,
+    "actual_output": "Ran 807 tests in 98.6s with 8 workers: OK\n",
+    "tests": 807,
+    "seconds": 98.6,
+    "workers": 8
+  },
+  "ledger_entries": {
+    "assurance-2-mechanical-mutations-final10": {
+      "argv": [
+        "python3",
+        "docs/assurance/capture-validation-output-2.py",
+        "docs/assurance/mechanical-review-mutations-2-final10-full.log",
+        "--",
+        "python3",
+        "docs/assurance/mutate-mechanical-review-2-final10.py",
+        "--ready"
+      ],
+      "at": "2026-10-28T23:35:18Z",
+      "duration": 75.052,
+      "exit": 0,
+      "head": "9efcfb7939cd6818f28caab48d3dadf4b2d69f4a",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "assurance-2-mechanical-mutations-final10",
+      "tree": "3956d6137128443aaf5e0c4082ed9d4ff82f342091c76d818fdc6769246e6afd"
+    },
+    "assurance-2-mechanical-framework-final10": {
+      "argv": [
+        "python3",
+        "docs/assurance/capture-validation-output-2.py",
+        "docs/assurance/mechanical-framework-2-final10-full.log",
+        "--",
+        "python3",
+        ".ai/scripts/run_tests.py",
+        "-j",
+        "8"
+      ],
+      "at": "2026-10-28T23:37:14Z",
+      "duration": 98.702,
+      "exit": 0,
+      "head": "9efcfb7939cd6818f28caab48d3dadf4b2d69f4a",
+      "inputs": [],
+      "inputs_sha256": null,
+      "label": "assurance-2-mechanical-framework-final10",
+      "tree": "3956d6137128443aaf5e0c4082ed9d4ff82f342091c76d818fdc6769246e6afd"
+    }
+  },
+  "native_v7_preservation": {
+    "files": 17,
+    "unchanged": true,
+    "comparison_at": "2026-10-28T23:37:27.934826+00:00",
+    "changed": [],
+    "before_manifest_sha256": "9dba9366522cee39ba48de18b1adffcda2251902f93b2a09159128d99d6c6df7",
+    "after_manifest": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/native-codex-v7-help-fix-preservation-after.json"
+  },
+  "native_calls": 0,
+  "model_calls": 0,
+  "new_attempt_preparation": false,
+  "source_edits_by_validator": false,
+  "historical_evidence_edits": false
+}

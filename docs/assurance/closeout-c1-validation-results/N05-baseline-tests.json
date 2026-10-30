@@ -1,0 +1,17 @@
+{
+  "errors": [],
+  "expected_failures": [],
+  "failures": [],
+  "finished": [
+    "test_assurance.RuntimeTests.test_changed_executable_is_stale"
+  ],
+  "loaded": [
+    "test_assurance.RuntimeTests.test_changed_executable_is_stale"
+  ],
+  "run": 1,
+  "skips": [],
+  "started": [
+    "test_assurance.RuntimeTests.test_changed_executable_is_stale"
+  ],
+  "unexpected": []
+}

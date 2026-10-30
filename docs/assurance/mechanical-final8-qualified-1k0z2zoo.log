@@ -1,0 +1,27 @@
+test_own_witness_keeps_foreign_index_object_and_common_checks (test_review_enforcement.ReadOnlyTests.test_own_witness_keeps_foreign_index_object_and_common_checks) ... 
+  test_own_witness_keeps_foreign_index_object_and_common_checks (test_review_enforcement.ReadOnlyTests.test_own_witness_keeps_foreign_index_object_and_common_checks) (variable='GIT_INDEX_FILE') ... FAIL
+  test_own_witness_keeps_foreign_index_object_and_common_checks (test_review_enforcement.ReadOnlyTests.test_own_witness_keeps_foreign_index_object_and_common_checks) (variable='GIT_OBJECT_DIRECTORY') ... FAIL
+
+======================================================================
+FAIL: test_own_witness_keeps_foreign_index_object_and_common_checks (test_review_enforcement.ReadOnlyTests.test_own_witness_keeps_foreign_index_object_and_common_checks) (variable='GIT_INDEX_FILE')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-1k0z2zoo/.ai/scripts/tests/test_review_enforcement.py", line 560, in test_own_witness_keeps_foreign_index_object_and_common_checks
+    with self.assertRaisesRegex(guard.ReviewError, 'foreign override checked'):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ReviewError not raised
+
+======================================================================
+FAIL: test_own_witness_keeps_foreign_index_object_and_common_checks (test_review_enforcement.ReadOnlyTests.test_own_witness_keeps_foreign_index_object_and_common_checks) (variable='GIT_OBJECT_DIRECTORY')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-1k0z2zoo/.ai/scripts/tests/test_review_enforcement.py", line 560, in test_own_witness_keeps_foreign_index_object_and_common_checks
+    with self.assertRaisesRegex(guard.ReviewError, 'foreign override checked'):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: ReviewError not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 0.229s
+
+FAILED (failures=2)
+timing: {"elapsed_seconds": 0.314, "exit_code": 1, "finished_at": "2026-10-28T22:24:51.679248+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T22:24:51.365423+00:00"}

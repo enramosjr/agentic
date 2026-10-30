@@ -1,0 +1,18 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "-I",
+    "-B",
+    "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/validate-closeout-c1-continuation.py",
+    "--worker",
+    "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/closeout-c1-continuation-results/.work/N10-baseline/repo",
+    "test_assurance.ExitCodeTests",
+    "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/closeout-c1-continuation-results/N10-baseline-tests.json"
+  ],
+  "cwd": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/closeout-c1-continuation-results/.work/N10-baseline/repo",
+  "duration": 2.862743773992406,
+  "exit": 0,
+  "stderr": "",
+  "stdout": "",
+  "timeout": false
+}

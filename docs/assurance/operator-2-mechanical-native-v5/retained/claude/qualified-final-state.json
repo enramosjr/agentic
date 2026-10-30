@@ -1,0 +1,17 @@
+{
+  "adapter": "claude",
+  "native_review": {
+    "adapter": "claude",
+    "capture_sha256": "1aa41357d4cded6427398a1b931fdf1da5212a1c87256de7afbcc9aab69d2224",
+    "child": "a9593c0b452281b45",
+    "completion_sha256": "a655c6aa46e7f61faa8aabc74d9f2ff182ba8423d5a15282486ef7e22f7fc1b9",
+    "id": "51c8a4bb530a420994ed673891829f9b",
+    "report_sha256": "75528311c206c6cd24c7f18579173c0d56516ba40a77b659aee2c7600f2f3c6b",
+    "session": "bb17d956-bfb8-4eec-b0d8-b8f57d1a5c97"
+  },
+  "verify": {
+    "at": "2026-10-28T22:07:34Z",
+    "level": "L2",
+    "note": "converge:GREET-R2 exit=0 tree=8210cc3; converge:GREET-R1 exit=0 tree=8210cc3; unit-greeting exit=0 tree=8210cc3; okf-records exit=0 tree=8210cc3"
+  }
+}

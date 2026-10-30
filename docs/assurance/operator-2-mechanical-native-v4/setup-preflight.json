@@ -1,0 +1,56 @@
+{
+  "scenario": "control-delta",
+  "checks": [
+    "delta"
+  ],
+  "adapter": [
+    "live"
+  ],
+  "fixture": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v4/setup-preflight/repo",
+  "fixture_head": "97b5fb9062ad5e671e4e2af5abab1613643c4207",
+  "setup": "PASS",
+  "setup_processes": [
+    {
+      "pid": 434193,
+      "token": "dfeca5ba544e4a26af63d7ac571d2eba",
+      "directory": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v4/git-metadata/okf-scratch/eval-process-s_qws_9u",
+      "deadline": 1793222999.6710155,
+      "start_ticks": "42696614",
+      "boot": "551c3ec6-99b0-4a26-ad80-f4a1f022aa07",
+      "context": null,
+      "process_phase": "setup"
+    },
+    {
+      "pid": 434196,
+      "token": "23c514c0b60d48c3a5572ff8416dfcb2",
+      "directory": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v4/git-metadata/okf-scratch/eval-process-eud0nk73",
+      "deadline": 1793222999.6710155,
+      "start_ticks": "42696620",
+      "boot": "551c3ec6-99b0-4a26-ad80-f4a1f022aa07",
+      "context": null,
+      "process_phase": "setup"
+    },
+    {
+      "pid": 434225,
+      "token": "d1454608465141b29f16611e1e8205fb",
+      "directory": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v4/git-metadata/okf-scratch/eval-process-tr3g7_8r",
+      "deadline": 1793222999.6710155,
+      "start_ticks": "42696640",
+      "boot": "551c3ec6-99b0-4a26-ad80-f4a1f022aa07",
+      "context": null,
+      "process_phase": "setup"
+    },
+    {
+      "pid": 434227,
+      "token": "74542f499ffe41c8904b727d623cecdc",
+      "directory": "/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v4/git-metadata/okf-scratch/eval-process-a4dgwje9",
+      "deadline": 1793222999.6710155,
+      "start_ticks": "42696645",
+      "boot": "551c3ec6-99b0-4a26-ad80-f4a1f022aa07",
+      "context": null,
+      "process_phase": "setup"
+    }
+  ],
+  "agent_processes": 0,
+  "model_calls": 0
+}

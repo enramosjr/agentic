@@ -1,0 +1,22 @@
+[
+  "/home/enramosjr/.local/share/claude/versions/2.1.312",
+  "-p",
+  "--output-format",
+  "stream-json",
+  "--verbose",
+  "--forward-subagent-text",
+  "--include-hook-events",
+  "--model",
+  "claude-sonnet-5-5",
+  "--effort",
+  "medium",
+  "--permission-mode",
+  "acceptEdits",
+  "--permission-prompts",
+  "none",
+  "--setting-sources",
+  "project",
+  "--strict-mcp-config",
+  "--settings",
+  "{\"hooks\": {\"SessionStart\": [{\"hooks\": [{\"type\": \"command\", \"command\": \"python3 \\\"$CLAUDE_PROJECT_DIR/.ai/scripts/autonomy_hook.py\\\"\", \"timeout\": 30}, {\"type\": \"command\", \"command\": \"python3 \\\"$CLAUDE_PROJECT_DIR/.ai/scripts/lifecycle.py\\\" hook --skip-in-cursor\", \"timeout\": 10}, {\"type\": \"command\", \"command\": \"python3 \\\"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\\\" hook --adapter claude\", \"timeout\": 10}]}, {\"hooks\": [{\"type\": \"command\", \"command\": \"/usr/bin/python3 /home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v4/retained/claude/live-capture/tools/live_observer.py hook\", \"timeout\": 10}]}], \"PreToolUse\": [{\"matcher\": \"Bash\", \"hooks\": [{\"type\": \"command\", \"command\": \"python3 \\\"$CLAUDE_PROJECT_DIR/.ai/scripts/shell_guard.py\\\" --skip-in-cursor\", \"timeout\": 10}, {\"type\": \"command\", \"command\": \"python3 \\\"$CLAUDE_PROJECT_DIR/.ai/scripts/lifecycle.py\\\" hook --skip-in-cursor\", \"timeout\": 10}]}, {\"matcher\": \"Write|Edit|MultiEdit|NotebookEdit|Delete\", \"hooks\": [{\"type\": \"command\", \"command\": \"python3 \\\"$CLAUDE_PROJECT_DIR/.ai/scripts/lifecycle.py\\\" hook --skip-in-cursor\", \"timeout\": 10}]}, {\"hooks\": [{\"type\": \"command\", \"command\": \"python3 \\\"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\\\" hook --adapter claude\", \"timeout\": 10}]}, {\"hooks\": [{\"type\": \"command\", \"command\": \"/usr/bin/python3 /home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v4/retained/claude/live-capture/tools/live_observer.py hook\", \"timeout\": 10}]}], \"PostToolUse\": [{\"hooks\": [{\"type\": \"command\", \"command\": \"python3 \\\"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\\\" hook --adapter claude\", \"timeout\": 10}]}, {\"hooks\": [{\"type\": \"command\", \"command\": \"/usr/bin/python3 /home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v4/retained/claude/live-capture/tools/live_observer.py hook\", \"timeout\": 10}]}], \"SubagentStart\": [{\"hooks\": [{\"type\": \"command\", \"command\": \"python3 \\\"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\\\" hook --adapter claude\", \"timeout\": 10}]}, {\"hooks\": [{\"type\": \"command\", \"command\": \"/usr/bin/python3 /home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v4/retained/claude/live-capture/tools/live_observer.py hook\", \"timeout\": 10}]}], \"SubagentStop\": [{\"hooks\": [{\"type\": \"command\", \"command\": \"python3 \\\"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\\\" hook --adapter claude\", \"timeout\": 10}]}, {\"hooks\": [{\"type\": \"command\", \"command\": \"/usr/bin/python3 /home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v4/retained/claude/live-capture/tools/live_observer.py hook\", \"timeout\": 10}]}], \"Stop\": [{\"hooks\": [{\"type\": \"command\", \"command\": \"python3 \\\"$CLAUDE_PROJECT_DIR/.ai/scripts/autonomy_hook.py\\\"\", \"timeout\": 30}]}, {\"hooks\": [{\"type\": \"command\", \"command\": \"/usr/bin/python3 /home/enramosjr/Projects/agentic-assurance-7/docs/assurance/operator-2-mechanical-native-v4/retained/claude/live-capture/tools/live_observer.py hook\", \"timeout\": 10}]}], \"PostToolUseFailure\": [{\"hooks\": [{\"type\": \"command\", \"command\": \"python3 \\\"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\\\" hook --adapter claude\", \"timeout\": 10}]}]}, \"permissions\": {\"allow\": [\"Bash(python3 .ai/scripts/*)\", \"Bash(python3 -m unittest*)\", \"Bash(git *)\"]}}"
+]

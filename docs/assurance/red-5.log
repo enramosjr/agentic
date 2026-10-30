@@ -1,0 +1,13 @@
+RED recorded (exit 1):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_assurance_inputs.py", line 270, in test_framework_real_runner_reuse_and_each_input_invalidation
+    value = self.suggestion()
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_assurance_inputs.py", line 82, in suggestion
+    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 2 != 0 : /usr/bin/python3: can't open file '/home/enramosjr/.cache/okf-tests/tmpn8jxc7ta/repo with spaces/.ai/scripts/assurance_inputs.py': [Errno 2] No such file or directory
+
+
+----------------------------------------------------------------------
+Ran 12 tests in 0.476s
+
+FAILED (failures=9, errors=15)

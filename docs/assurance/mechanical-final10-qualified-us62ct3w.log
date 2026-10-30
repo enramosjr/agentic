@@ -1,0 +1,16 @@
+test_root_help_is_read_only_through_active_hooks_and_actual_cli (test_review_enforcement.ReadOnlyTests.test_root_help_is_read_only_through_active_hooks_and_actual_cli) ... FAIL
+
+======================================================================
+FAIL: test_root_help_is_read_only_through_active_hooks_and_actual_cli (test_review_enforcement.ReadOnlyTests.test_root_help_is_read_only_through_active_hooks_and_actual_cli)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-us62ct3w/.ai/scripts/tests/test_review_enforcement.py", line 581, in test_root_help_is_read_only_through_active_hooks_and_actual_cli
+    self.assertFalse(guard.command_mutates(command))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+----------------------------------------------------------------------
+Ran 1 test in 1.238s
+
+FAILED (failures=1)
+timing: {"elapsed_seconds": 1.365, "exit_code": 1, "finished_at": "2026-10-28T23:35:18.329541+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T23:35:16.964217+00:00"}

@@ -1,0 +1,17 @@
+{
+  "errors": [],
+  "expected_failures": [],
+  "failures": [],
+  "finished": [
+    "test_lifecycle_conformance.Assurance.test_assurance_documented"
+  ],
+  "loaded": [
+    "test_lifecycle_conformance.Assurance.test_assurance_documented"
+  ],
+  "run": 1,
+  "skips": [],
+  "started": [
+    "test_lifecycle_conformance.Assurance.test_assurance_documented"
+  ],
+  "unexpected": []
+}

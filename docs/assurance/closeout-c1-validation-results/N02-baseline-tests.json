@@ -1,0 +1,23 @@
+{
+  "errors": [],
+  "expected_failures": [],
+  "failures": [],
+  "finished": [
+    "test_assurance.CompatibilityTests.test_obligation_free_and_prose_capabilities_stay_green",
+    "test_assurance.CompatibilityTests.test_obligation_lines_keep_validate_clean",
+    "test_assurance.CompatibilityTests.test_repository_without_bundle_reports_nothing"
+  ],
+  "loaded": [
+    "test_assurance.CompatibilityTests.test_obligation_free_and_prose_capabilities_stay_green",
+    "test_assurance.CompatibilityTests.test_obligation_lines_keep_validate_clean",
+    "test_assurance.CompatibilityTests.test_repository_without_bundle_reports_nothing"
+  ],
+  "run": 3,
+  "skips": [],
+  "started": [
+    "test_assurance.CompatibilityTests.test_obligation_free_and_prose_capabilities_stay_green",
+    "test_assurance.CompatibilityTests.test_obligation_lines_keep_validate_clean",
+    "test_assurance.CompatibilityTests.test_repository_without_bundle_reports_nothing"
+  ],
+  "unexpected": []
+}

@@ -1,0 +1,13 @@
+run assurance-2-mutations: exit=1 tree=2a25829
+    status-allowed KILLED 
+    head-baseline KILLED 
+    block-omitted INVALID/SURVIVED 
+    delta-omitted KILLED 
+    git-swallowed KILLED 
+    risk-waiver KILLED 
+    inexact-argv KILLED 
+    wrong-scope KILLED 
+    post-run-inputs KILLED 
+    duplicate-execution KILLED 
+    failure-as-pass KILLED 
+    reload-omitted KILLED

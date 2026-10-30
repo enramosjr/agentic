@@ -1,0 +1,2 @@
+Ignoring 11 permissions.allow entries from .claude/settings.json: this workspace has not been trusted. Run Claude Code interactively here once and accept the trust dialog, or set projects["/home/enramosjr/Projects/agentic/.git/okf-scratch/qualify-attempt-922p64vw/repo"].hasTrustDialogAccepted: true in /home/enramosjr/.claude.json.
+{"initialization_only": true, "model_requested": false, "cli_version": "2.1.312", "session_start_events": 1}

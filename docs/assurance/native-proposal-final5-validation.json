@@ -1,0 +1,135 @@
+{
+  "artifact": {
+    "bundle": "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-87ezf2mv",
+    "sha256": "e1456dd39be6748ef402e26f067705a84ecdf58c2127f0aba7e35ebad099cb30",
+    "files": [
+      ".ai/scripts/scratch.py",
+      "docs/assurance/native-launch-2-review-enforcement.py",
+      "docs/assurance/prepare-native-2-review-enforcement.py",
+      "docs/assurance/run-native-2-review-enforcement.py",
+      "docs/assurance/test-native-preparation-2-review-enforcement.py"
+    ]
+  },
+  "baseline": {
+    "command": [
+      "/usr/bin/python3",
+      "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/artifacts.py",
+      "run",
+      "--bundle",
+      "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-87ezf2mv",
+      "--sha256",
+      "e1456dd39be6748ef402e26f067705a84ecdf58c2127f0aba7e35ebad099cb30",
+      "--timeout",
+      "30",
+      "--",
+      "/usr/bin/python3",
+      "{artifact:docs/assurance/test-native-preparation-2-review-enforcement.py}"
+    ],
+    "exit": 0,
+    "output": "..........\n----------------------------------------------------------------------\nRan 10 tests in 0.067s\n\nOK\ntiming: {\"elapsed_seconds\": 0.214, \"exit_code\": 0, \"finished_at\": \"2026-10-28T21:59:32.422756+00:00\", \"label\": \"artifact-acceptance\", \"outcome\": \"PASS\", \"started_at\": \"2026-10-28T21:59:32.208976+00:00\"}\n"
+  },
+  "controls": [
+    {
+      "name": "trusted-runtime-check-omitted",
+      "confirmed": true,
+      "artifact": {
+        "bundle": "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-ep4pw8z9",
+        "sha256": "e4d5ddb64e679c047eeb309df73c1af3d4883ae59aa65f527580fa084f2b40bf",
+        "files": [
+          ".ai/scripts/scratch.py",
+          "docs/assurance/native-launch-2-review-enforcement.py",
+          "docs/assurance/prepare-native-2-review-enforcement.py",
+          "docs/assurance/run-native-2-review-enforcement.py",
+          "docs/assurance/test-native-preparation-2-review-enforcement.py"
+        ]
+      },
+      "killed": true,
+      "command": [
+        "/usr/bin/python3",
+        "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/artifacts.py",
+        "run",
+        "--bundle",
+        "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-ep4pw8z9",
+        "--sha256",
+        "e4d5ddb64e679c047eeb309df73c1af3d4883ae59aa65f527580fa084f2b40bf",
+        "--timeout",
+        "30",
+        "--",
+        "/usr/bin/python3",
+        "{artifact:docs/assurance/test-native-preparation-2-review-enforcement.py}",
+        "TrustPolicyTests.test_trust_requires_exact_native_definitions_and_actual_trusted_reply"
+      ],
+      "exit": 1,
+      "output": "F\n======================================================================\nFAIL: test_trust_requires_exact_native_definitions_and_actual_trusted_reply (__main__.TrustPolicyTests.test_trust_requires_exact_native_definitions_and_actual_trusted_reply)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-ep4pw8z9/docs/assurance/test-native-preparation-2-review-enforcement.py\", line 50, in test_trust_requires_exact_native_definitions_and_actual_trusted_reply\n    with self.assertRaisesRegex(ValueError, 'trust unavailable'):\n         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: ValueError not raised\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (failures=1)\ntiming: {\"elapsed_seconds\": 0.114, \"exit_code\": 1, \"finished_at\": \"2026-10-28T21:59:32.648164+00:00\", \"label\": \"artifact-acceptance\", \"outcome\": \"FAIL\", \"started_at\": \"2026-10-28T21:59:32.534572+00:00\"}\n"
+    },
+    {
+      "name": "native-discovery-mutated",
+      "confirmed": true,
+      "artifact": {
+        "bundle": "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-15fske6w",
+        "sha256": "f2b6f2c877bb10583894146c029b65bf5a663c2c900f934b64b3624f3965ae8c",
+        "files": [
+          ".ai/scripts/scratch.py",
+          "docs/assurance/native-launch-2-review-enforcement.py",
+          "docs/assurance/prepare-native-2-review-enforcement.py",
+          "docs/assurance/run-native-2-review-enforcement.py",
+          "docs/assurance/test-native-preparation-2-review-enforcement.py"
+        ]
+      },
+      "killed": true,
+      "command": [
+        "/usr/bin/python3",
+        "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/artifacts.py",
+        "run",
+        "--bundle",
+        "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-15fske6w",
+        "--sha256",
+        "f2b6f2c877bb10583894146c029b65bf5a663c2c900f934b64b3624f3965ae8c",
+        "--timeout",
+        "30",
+        "--",
+        "/usr/bin/python3",
+        "{artifact:docs/assurance/test-native-preparation-2-review-enforcement.py}",
+        "TrustPolicyTests.test_overlay_preserves_existing_state_without_editing_discovery"
+      ],
+      "exit": 1,
+      "output": "F\n======================================================================\nFAIL: test_overlay_preserves_existing_state_without_editing_discovery (__main__.TrustPolicyTests.test_overlay_preserves_existing_state_without_editing_discovery)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-15fske6w/docs/assurance/test-native-preparation-2-review-enforcement.py\", line 74, in test_overlay_preserves_existing_state_without_editing_discovery\n    self.assertEqual(self.preflight, original)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: {'_ho[519 chars]old'}, 'fixture:session_start:0:0': {'trusted_[80 chars]}}}}} != {'_ho[519 chars]old'}}}}}\nDiff is 1224 characters long. Set self.maxDiff to None to see it.\n\n----------------------------------------------------------------------\nRan 1 test in 0.001s\n\nFAILED (failures=1)\ntiming: {\"elapsed_seconds\": 0.114, \"exit_code\": 1, \"finished_at\": \"2026-10-28T21:59:32.871507+00:00\", \"label\": \"artifact-acceptance\", \"outcome\": \"FAIL\", \"started_at\": \"2026-10-28T21:59:32.757877+00:00\"}\n"
+    },
+    {
+      "name": "relocated-temporary-environment-refresh-omitted",
+      "confirmed": true,
+      "artifact": {
+        "bundle": "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-qj3sws4c",
+        "sha256": "a4f08b0a449d64e5fed6f8da6b323e6b0c2fa50333b5d02193f1fb1c1ddc3cc1",
+        "files": [
+          ".ai/scripts/scratch.py",
+          "docs/assurance/native-launch-2-review-enforcement.py",
+          "docs/assurance/prepare-native-2-review-enforcement.py",
+          "docs/assurance/run-native-2-review-enforcement.py",
+          "docs/assurance/test-native-preparation-2-review-enforcement.py"
+        ]
+      },
+      "killed": true,
+      "command": [
+        "/usr/bin/python3",
+        "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/artifacts.py",
+        "run",
+        "--bundle",
+        "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-qj3sws4c",
+        "--sha256",
+        "a4f08b0a449d64e5fed6f8da6b323e6b0c2fa50333b5d02193f1fb1c1ddc3cc1",
+        "--timeout",
+        "30",
+        "--",
+        "/usr/bin/python3",
+        "{artifact:docs/assurance/test-native-preparation-2-review-enforcement.py}",
+        "TrustPolicyTests.test_git_receipts_are_external_before_native_execution"
+      ],
+      "exit": 1,
+      "output": "F\n======================================================================\nFAIL: test_git_receipts_are_external_before_native_execution (__main__.TrustPolicyTests.test_git_receipts_are_external_before_native_execution)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-qj3sws4c/docs/assurance/test-native-preparation-2-review-enforcement.py\", line 156, in test_git_receipts_are_external_before_native_execution\n    self.assertEqual(Path(os.environ[name]), expected)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: Posix[55 chars]/tmp7og6qj0m/attempt/repo/.git/okf-scratch') != Posix[55 chars]/tmp7og6qj0m/operator/retained/codex/git-metadata/okf-scratch')\n\n----------------------------------------------------------------------\nRan 1 test in 0.012s\n\nFAILED (failures=1)\ntiming: {\"elapsed_seconds\": 0.114, \"exit_code\": 1, \"finished_at\": \"2026-10-28T21:59:33.097378+00:00\", \"label\": \"artifact-acceptance\", \"outcome\": \"FAIL\", \"started_at\": \"2026-10-28T21:59:32.983701+00:00\"}\n"
+    }
+  ],
+  "Claude_Codex_app_server_processes": 0,
+  "model_calls": 0,
+  "scope": "local Git/Python/mocked policy and retention; native qualification remains unverified"
+}

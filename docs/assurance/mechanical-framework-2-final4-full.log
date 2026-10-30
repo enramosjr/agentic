@@ -1,0 +1,238 @@
+======================================================================
+ERROR: test_scratch.ScratchTests.test_system_temp_symlink_is_rejected_without_fallback
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_scratch.py", line 37, in test_system_temp_symlink_is_rejected_without_fallback
+    (self.repo / ".git" / "okf-scratch").symlink_to("/tmp", target_is_directory=True)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 1213, in symlink_to
+    os.symlink(target, self, target_is_directory)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileExistsError: [Errno 17] File exists: '/tmp' -> '/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp75iubnb3/.git/okf-scratch'
+
+======================================================================
+FAIL: test_brownfield_deltas.ReceiptRecoveryTests.test_third_state_refused
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_brownfield_deltas.py", line 362, in test_third_state_refused
+    self.assertEqual(before, self.snapshot())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'.gi[49462 chars]18614453125456), '.git/okf-scratch/review/305e[1514612 chars]758)} != {'.gi[49462 chars]18614556269818), '.git/okf-scratch/review/305e[1515044 chars]758)}
+Diff is 6498284 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_retrospectives.RetrospectiveTests.test_compatibility
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_retrospectives.py", line 154, in test_compatibility
+    output = self.hook({'hook_event_name': 'PreToolUse', 'tool_name': 'Bash',
+                        'tool_input': {'command': command}, 'cwd': str(self.repo)})
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_lifecycle.py", line 107, in hook
+    self.assertEqual(result.returncode, 0, result.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : lifecycle: retrospective: lesson numbers must be existing, unique and ascending
+
+
+======================================================================
+FAIL: test_worktree_hooks.WorktreeHookTests.test_invalid_explicit_workdir_denies_guarded_operation (workdir='  ', tool='Bash')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_worktree_hooks.py", line 136, in test_invalid_explicit_workdir_denies_guarded_operation
+    self.assertIn('workdir', self.decision(data, True))
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'workdir' not found in '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "Blocked by .ai/scripts/lifecycle.py: Git target metadata probe unavailable; mutation refused"}}\n'
+
+======================================================================
+FAIL: test_worktree_hooks.WorktreeHookTests.test_invalid_explicit_workdir_denies_guarded_operation (workdir=4, tool='Bash')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_worktree_hooks.py", line 136, in test_invalid_explicit_workdir_denies_guarded_operation
+    self.assertIn('workdir', self.decision(data, True))
+                             ~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_worktree_hooks.py", line 70, in decision
+    output = self.hook(data, **env)
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_worktree_hooks.py", line 66, in hook
+    self.assertEqual(result.returncode, 0, result.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpusxh4jgm/outer/.ai/scripts/lifecycle.py", line 1993, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpusxh4jgm/outer/.ai/scripts/lifecycle.py", line 1977, in main
+    return args.func(args)
+           ~~~~~~~~~^^^^^^
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpusxh4jgm/outer/.ai/scripts/lifecycle.py", line 1750, in cmd_hook
+    for protected_root in review_guard.operation_roots(data):
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpusxh4jgm/outer/.ai/scripts/review_guard.py", line 849, in operation_roots
+    base = base / Path(values['workdir']).expanduser()
+                  ~~~~^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 150, in __init__
+    raise TypeError(
+    ...<2 lines>...
+        f"not {type(path).__name__!r}")
+TypeError: argument should be a str or an os.PathLike object where __fspath__ returns a str, not 'int'
+
+
+======================================================================
+FAIL: test_worktree_hooks.WorktreeHookTests.test_invalid_explicit_workdir_denies_guarded_operation (workdir=4, tool='Shell')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_worktree_hooks.py", line 136, in test_invalid_explicit_workdir_denies_guarded_operation
+    self.assertIn('workdir', self.decision(data, True))
+                             ~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_worktree_hooks.py", line 70, in decision
+    output = self.hook(data, **env)
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_worktree_hooks.py", line 66, in hook
+    self.assertEqual(result.returncode, 0, result.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpusxh4jgm/outer/.ai/scripts/lifecycle.py", line 1993, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpusxh4jgm/outer/.ai/scripts/lifecycle.py", line 1977, in main
+    return args.func(args)
+           ~~~~~~~~~^^^^^^
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpusxh4jgm/outer/.ai/scripts/lifecycle.py", line 1750, in cmd_hook
+    for protected_root in review_guard.operation_roots(data):
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpusxh4jgm/outer/.ai/scripts/review_guard.py", line 849, in operation_roots
+    base = base / Path(values['workdir']).expanduser()
+                  ~~~~^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 150, in __init__
+    raise TypeError(
+    ...<2 lines>...
+        f"not {type(path).__name__!r}")
+TypeError: argument should be a str or an os.PathLike object where __fspath__ returns a str, not 'int'
+
+
+======================================================================
+FAIL: test_worktree_hooks.WorktreeHookTests.test_invalid_explicit_workdir_denies_guarded_operation (workdir=4, tool='Edit')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_worktree_hooks.py", line 136, in test_invalid_explicit_workdir_denies_guarded_operation
+    self.assertIn('workdir', self.decision(data, True))
+                             ~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_worktree_hooks.py", line 70, in decision
+    output = self.hook(data, **env)
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_worktree_hooks.py", line 66, in hook
+    self.assertEqual(result.returncode, 0, result.stderr)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 1 != 0 : Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpusxh4jgm/outer/.ai/scripts/lifecycle.py", line 1993, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpusxh4jgm/outer/.ai/scripts/lifecycle.py", line 1977, in main
+    return args.func(args)
+           ~~~~~~~~~^^^^^^
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpusxh4jgm/outer/.ai/scripts/lifecycle.py", line 1750, in cmd_hook
+    for protected_root in review_guard.operation_roots(data):
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpusxh4jgm/outer/.ai/scripts/review_guard.py", line 849, in operation_roots
+    base = base / Path(values['workdir']).expanduser()
+                  ~~~~^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/pathlib/__init__.py", line 150, in __init__
+    raise TypeError(
+    ...<2 lines>...
+        f"not {type(path).__name__!r}")
+TypeError: argument should be a str or an os.PathLike object where __fspath__ returns a str, not 'int'
+
+
+======================================================================
+FAIL: test_worktree_hooks.WorktreeHookTests.test_invalid_explicit_workdir_denies_guarded_operation (workdir='/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpusxh4jgm/missing', tool='Bash')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_worktree_hooks.py", line 136, in test_invalid_explicit_workdir_denies_guarded_operation
+    self.assertIn('workdir', self.decision(data, True))
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'workdir' not found in '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "Blocked by .ai/scripts/lifecycle.py: Git target metadata probe unavailable; mutation refused"}}\n'
+
+======================================================================
+FAIL: test_worktree_hooks.WorktreeHookTests.test_invalid_explicit_workdir_denies_guarded_operation (workdir='/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpusxh4jgm/outer/app.py', tool='Bash')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_worktree_hooks.py", line 136, in test_invalid_explicit_workdir_denies_guarded_operation
+    self.assertIn('workdir', self.decision(data, True))
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'workdir' not found in '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "Blocked by .ai/scripts/lifecycle.py: Git target metadata probe unavailable; mutation refused"}}\n'
+
+======================================================================
+FAIL: test_worktree_hooks.WorktreeHookTests.test_invalid_explicit_workdir_denies_guarded_operation (workdir='/home/enramosjr/Projects/agentic/.git/okf-scratch/tmpusxh4jgm/plain', tool='Bash')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_worktree_hooks.py", line 136, in test_invalid_explicit_workdir_denies_guarded_operation
+    self.assertIn('workdir', self.decision(data, True))
+    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'workdir' not found in '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": "Blocked by .ai/scripts/lifecycle.py: Git target cannot be established; use an existing literal checkout or git -C"}}\n'
+
+======================================================================
+FAIL: test_onboard.OnboardE2ETests.test_cited_drafts_validate_and_second_run_is_noop
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_onboard.py", line 82, in test_cited_drafts_validate_and_second_run_is_noop
+    self.assertEqual(before, self.snapshot())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'pyp[40348 chars]18630593602299), '.git/okf-scratch/review/88a0[462910 chars]930)} != {'pyp[40348 chars]18630753214520), '.git/okf-scratch/review/88a0[463342 chars]930)}
+Diff is 1995561 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_onboard.OnboardE2ETests.test_preflight_refusal_before_initialization
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_onboard.py", line 95, in test_preflight_refusal_before_initialization
+    self.assertEqual(before, self.snapshot())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'pyp[34548 chars].git/logs/refs/heads/master': (b'0000000000000[462460 chars]930)} != {'pyp[34548 chars].git/okf-scratch/review/e4c221c0e253e44319a232[463309 chars]930)}
+Diff is 1971909 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_onboard.OnboardE2ETests.test_reserved_index_directory_refused_without_initialization
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_onboard.py", line 102, in test_reserved_index_directory_refused_without_initialization
+    self.assertEqual(before, self.snapshot())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'pyp[34545 chars].git/logs/refs/heads/master': (b'0000000000000[462460 chars]930)} != {'pyp[34545 chars].git/okf-scratch/review/30bdde4a12889e660d8216[463309 chars]930)}
+Diff is 1971906 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_assurance.ExitCodeTests.test_run_with_report_flags_is_refused
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_assurance.py", line 386, in test_run_with_report_flags_is_refused
+    self.assertEqual(self.snapshot(), before)  # nothing ran, nothing recorded
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'/ho[704601 chars]cers/e104c4f7788d46949573892e6bcaa0cf/owner.js[3351 chars]}\n'} != {'/ho[704601 chars]cers/3abf923b56bf4e99a7c011b3a9c09e3e/borrower[1427 chars]}\n'}
+Diff is 18166637 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_brownfield_deltas.MergeCliTests.test_apply_edited_spec_refused
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_brownfield_deltas.py", line 227, in test_apply_edited_spec_refused
+    self.assertEqual(before, self.snapshot())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'.gi[45850 chars]18641431653750), '.git/okf-scratch/review/1015[1514180 chars]758)} != {'.gi[45850 chars]18641550420083), '.git/okf-scratch/review/1015[1514612 chars]758)}
+Diff is 6471972 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_brownfield_deltas.MergeCliTests.test_invalid_log_destination_refused_before_receipt_or_target_write
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_brownfield_deltas.py", line 199, in test_invalid_log_destination_refused_before_receipt_or_target_write
+    self.assertEqual(before, self.snapshot())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'.gi[45875 chars]18643057505034), '.git/okf-scratch/review/5dde[1514180 chars]758)} != {'.gi[45875 chars]18643176324468), '.git/okf-scratch/review/5dde[1514612 chars]758)}
+Diff is 6472008 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_brownfield_deltas.MergeCliTests.test_preview_then_approved_apply_and_noop
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_brownfield_deltas.py", line 219, in test_preview_then_approved_apply_and_noop
+    self.assertEqual(after, self.snapshot())
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'.gi[49563 chars]18644277941026), '.git/okf-scratch/review/54df[1515041 chars]758)} != {'.gi[49563 chars]18644394117322), '.git/okf-scratch/review/54df[1515473 chars]758)}
+Diff is 6508934 characters long. Set self.maxDiff to None to see it.
+
+Ran 796 tests in 92.2s with 8 workers: FAILED (failures=16, errors=1)

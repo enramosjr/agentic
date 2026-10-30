@@ -1,0 +1,35 @@
+{
+  "errors": [],
+  "expected_failures": [],
+  "failures": [],
+  "finished": [
+    "test_assurance.StatusTests.test_changed_command_is_unverified",
+    "test_assurance.StatusTests.test_deleted_input_is_stale",
+    "test_assurance.StatusTests.test_evidence_from_earlier_committed_record",
+    "test_assurance.StatusTests.test_fresh_evidence_is_verified",
+    "test_assurance.StatusTests.test_input_edit_is_stale_and_names_file",
+    "test_assurance.StatusTests.test_newer_failure_wins",
+    "test_assurance.StatusTests.test_unrelated_edit_stays_verified"
+  ],
+  "loaded": [
+    "test_assurance.StatusTests.test_changed_command_is_unverified",
+    "test_assurance.StatusTests.test_deleted_input_is_stale",
+    "test_assurance.StatusTests.test_evidence_from_earlier_committed_record",
+    "test_assurance.StatusTests.test_fresh_evidence_is_verified",
+    "test_assurance.StatusTests.test_input_edit_is_stale_and_names_file",
+    "test_assurance.StatusTests.test_newer_failure_wins",
+    "test_assurance.StatusTests.test_unrelated_edit_stays_verified"
+  ],
+  "run": 7,
+  "skips": [],
+  "started": [
+    "test_assurance.StatusTests.test_changed_command_is_unverified",
+    "test_assurance.StatusTests.test_deleted_input_is_stale",
+    "test_assurance.StatusTests.test_evidence_from_earlier_committed_record",
+    "test_assurance.StatusTests.test_fresh_evidence_is_verified",
+    "test_assurance.StatusTests.test_input_edit_is_stale_and_names_file",
+    "test_assurance.StatusTests.test_newer_failure_wins",
+    "test_assurance.StatusTests.test_unrelated_edit_stays_verified"
+  ],
+  "unexpected": []
+}

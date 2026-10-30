@@ -1,0 +1,62 @@
+{
+  "errors": [],
+  "expected_failures": [],
+  "failures": [
+    {
+      "frames": [
+        {
+          "file": "case.py",
+          "function": "testPartExecutor",
+          "line": 58,
+          "locals": {}
+        },
+        {
+          "file": "case.py",
+          "function": "run",
+          "line": 669,
+          "locals": {}
+        },
+        {
+          "file": "case.py",
+          "function": "_callTestMethod",
+          "line": 615,
+          "locals": {}
+        },
+        {
+          "file": "test_assurance.py",
+          "function": "test_text_and_json_fields_without_output",
+          "line": 336,
+          "locals": {}
+        },
+        {
+          "file": "case.py",
+          "function": "assertEqual",
+          "line": 925,
+          "locals": {}
+        },
+        {
+          "file": "case.py",
+          "function": "_baseAssertEqual",
+          "line": 918,
+          "locals": {}
+        }
+      ],
+      "id": "test_assurance.ReportFormatTests.test_text_and_json_fields_without_output",
+      "message": "2 != 1",
+      "traceback": "Traceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/case.py\", line 58, in testPartExecutor\n    yield\n  File \"/usr/lib/python3.14/unittest/case.py\", line 669, in run\n    self._callTestMethod(testMethod)\n    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/unittest/case.py\", line 615, in _callTestMethod\n    result = method()\n  File \"/home/enramosjr/Projects/agentic-assurance-7/docs/assurance/closeout-c1-continuation-results/.work/N09-mutant/repo/.ai/scripts/tests/test_assurance.py\", line 336, in test_text_and_json_fields_without_output\n    self.assertEqual(data['schema_version'], 1)\n    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/unittest/case.py\", line 925, in assertEqual\n    assertion_func(first, second, msg=msg)\n    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/unittest/case.py\", line 918, in _baseAssertEqual\n    raise self.failureException(msg)\nAssertionError: 2 != 1\n",
+      "type": "AssertionError"
+    }
+  ],
+  "finished": [
+    "test_assurance.ReportFormatTests.test_text_and_json_fields_without_output"
+  ],
+  "loaded": [
+    "test_assurance.ReportFormatTests.test_text_and_json_fields_without_output"
+  ],
+  "run": 1,
+  "skips": [],
+  "started": [
+    "test_assurance.ReportFormatTests.test_text_and_json_fields_without_output"
+  ],
+  "unexpected": []
+}

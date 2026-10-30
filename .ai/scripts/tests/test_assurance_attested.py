@@ -20,7 +20,7 @@ REPORT = '# Review\n\n## Verdict\n\n{verdict}\n\n## Validation Reviewed\n\n{cite
 def normalise(text):
     """Strip the values that differ per run: short heads, timestamps and task-id record names."""
     text = re.sub(r'head=[0-9a-f]{7}', 'head=HEAD', text)
-    text = re.sub(r'at=\d{4}-\d\d-\d\dT[\d:]+Z', 'at=NOW', text)
+    text = re.sub(r'at=\d{4}-\d\d-\d\dT[\d:]+(?:\.[0-9]{1,6})?Z', 'at=NOW', text)
     text = re.sub(r'"at": "[^"]+"', '"at": "NOW"', text)
     text = re.sub(r'"head": "[0-9a-f]{40}"', '"head": "HEAD"', text)
     return re.sub(r'[\w.-]+\.json', 'RECORD.json', text)

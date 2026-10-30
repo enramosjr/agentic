@@ -1,0 +1,20 @@
+R1 FAIL (exit 1)
+    N01: baseline PASS; intended assertion rejected; restored
+    N02: baseline PASS; intended assertion rejected; restored
+    N03: baseline PASS; intended assertion rejected; restored
+    N04: baseline PASS; intended assertion rejected; restored
+    N05: baseline PASS; intended assertion rejected; restored
+    N06: baseline PASS; intended assertion rejected; restored
+    N07: baseline PASS; intended assertion rejected; restored
+    C1 PROOF REFUSED: ProofError: ProofError: wrong changed selection
+R2 FAIL (exit 1)
+    C1 PROOF REFUSED: failed/stale evidence
+R3 FAIL (exit 1)
+    C1 PROOF REFUSED: failed/stale evidence
+R4 FAIL (exit 1)
+    C1 PROOF REFUSED: failed/stale evidence
+R5 FAIL (exit 1)
+    C1 PROOF REFUSED: failed/stale evidence
+R6 FAIL (exit 1)
+    C1 PROOF REFUSED: failed/stale evidence
+converge: 0 PASS, 6 FAIL, 0 MANUAL

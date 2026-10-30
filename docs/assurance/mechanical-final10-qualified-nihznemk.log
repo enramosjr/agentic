@@ -1,0 +1,25 @@
+test_relative_git_selectors_follow_git_directory_order (test_review_enforcement.ReadOnlyTests.test_relative_git_selectors_follow_git_directory_order) ... FAIL
+
+======================================================================
+FAIL: test_relative_git_selectors_follow_git_directory_order (test_review_enforcement.ReadOnlyTests.test_relative_git_selectors_follow_git_directory_order)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-nihznemk/.ai/scripts/tests/test_review_enforcement.py", line 720, in test_relative_git_selectors_follow_git_directory_order
+    self.assertEqual(guard.operation_roots(data), [target.resolve()])
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Lists differ: [Posi[29 chars]ts/agentic/.git/okf-scratch/tmp42d8sdmu/repo')] != [Posi[29 chars]ts/agentic/.git/okf-scratch/tmp42d8sdmu/repo/nested/selected')]
+
+First differing element 0:
+Posix[27 chars]cts/agentic/.git/okf-scratch/tmp42d8sdmu/repo')
+Posix[27 chars]cts/agentic/.git/okf-scratch/tmp42d8sdmu/repo/nested/selected')
+
+- [PosixPath('/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp42d8sdmu/repo')]
++ [PosixPath('/home/enramosjr/Projects/agentic/.git/okf-scratch/tmp42d8sdmu/repo/nested/selected')]
+?                                                                               ++++++++++++++++
+
+
+----------------------------------------------------------------------
+Ran 1 test in 0.210s
+
+FAILED (failures=1)
+timing: {"elapsed_seconds": 0.314, "exit_code": 1, "finished_at": "2026-10-28T23:35:13.520244+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T23:35:13.206359+00:00"}

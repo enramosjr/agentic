@@ -1,0 +1,20 @@
+test_inaccessible_host_allows_only_pending_enable_and_restart (test_review_enforcement.ActivationTests.test_inaccessible_host_allows_only_pending_enable_and_restart) ... ERROR
+
+======================================================================
+ERROR: test_inaccessible_host_allows_only_pending_enable_and_restart (test_review_enforcement.ActivationTests.test_inaccessible_host_allows_only_pending_enable_and_restart)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-jc08h703/.ai/scripts/tests/test_review_enforcement.py", line 122, in test_inaccessible_host_allows_only_pending_enable_and_restart
+    self.assertEqual(self.native_command('enable')[0], 0)
+                     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-jc08h703/.ai/scripts/tests/test_review_enforcement.py", line 96, in native_command
+    code = self.native.command(args)
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-jc08h703/.ai/scripts/review_native.py", line 498, in command
+    raise guard.ReviewError('observed native parent runtime identity is incomplete; restart with native hooks')
+review_guard.ReviewError: observed native parent runtime identity is incomplete; restart with native hooks
+
+----------------------------------------------------------------------
+Ran 1 test in 0.927s
+
+FAILED (errors=1)
+timing: {"elapsed_seconds": 1.015, "exit_code": 1, "finished_at": "2026-10-28T23:09:28.319836+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T23:09:27.304935+00:00"}

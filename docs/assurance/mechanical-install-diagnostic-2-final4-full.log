@@ -1,0 +1,15 @@
+.......F.........................................
+======================================================================
+FAIL: test_bootstrap_repeat_check_records_and_hook (test_install.BootstrapWorkflowTests.test_bootstrap_repeat_check_records_and_hook)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic-assurance-7/.ai/scripts/tests/test_install.py", line 214, in test_bootstrap_repeat_check_records_and_hook
+    self.assertEqual(tree_state(self.target), before)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: {'.gi[1868413 chars]18290235921402), '.git/okf-scratch/review/be79[1181 chars]141)} != {'.gi[1868413 chars]18290155574149), '.git/okf-scratch/review/be79[573 chars]868)}
+Diff is 4138427 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 49 tests in 17.967s
+
+FAILED (failures=1)

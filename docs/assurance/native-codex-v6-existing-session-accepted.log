@@ -1,0 +1,19 @@
+test_observed_session_refuses (__main__.PrebranchTests.test_observed_session_refuses) ... FAIL
+
+======================================================================
+FAIL: test_observed_session_refuses (__main__.PrebranchTests.test_observed_session_refuses)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-jr04zo_f/docs/assurance/test-native-prebranch-2-v6.py", line 92, in test_observed_session_refuses
+    self.refused('codex', 'precede native sessions and task state')
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/enramosjr/Projects/agentic/.git/okf-scratch/qualified-jr04zo_f/docs/assurance/test-native-prebranch-2-v6.py", line 61, in refused
+    with self.assertRaisesRegex(ValueError, reason):
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+AssertionError: ValueError not raised
+
+----------------------------------------------------------------------
+Ran 1 test in 0.043s
+
+FAILED (failures=1)
+timing: {"elapsed_seconds": 0.164, "exit_code": 1, "finished_at": "2026-10-28T22:46:27.260013+00:00", "label": "artifact-acceptance", "outcome": "FAIL", "started_at": "2026-10-28T22:46:27.096392+00:00"}
