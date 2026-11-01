@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "head_baseline": "43091ae42693646b25f09110d0e860b4f0560b99",
+  "sources": [
+    {
+      "revision": "43091ae42693646b25f09110d0e860b4f0560b99",
+      "path": ".ai/scripts/assurance_inputs.py",
+      "file": "43091ae42693646b25f09110d0e860b4f0560b99-assurance_inputs.py.txt",
+      "git_blob": "8d47509d998a24f0703dec54495913b32a249408",
+      "sha256": "7faa37f1bc04b55511ce84ac3b97378a4e922b574c581cdb6c4b95c1c4a3b90b"
+    },
+    {
+      "revision": "4b89221b6f1c416303452abd57fb4fb15816b2b3",
+      "path": ".ai/scripts/assurance_inputs.py",
+      "file": "4b89221b6f1c416303452abd57fb4fb15816b2b3-assurance_inputs.py.txt",
+      "git_blob": "972060235874a89091ae3c31dee423849068bb01",
+      "sha256": "c999bcaa0fbca57bbec17f91345251e3aae68e1e284ca0fa7449fa75413a9b84"
+    },
+    {
+      "revision": "c50034260a8c7e8a5ff42b44296720081dc9c039",
+      "path": ".ai/scripts/assurance_inputs.py",
+      "file": "c50034260a8c7e8a5ff42b44296720081dc9c039-assurance_inputs.py.txt",
+      "git_blob": "10cd2151c6a32d640adbcf1747e8daf89b546967",
+      "sha256": "6077e8c9ba2579034eba4a4e8a7a37f7f3bb534cd75075c4f696d58741c938f9"
+    },
+    {
+      "revision": "8cb4d804a620e0761c2bab45846e7cd62c98ddd4",
+      "path": ".ai/scripts/assurance_inputs.py",
+      "file": "8cb4d804a620e0761c2bab45846e7cd62c98ddd4-assurance_inputs.py.txt",
+      "git_blob": "3e4c2829b622ac6ad5df14f776c8c694d0f1a129",
+      "sha256": "61d736d3abbd90010e99aac9754cfe3fd2e97861b8e89c7d24472cfc415df972"
+    },
+    {
+      "revision": "0efa2240b6109f6e69fe7a5dacaa3f9be16482c2",
+      "path": ".ai/scripts/assurance_inputs.py",
+      "file": "0efa2240b6109f6e69fe7a5dacaa3f9be16482c2-assurance_inputs.py.txt",
+      "git_blob": "9df84805db772f7df5a508c31a24a0e991c7cfc2",
+      "sha256": "ef3e7eaebbe1559a0ce8f27582787fe5736690ad2abffefb20aa81f1e15c09f1"
+    },
+    {
+      "revision": "f2c0b6db99e797b99781034a7f8b4b44b17f5f00",
+      "path": ".ai/scripts/assurance_inputs.py",
+      "file": "f2c0b6db99e797b99781034a7f8b4b44b17f5f00-assurance_inputs.py.txt",
+      "git_blob": "4c88104ab01094e68cea3137b40ce74b92197697",
+      "sha256": "eada059d49e1d6d3047a37613df2e61ad42b8763bc9bb985d487f391af369ec8"
+    },
+    {
+      "revision": "22c65521b281fce485ec5d10e45359cded53ec3f",
+      "path": ".ai/scripts/assurance_inputs.py",
+      "file": "22c65521b281fce485ec5d10e45359cded53ec3f-assurance_inputs.py.txt",
+      "git_blob": "15a0fdbe52a82d0221306bf6e2a2d83502ca7143",
+      "sha256": "b975f643122d2836c634a89efd82f3905c346489f9d4cba020b386475199c9df"
+    },
+    {
+      "revision": "cf158b53b9c164b22a3172792ab3c86980106e0e",
+      "path": ".ai/scripts/assurance_inputs.py",
+      "file": "cf158b53b9c164b22a3172792ab3c86980106e0e-assurance_inputs.py.txt",
+      "git_blob": "09f25e176e2c00a4c65093114cf77f8019f60b56",
+      "sha256": "31778e4b930b2ae3b0d9ebc6b6142f05968a4aebf26ab3fcb5566e23397e4d3d"
+    },
+    {
+      "revision": "e702aa9a2be85992d0590d14d691e74adcfcec3d",
+      "path": ".ai/scripts/assurance_inputs.py",
+      "file": "e702aa9a2be85992d0590d14d691e74adcfcec3d-assurance_inputs.py.txt",
+      "git_blob": "d552591632851a33c562daae93743445f5474c32",
+      "sha256": "3283c22fa51cb441aefbf0fe214e3a6b9fb18e5dad56f00868488677fa44413c"
+    },
+    {
+      "revision": "87b8f5fdbf86fb1a7169a7fb8cd02d066bba5e8f",
+      "path": ".ai/scripts/assurance_inputs.py",
+      "file": "87b8f5fdbf86fb1a7169a7fb8cd02d066bba5e8f-assurance_inputs.py.txt",
+      "git_blob": "e6615fcf1bc8a20a98016b56db8338500123b2fa",
+      "sha256": "ac9ca47f0373d72a590bd34a581eb5b79de8576103111f4bbb9d3e38663a8119"
+    },
+    {
+      "revision": "22c65521b281fce485ec5d10e45359cded53ec3f",
+      "path": ".ai/lifecycle.md",
+      "file": "22c65521b281fce485ec5d10e45359cded53ec3f-lifecycle.md",
+      "git_blob": "935f5cbe8335dae011cb0797427fb92a2f8af3de",
+      "sha256": "bf30923c4b043d75c40cb1b2145e2867b02f3a83a5f65aed52f33abf8ae664fd"
+    },
+    {
+      "revision": "cf158b53b9c164b22a3172792ab3c86980106e0e",
+      "path": ".ai/lifecycle.md",
+      "file": "cf158b53b9c164b22a3172792ab3c86980106e0e-lifecycle.md",
+      "git_blob": "02a8f03f05de7b5c8ca6073552160e3442787a98",
+      "sha256": "3984f5f99aafeb482f73dd065cba26f42f9c4e49eae2ea6c868b398412020490"
+    },
+    {
+      "revision": "e702aa9a2be85992d0590d14d691e74adcfcec3d",
+      "path": ".ai/lifecycle.md",
+      "file": "e702aa9a2be85992d0590d14d691e74adcfcec3d-lifecycle.md",
+      "git_blob": "6f4438e47aa2d15421053e27605771d1451c2afc",
+      "sha256": "006b3f01817526342906983a1f5b23871822b98f5a5f76b1f7bb8305f3d72ce4"
+    },
+    {
+      "revision": "87b8f5fdbf86fb1a7169a7fb8cd02d066bba5e8f",
+      "path": ".ai/lifecycle.md",
+      "file": "87b8f5fdbf86fb1a7169a7fb8cd02d066bba5e8f-lifecycle.md",
+      "git_blob": "ec69f91cc9c4e97c6bd48a698f2e5cb9d8e35aa3",
+      "sha256": "be726e6adfd56d79045403196612042ff9f330dea03a014f166864fc9d57f84c"
+    }
+  ]
+}

@@ -93,6 +93,29 @@ def commands(data, flat=False, require_commands=False):
     return sorted(result)
 
 
+def expand_managed_matcher(groups, desired, previous):
+    """Replace only a redundant canonical command's literal matcher subset."""
+    hooks = desired.get("hooks", [])
+    if len(hooks) != 1 or hooks[0].get("type", "command") != "command" or hooks[0].get("command") not in previous:
+        return
+    pattern = r"[A-Za-z][A-Za-z0-9_]*(?:\|[A-Za-z][A-Za-z0-9_]*)*"
+    matcher = desired.get("matcher")
+    if not isinstance(matcher, str) or not re.fullmatch(pattern, matcher):
+        return
+    wanted = set(matcher.split("|"))
+    other = {key: value for key, value in desired.items() if key != "matcher"}
+    for group in list(groups):
+        old = group.get("matcher")
+        if (not isinstance(old, str) or not re.fullmatch(pattern, old)
+                or not set(old.split("|")) < wanted
+                or {key: value for key, value in group.items() if key != "matcher"} != other):
+            continue
+        if desired in groups:
+            groups.remove(group)
+        else:
+            group["matcher"] = matcher
+
+
 def merge_hooks(adopter, kit, previous=(), flat=False):
     result = copy.deepcopy(adopter)
     for key, value in kit.items():
@@ -112,6 +135,7 @@ def merge_hooks(adopter, kit, previous=(), flat=False):
                 if not any((h.get("command"), h.get("matcher")) == (group["command"], group.get("matcher")) for h in dest):
                     dest.append(copy.deepcopy(group))
             else:
+                expand_managed_matcher(dest, group, previous)
                 matches = [g for g in dest if g.get("matcher") == group.get("matcher")]
                 if not matches:
                     dest.append(copy.deepcopy(group))

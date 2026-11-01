@@ -11,6 +11,7 @@ import sys
 import tempfile
 import unittest
 import contextlib
+import copy
 import io
 from unittest.mock import patch
 
@@ -313,6 +314,92 @@ class HookMergeTests(InstallerCase):
         self.assertEqual(self.merge(kit, kit), kit)
         self.assertEqual(len(self.merge({"hooks": {}}, kit)["hooks"]["Edit"]), 2)
 
+    def test_manifested_literal_matcher_expansion_preserves_coverage(self):
+        command = 'python3 lifecycle.py hook'
+        hook = {"type": "command", "command": command, "timeout": 10}
+        old = {"matcher": "Write|Edit|MultiEdit|NotebookEdit", "hooks": [hook]}
+        new = {"matcher": old["matcher"] + "|Delete", "hooks": [hook]}
+        ours = {"permissions": {"allow": ["ours"]}, "hooks": {"PreToolUse": [old]}}
+        kit = {"hooks": {"PreToolUse": [new]}}
+        before = copy.deepcopy(ours)
+        merged = self.merge(ours, kit, [command])
+        self.assertEqual(merged, {**ours, "hooks": {"PreToolUse": [new]}})
+        self.assertEqual(ours, before)
+        self.assertEqual(self.merge(merged, kit, [command]), merged)
+        for tool in new["matcher"].split("|"):
+            self.assertEqual(sum(tool in group["matcher"].split("|")
+                                 for group in merged["hooks"]["PreToolUse"]), 1)
+
+    def test_manifested_expansion_coalesces_already_present_group(self):
+        command = 'python3 lifecycle.py hook'
+        hook = {"type": "command", "command": command, "timeout": 10}
+        old = {"matcher": "Write|Edit", "hooks": [hook]}
+        new = {"matcher": "Write|Edit|Delete", "hooks": [hook]}
+        kit = {"hooks": {"PreToolUse": [new]}}
+        for groups in ([old, new], [new, old]):
+            with self.subTest(groups=groups):
+                ours = {"hooks": {"PreToolUse": groups}}
+                before = copy.deepcopy(ours)
+                self.assertEqual(self.merge(ours, kit, [command]), kit)
+                self.assertEqual(ours, before)
+
+    def test_matcher_expansion_keeps_custom_or_unproven_groups(self):
+        command = 'python3 lifecycle.py hook'
+        hook = {"type": "command", "command": command, "timeout": 10}
+        new = {"matcher": "Write|Edit|Delete", "hooks": [hook]}
+        kit = {"hooks": {"PreToolUse": [new]}}
+        cases = [
+            ("unmanifested", {"matcher": "Write|Edit", "hooks": [hook]}, []),
+            ("options", {"matcher": "Write|Edit", "hooks": [{**hook, "timeout": 20}]}, [command]),
+            ("metadata", {"matcher": "Write|Edit", "hooks": [hook], "ours": True}, [command]),
+            ("mixed", {"matcher": "Write|Edit", "hooks": [hook, {"command": "ours"}]}, [command]),
+            ("prompt", {"matcher": "Write|Edit", "hooks": [{"type": "prompt", "prompt": "ours"}]}, [command]),
+            ("regex", {"matcher": "Write.*|Edit", "hooks": [hook]}, [command]),
+            ("non-subset", {"matcher": "Write|Read", "hooks": [hook]}, [command]),
+            ("same-set", {"matcher": "Edit|Write|Delete", "hooks": [hook]}, [command]),
+            ("missing", {"hooks": [hook]}, [command]),
+        ]
+        for name, group, previous in cases:
+            with self.subTest(name=name):
+                ours = {"hooks": {"PreToolUse": [group], "OtherEvent": [group]}}
+                before = copy.deepcopy(ours)
+                merged = self.merge(ours, kit, previous)
+                self.assertIn(group, merged["hooks"]["PreToolUse"])
+                self.assertEqual(merged["hooks"]["OtherEvent"], [group])
+                self.assertEqual(ours, before)
+
+    def test_actual_legacy_matcher_upgrade_keeps_adopter_content(self):
+        name = ".claude/settings.json"
+        desired = json.loads((self.template / name).read_bytes())
+        legacy = copy.deepcopy(desired)
+        expanded = "Write|Edit|MultiEdit|NotebookEdit|Delete"
+        groups = legacy["hooks"]["PreToolUse"]
+        group = next(group for group in groups if group.get("matcher") == expanded)
+        group["matcher"] = expanded.removesuffix("|Delete")
+        self.write(name, json.dumps(legacy), template=True)
+        prompt = {"type": "prompt", "prompt": "Keep adopter review"}
+        self.write(name, json.dumps({"permissions": {"allow": ["ours"]},
+                                    "hooks": {"Stop": [{"hooks": [prompt]}]}}))
+        self.write("AGENTS.md", "# Adopter instructions\n")
+        self.commit()
+        self.run_install()
+        self.commit()
+        self.write(name, json.dumps(desired), template=True)
+        self.run_install()
+        actual = json.loads((self.target / name).read_bytes())
+        self.assertEqual(actual["permissions"], {"allow": ["ours"]})
+        expected_stop = copy.deepcopy(desired["hooks"]["Stop"])
+        expected_stop[0]["hooks"].insert(0, prompt)
+        self.assertEqual(actual["hooks"]["Stop"], expected_stop)
+        self.assertTrue((self.target / "AGENTS.md").read_text().startswith("# Adopter instructions\n"))
+        matchers = [group.get("matcher") for group in actual["hooks"]["PreToolUse"]]
+        self.assertNotIn(expanded.removesuffix("|Delete"), matchers)
+        self.assertEqual(matchers.count(expanded), 1)
+        self.run_install("--check")
+        before = self.snapshot()
+        self.assertIn("up to date", self.run_install())
+        self.assertEqual(self.snapshot(), before)
+
     def test_cursor_flat_merge_dedup_and_version_kept(self):
         ours = {"version": 9, "hooks": {"edit": [{"command": "kit", "matcher": "x"}, {"command": "ours"}]}}
         kit = {"version": 1, "hooks": {"edit": [{"command": "kit", "matcher": "x"}, {"command": "kit", "matcher": "y"}]}}
@@ -364,6 +451,14 @@ class InstructionsTests(InstallerCase):
     def test_absent_agents_md_gets_block_only(self):
         self.run_install()
         self.assertEqual((self.target / "AGENTS.md").read_bytes(), install.BEGIN + b"\n" + (self.template / "AGENTS.md").read_bytes() + install.END + b"\n")
+
+    def test_installed_governance_including_markers_stays_below_budget(self):
+        self.run_install()
+        body = (self.template / "AGENTS.md").read_bytes()
+        installed = (self.target / "AGENTS.md").read_bytes()
+        self.assertEqual(installed, install.BEGIN + b"\n" + body + install.END + b"\n")
+        self.assertLess(len(body.decode().encode()), 30_000)
+        self.assertLess(len(installed.decode().encode()), 30_000)
 
     def test_existing_agents_md_bytes_kept_and_block_appended(self):
         self.write("AGENTS.md", b"# Ours\r\n\xff")

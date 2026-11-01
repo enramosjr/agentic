@@ -18,6 +18,7 @@ sys.path.insert(0, str(SCRIPTS))
 import disk_tmp  # noqa: E402,F401
 import ledger  # noqa: E402
 import assurance  # noqa: E402
+from compatibility_baselines import HEAD_BASELINE, read_baseline  # noqa: E402
 
 # Handwritten read oracle, deliberately independent of the exporter's catalog.
 COMMAND = ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests', '-p', 'test_run_tests.py']
@@ -698,13 +699,11 @@ class HarnessWiringProfileTests(HarnessWiringFixture):  # R1
         self.refused(cwd=self.root / '.ai')
 
     def assert_prior_profiles(self):
-        # Compare unchanged catalog entries with the delivered, invoking HEAD.
+        # Compare unchanged catalog entries with the independently pinned delivery.
         # This baseline is independent of the modified worktree catalog.
-        result = subprocess.run(['git', 'show', 'HEAD:.ai/scripts/assurance_inputs.py'],
-                                cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        baseline_source = read_baseline(HEAD_BASELINE, '.ai/scripts/assurance_inputs.py')
         import ast
-        tree = ast.parse(result.stdout)
+        tree = ast.parse(baseline_source)
         baseline = next(ast.literal_eval(node.value) for node in tree.body
                         if isinstance(node, ast.Assign)
                         and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in node.targets))
@@ -1073,11 +1072,9 @@ class ReviewerReportFixture(Fixture):
 
     def assert_prior_profiles(self):
         HarnessWiringProfileTests.assert_prior_profiles(self)
-        result = subprocess.run(['git', 'show', 'HEAD:.ai/scripts/assurance_inputs.py'],
-                                cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        baseline_source = read_baseline(HEAD_BASELINE, '.ai/scripts/assurance_inputs.py')
         import ast
-        tree = ast.parse(result.stdout)
+        tree = ast.parse(baseline_source)
         baseline = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign)
                         and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in n.targets))
         expected = next(p for p in baseline if p['id'] == 'python-harness-wiring')
@@ -1492,11 +1489,9 @@ class InstallerDocFixture(Fixture):
                 path.write_bytes(original)
 
     def assert_prior_profiles(self):
-        result = subprocess.run(['git', 'show', 'HEAD:.ai/scripts/assurance_inputs.py'],
-                                cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        baseline_source = read_baseline(HEAD_BASELINE, '.ai/scripts/assurance_inputs.py')
         import ast
-        baseline = next(ast.literal_eval(n.value) for n in ast.parse(result.stdout).body
+        baseline = next(ast.literal_eval(n.value) for n in ast.parse(baseline_source).body
                         if isinstance(n, ast.Assign)
                         and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in n.targets))
         identities = ('python-runner-test', 'python-architecture-compatibility',
@@ -1953,12 +1948,9 @@ class ValidationPolicyFixture(Fixture):
                 path.write_bytes(original)
 
     def assert_prior_profiles(self):
-        result = subprocess.run(
-            ['git', 'show', '4b89221b6f1c416303452abd57fb4fb15816b2b3:.ai/scripts/assurance_inputs.py'],
-            cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        baseline_source = read_baseline('4b89221b6f1c416303452abd57fb4fb15816b2b3', '.ai/scripts/assurance_inputs.py')
         import ast
-        baseline = next(ast.literal_eval(n.value) for n in ast.parse(result.stdout).body
+        baseline = next(ast.literal_eval(n.value) for n in ast.parse(baseline_source).body
                         if isinstance(n, ast.Assign)
                         and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in n.targets))
         identities = ('python-runner-test', 'python-architecture-compatibility', 'python-harness-wiring',
@@ -2415,12 +2407,9 @@ class AuditDocFixture(Fixture):
                 path.write_bytes(original)
 
     def assert_prior_profiles(self):
-        result = subprocess.run(
-            ['git', 'show', 'c50034260a8c7e8a5ff42b44296720081dc9c039:.ai/scripts/assurance_inputs.py'],
-            cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        baseline_source = read_baseline('c50034260a8c7e8a5ff42b44296720081dc9c039', '.ai/scripts/assurance_inputs.py')
         import ast
-        baseline = next(ast.literal_eval(n.value) for n in ast.parse(result.stdout).body
+        baseline = next(ast.literal_eval(n.value) for n in ast.parse(baseline_source).body
                         if isinstance(n, ast.Assign)
                         and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in n.targets))
         identities = ('python-runner-test', 'python-architecture-compatibility', 'python-harness-wiring',
@@ -2887,12 +2876,9 @@ class AnalysisConvergenceDocFixture(Fixture):
                 path.write_bytes(original)
 
     def assert_prior_profiles(self):
-        result = subprocess.run(
-            ['git', 'show', '8cb4d804a620e0761c2bab45846e7cd62c98ddd4:.ai/scripts/assurance_inputs.py'],
-            cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        baseline_source = read_baseline('8cb4d804a620e0761c2bab45846e7cd62c98ddd4', '.ai/scripts/assurance_inputs.py')
         import ast
-        baseline = next(ast.literal_eval(n.value) for n in ast.parse(result.stdout).body
+        baseline = next(ast.literal_eval(n.value) for n in ast.parse(baseline_source).body
                         if isinstance(n, ast.Assign)
                         and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in n.targets))
         identities = ('python-runner-test', 'python-architecture-compatibility', 'python-harness-wiring',
@@ -3387,12 +3373,9 @@ class StageDocFixture(Fixture):
                 path.write_bytes(original)
 
     def assert_prior_profiles(self):
-        result = subprocess.run(
-            ['git', 'show', '0efa2240b6109f6e69fe7a5dacaa3f9be16482c2:.ai/scripts/assurance_inputs.py'],
-            cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        baseline_source = read_baseline('0efa2240b6109f6e69fe7a5dacaa3f9be16482c2', '.ai/scripts/assurance_inputs.py')
         import ast
-        baseline = next(ast.literal_eval(n.value) for n in ast.parse(result.stdout).body
+        baseline = next(ast.literal_eval(n.value) for n in ast.parse(baseline_source).body
                         if isinstance(n, ast.Assign)
                         and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in n.targets))
         identities = ('python-runner-test', 'python-architecture-compatibility', 'python-harness-wiring',
@@ -3922,12 +3905,9 @@ class TierDocFixture(Fixture):
                 path.write_bytes(original)
 
     def assert_prior_profiles(self):
-        result = subprocess.run(
-            ['git', 'show', 'f2c0b6db99e797b99781034a7f8b4b44b17f5f00:.ai/scripts/assurance_inputs.py'],
-            cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        baseline_source = read_baseline('f2c0b6db99e797b99781034a7f8b4b44b17f5f00', '.ai/scripts/assurance_inputs.py')
         import ast
-        baseline = next(ast.literal_eval(n.value) for n in ast.parse(result.stdout).body
+        baseline = next(ast.literal_eval(n.value) for n in ast.parse(baseline_source).body
                         if isinstance(n, ast.Assign)
                         and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in n.targets))
         identities = ('python-runner-test', 'python-architecture-compatibility', 'python-harness-wiring',
@@ -4444,12 +4424,9 @@ class AssuranceDocFixture(Fixture):
                 self.assertEqual(path.read_bytes(), original)
 
     def assert_prior_profiles(self):
-        result = subprocess.run(
-            ['git', 'show', '22c65521b281fce485ec5d10e45359cded53ec3f:.ai/scripts/assurance_inputs.py'],
-            cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        baseline_source = read_baseline('22c65521b281fce485ec5d10e45359cded53ec3f', '.ai/scripts/assurance_inputs.py')
         import ast
-        baseline = next(ast.literal_eval(n.value) for n in ast.parse(result.stdout).body
+        baseline = next(ast.literal_eval(n.value) for n in ast.parse(baseline_source).body
                         if isinstance(n, ast.Assign)
                         and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in n.targets))
         identities = ('python-runner-test', 'python-architecture-compatibility', 'python-harness-wiring',
@@ -4706,11 +4683,8 @@ class AssuranceDocCompatibilityTests(AssuranceDocFixture):  # R4
                        'conservative', 'explicit', 'manual', 'ten prior profiles',
                        *ASSURANCE_DOC_INPUTS):
             self.assertIn(phrase, guide)
-        baseline = subprocess.run(['git', 'show',
-            '22c65521b281fce485ec5d10e45359cded53ec3f:.ai/lifecycle.md'],
-            cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
-        self.assertEqual(baseline.returncode, 0, baseline.stderr)
-        for paragraph in baseline.stdout.split('\n\n'):
+        baseline_source = read_baseline('22c65521b281fce485ec5d10e45359cded53ec3f', '.ai/lifecycle.md')
+        for paragraph in baseline_source.split('\n\n'):
             self.assertIn(paragraph, guide, 'previous guide paragraph changed')
 
 
@@ -4982,11 +4956,9 @@ class AgentsBudgetFixture(Fixture):
                 self.assertEqual(path.read_bytes(), original)
 
     def assert_prior_profiles(self):
-        result = subprocess.run(['git', 'show', AGENTS_BUDGET_HEAD + ':.ai/scripts/assurance_inputs.py'],
-                                cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        baseline_source = read_baseline(AGENTS_BUDGET_HEAD, '.ai/scripts/assurance_inputs.py')
         import ast
-        baseline = next(ast.literal_eval(n.value) for n in ast.parse(result.stdout).body
+        baseline = next(ast.literal_eval(n.value) for n in ast.parse(baseline_source).body
                         if isinstance(n, ast.Assign)
                         and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in n.targets))
         identities = ('python-runner-test', 'python-architecture-compatibility', 'python-harness-wiring',
@@ -5219,10 +5191,8 @@ class AgentsBudgetCompatibilityTests(AgentsBudgetFixture):  # R4
                        'historical', 'normative', 'conservative', 'explicit', 'manual',
                        'eleven prior profiles', *AGENTS_BUDGET_INPUTS):
             self.assertIn(phrase, guide)
-        baseline = subprocess.run(['git', 'show', AGENTS_BUDGET_HEAD + ':.ai/lifecycle.md'],
-                                  cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
-        self.assertEqual(baseline.returncode, 0, baseline.stderr)
-        for paragraph in baseline.stdout.split('\n\n'):
+        baseline_source = read_baseline(AGENTS_BUDGET_HEAD, '.ai/lifecycle.md')
+        for paragraph in baseline_source.split('\n\n'):
             self.assertIn(paragraph, guide, 'previous guide paragraph changed')
 
 
@@ -5468,11 +5438,9 @@ class SemanticLensFixture(AgentsBudgetFixture):
                 self.assertEqual(path.read_bytes(), original)
 
     def assert_prior_profiles(self):
-        result = subprocess.run(['git', 'show', SEMANTIC_LENS_HEAD + ':.ai/scripts/assurance_inputs.py'],
-                                cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        baseline_source = read_baseline(SEMANTIC_LENS_HEAD, '.ai/scripts/assurance_inputs.py')
         import ast
-        baseline = next(ast.literal_eval(n.value) for n in ast.parse(result.stdout).body
+        baseline = next(ast.literal_eval(n.value) for n in ast.parse(baseline_source).body
                         if isinstance(n, ast.Assign)
                         and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in n.targets))
         identities = ('python-runner-test', 'python-architecture-compatibility', 'python-harness-wiring',
@@ -5727,10 +5695,8 @@ class SemanticLensCompatibilityTests(SemanticLensFixture):  # R4
                        'conservative', 'explicit', 'manual', 'twelve prior profiles',
                        *SEMANTIC_LENS_INPUTS):
             self.assertIn(phrase, guide)
-        baseline = subprocess.run(['git', 'show', SEMANTIC_LENS_HEAD + ':.ai/lifecycle.md'],
-                                  cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
-        self.assertEqual(baseline.returncode, 0, baseline.stderr)
-        for paragraph in baseline.stdout.split('\n\n'):
+        baseline_source = read_baseline(SEMANTIC_LENS_HEAD, '.ai/lifecycle.md')
+        for paragraph in baseline_source.split('\n\n'):
             self.assertIn(paragraph, guide, 'previous guide paragraph changed')
 
 
@@ -6060,11 +6026,9 @@ sys.exit(0 if result.wasSuccessful() else 1)
                 self.assertEqual(path.read_bytes(), original)
 
     def assert_prior_profiles(self):
-        result = subprocess.run(['git', 'show', SKILL_FRONTMATTER_HEAD + ':.ai/scripts/assurance_inputs.py'],
-                                cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
-        self.assertEqual(result.returncode, 0, result.stderr)
+        baseline_source = read_baseline(SKILL_FRONTMATTER_HEAD, '.ai/scripts/assurance_inputs.py')
         import ast
-        baseline = next(ast.literal_eval(n.value) for n in ast.parse(result.stdout).body
+        baseline = next(ast.literal_eval(n.value) for n in ast.parse(baseline_source).body
                         if isinstance(n, ast.Assign)
                         and any(isinstance(t, ast.Name) and t.id == 'PROFILES' for t in n.targets))
         identities = ('python-runner-test', 'python-architecture-compatibility', 'python-harness-wiring',
@@ -6321,10 +6285,8 @@ class SkillFrontmatterCompatibilityTests(SkillFrontmatterFixture):  # R4
                        'conservative', 'explicit', 'manual', 'thirteen prior profiles',
                        *SKILL_FRONTMATTER_INPUTS):
             self.assertIn(phrase, guide)
-        baseline = subprocess.run(['git', 'show', SKILL_FRONTMATTER_HEAD + ':.ai/lifecycle.md'],
-                                  cwd=SCRIPTS.parent.parent, capture_output=True, text=True, timeout=10)
-        self.assertEqual(baseline.returncode, 0, baseline.stderr)
-        for paragraph in baseline.stdout.split('\n\n'):
+        baseline_source = read_baseline(SKILL_FRONTMATTER_HEAD, '.ai/lifecycle.md')
+        for paragraph in baseline_source.split('\n\n'):
             self.assertIn(paragraph, guide, 'previous guide paragraph changed')
 
 
@@ -6604,6 +6566,96 @@ class SkillFrontmatterControlTests(SkillFrontmatterFixture):  # R6
                 self.assertFalse(result.errors, result.errors)
                 self.assertEqual(len(result.failures), 1, 'broken variant survived: ' + variant)
                 self.assertIn(criterion, result.failures[0][1])
+
+
+class InstalledBaselineTests(unittest.TestCase):
+    def test_all_baselines_have_verified_provenance(self):
+        from compatibility_baselines import DIRECTORY
+        manifest = json.loads((DIRECTORY / 'manifest.json').read_bytes())
+        self.assertEqual(manifest['head_baseline'], HEAD_BASELINE)
+        self.assertEqual(len(manifest['sources']), 14)
+        identities = set()
+        for entry in manifest['sources']:
+            with self.subTest(revision=entry['revision'], path=entry['path']):
+                identity = (entry['revision'], entry['path'])
+                self.assertNotIn(identity, identities)
+                identities.add(identity)
+                self.assertRegex(entry['revision'], r'^[0-9a-f]{40}$')
+                data = read_baseline(*identity).encode('utf-8')
+                self.assertEqual(hashlib.sha256(data).hexdigest(), entry['sha256'])
+                blob = b'blob ' + str(len(data)).encode('ascii') + b'\0' + data
+                self.assertEqual(hashlib.sha1(blob).hexdigest(), entry['git_blob'])
+
+    def test_missing_or_corrupted_baselines_fail_closed(self):
+        from compatibility_baselines import DIRECTORY
+        with tempfile.TemporaryDirectory() as directory:
+            copied = Path(directory) / 'baselines'
+            shutil.copytree(DIRECTORY, copied)
+            manifest = json.loads((copied / 'manifest.json').read_bytes())
+            entry = manifest['sources'][0]
+            data_path = copied / entry['file']
+            original = data_path.read_bytes()
+            data_path.unlink()
+            with self.assertRaisesRegex(ValueError, 'missing or invalid'):
+                read_baseline(entry['revision'], entry['path'], directory=copied)
+            data_path.write_bytes(original + b'\n')
+            with self.assertRaisesRegex(ValueError, 'content hash mismatch'):
+                read_baseline(entry['revision'], entry['path'], directory=copied)
+            data_path.write_bytes(original)
+            with self.assertRaisesRegex(ValueError, 'revision/path not pinned'):
+                read_baseline('0' * 40, entry['path'], directory=copied)
+            (copied / 'manifest.json').write_bytes((copied / 'manifest.json').read_bytes() + b'\n')
+            with self.assertRaisesRegex(ValueError, 'manifest hash mismatch'):
+                read_baseline(entry['revision'], entry['path'], directory=copied)
+
+    def test_changed_current_catalog_is_not_its_own_oracle(self):
+        case = HarnessWiringProfileTests('test_exact_registration_and_prior_profiles')
+        try:
+            case.setUp()
+            source = case.root / '.ai/scripts/assurance_inputs.py'
+
+            def fixture_module():
+                spec = importlib.util.spec_from_file_location('changed_actual_catalog', source)
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                return module
+
+            case.module = fixture_module
+            case.assert_prior_profiles()
+            original = source.read_text()
+            source.write_text(original + "\nPROFILES[0]['inputs'] = []\n")
+            self.assertNotEqual(source.read_text(), original)
+            with self.assertRaises(AssertionError):
+                case.assert_prior_profiles()
+        finally:
+            case.doCleanups()
+
+    def test_existing_comparison_works_without_framework_history(self):
+        import install
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'history-free adopter'
+            root.mkdir()
+            for name in install.KIT:
+                source, target = SCRIPTS.parent.parent / name, root / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                if source.is_symlink():
+                    target.symlink_to(os.readlink(source))
+                elif source.is_dir():
+                    shutil.copytree(source, target, ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+                else:
+                    shutil.copy2(source, target)
+            subprocess.run(['git', 'init', '-q', str(root)], check=True, capture_output=True)
+            environment = {**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'}
+            for key in ('GIT_DIR', 'GIT_WORK_TREE', '_AGENTIC_REVIEW_PRODUCER'):
+                environment.pop(key, None)
+            result = subprocess.run([sys.executable, '.ai/scripts/tests/test_assurance_inputs.py',
+                                     'HarnessWiringProfileTests.test_exact_registration_and_prior_profiles',
+                                     'AssuranceDocCompatibilityTests.test_advisory_guide_and_existing_contracts',
+                                     'SkillFrontmatterCompatibilityTests.test_advisory_guide_and_existing_contracts'],
+                                    cwd=root, env=environment, capture_output=True, text=True, timeout=120)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertRegex(result.stderr, r'Ran 3 tests in ')
+            self.assertNotIn('skipped', result.stderr)
 
 
 if __name__ == '__main__':
