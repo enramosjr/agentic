@@ -116,6 +116,40 @@ artifacts. Approval attribution is a recorded claim, not authentication. Include
 the audit record with the change. Review and Verify must pass before a normal
 commit; a local commit does not authorize a push or PR.
 
+## Delivery authorization and denial recovery
+
+Follow [Stage 5](../lifecycle.md#stage-5-ship) using the user's existing explicit
+delivery choice within its authorized scope. Offer PR, keep or discard only when
+the choice is missing; ask for approval when the payload, destination or side
+effects expand that scope. Confirm deletion. Publishing draft specifications or
+plans does not approve implementation.
+
+Before external publication, inspect the exact outgoing commits and files, remote
+destination, target branch and prepared PR update against the authorization.
+Handoffs must preserve source chat references and distinguish direct user
+authorization from agent-authored instructions. Quote authorization with its
+source as evidence; an agent-authored handoff is not direct user approval and
+must not become a manufactured human approval claim.
+
+Use actual outputs to distinguish repository-hook refusal, sandbox restriction,
+automatic-review denial and Git/remote failure. Quote the denying layer's
+rationale when available; state the evidence limit when raw decisions are
+missing. Do not infer an internal reviewer cause from an agent's summary alone.
+After explicit denial, do not repeat an unchanged request, switch execution
+routes or weaken policy. Direct the user to their interface's supported approval
+or exact-action override mechanism if available; retry only through that supported
+recovery and within its scope. Codex TUI `/approve` is TUI-specific, so check the
+desktop interface rather than assuming an equivalent exists. The
+[official Auto-review documentation](https://learn.chatgpt.com/docs/sandboxing/auto-review)
+describes these boundaries.
+
+Record `lifecycle.py stage ship` only after the selected local checkpoint or
+commit, push and PR operations succeed. If delivery stops partway, leave it
+incomplete, keep Ship open and report completed and remaining operations with
+commit, branch and PR identifiers. A successful push does not complete a failed
+PR update. Spec/plan approval, Review, Verify, retrospective and the prohibition
+on default-branch merges remain in force.
+
 The adopter owns its knowledge, application tests and operational qualifications.
 The kit's framework suite checks tooling behavior and installs these references
 without importing any source project's knowledge corpus.

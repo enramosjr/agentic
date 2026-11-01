@@ -53,7 +53,8 @@ def hook_status(status, conditional=False, no_evidence=False):
 
 
 def snapshot():
-    paths = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=True).stdout
+    paths = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+                           cwd=ROOT, capture_output=True, check=True).stdout
     result = {}
     for name in paths.split(b"\0"):
         if name:
@@ -265,6 +266,40 @@ class ReportTests(Base):
 
 class ReportOnlyTests(unittest.TestCase):
     """R7: measurement leaves the invoking mechanism and regression tests untouched."""
+    def test_untracked_installation_files_are_protected_without_staging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def git(*args):
+                return subprocess.run(['git', *args], cwd=root, check=True,
+                                      capture_output=True).stdout
+            git('init', '-q')
+            (root / '.gitignore').write_text('tracked-ignored.py\nignored.txt\n')
+            (root / 'tracked.py').write_bytes(b'tracked')
+            (root / 'tracked-ignored.py').write_bytes(b'owned despite ignore')
+            git('add', '-f', 'tracked.py', 'tracked-ignored.py', '.gitignore')
+            index_before = git('ls-files', '--stage', '-z')
+            installed = root / '.ai/scripts/assurance.py'
+            installed.parent.mkdir(parents=True)
+            installed.write_bytes(b'installed but not committed')
+            (root / 'ignored.txt').write_bytes(b'private cache')
+            (root / 'untracked-link').symlink_to('tracked.py')
+            with mock.patch(__name__ + '.ROOT', root):
+                before = snapshot()
+                self.assertEqual(before[b'.ai/scripts/assurance.py'], installed.read_bytes())
+                self.assertEqual(before[b'tracked.py'], b'tracked')
+                self.assertEqual(before[b'tracked-ignored.py'], b'owned despite ignore')
+                self.assertEqual(before[b'untracked-link'], 'tracked.py')
+                self.assertNotIn(b'ignored.txt', before)
+                installed.write_bytes(b'changed installation')
+                changed = snapshot()
+                self.assertNotEqual(before, changed)
+                self.assertEqual(changed[b'.ai/scripts/assurance.py'], b'changed installation')
+                installed.unlink()
+                removed = snapshot()
+                self.assertNotEqual(before, removed)
+                self.assertNotIn(b'.ai/scripts/assurance.py', removed)
+            self.assertEqual(git('ls-files', '--stage', '-z'), index_before)
+
     def test_protected_files_unchanged(self):
         _, _, _, _, _, before, after, _ = observed()
         for name in ("assurance.py", "ledger.py", "lifecycle.py", "okf.py",

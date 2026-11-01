@@ -1,4 +1,6 @@
 __pycache__/
 *.pyc
 knowledge/
-docs/
+/docs/
+/.ai/plans/
+/.ai/specifications/

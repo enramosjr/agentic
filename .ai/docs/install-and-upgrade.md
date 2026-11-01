@@ -16,6 +16,14 @@ its adopter instructions outside that block. Malformed source markers refuse
 before target writes. Target instructions outside a valid block remain in place.
 The manifest records the normalized governance hash and installed file hashes.
 
+For nested hook upgrades, a prior manifest-owned command's literal tool-name
+matcher can expand to the kit's strict superset without retaining redundant
+dispatch. This applies only to identical complete single-command hook lists and
+identical other group metadata in the same event. An already present identical
+expanded group is retained once. Custom options, mixed or prompt hooks, unknown
+regexes, non-subset matchers and unowned commands are preserved. Flat hooks retain
+their existing merge rules; configuration is never rebuilt wholesale.
+
 All scripts, roles, skills and hook settings are project-local. Codex requires
 trusting the project's .codex layer and reviewing hooks with `/hooks`; copying
 files does not activate trust. Global agent settings remain unchanged.

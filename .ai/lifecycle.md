@@ -132,11 +132,51 @@ Apply publishes a pending lifecycle merge receipt before replacing the capabilit
 
 ## Stage 5: Ship
 
+Use the user's existing explicit delivery choice within its authorized scope.
+Step 2's offer applies only when that choice is missing; an existing choice
+already satisfies it. Ask only for missing or expanded scope, without requesting
+permission again for the same authorized publication. Publishing draft
+specifications or plans does not approve their implementation.
+
+Complete the selected local checkpoint or commit, push and PR operations before
+closing the record in step 5. If an operation fails, report completed and remaining
+operations with the relevant commit, branch and PR identifiers, leave delivery
+incomplete and do not record Ship.
+
 1. Fetch the default branch and merge it into the candidate, then confirm the gate evidence still covers the head (§8.4 reuse rules).
 2. Offer the user these options and act only on their choice: open or update the PR, keep the branch, or discard it. Discarding deletes work, so confirm it.
 3. L3 delivers through the single milestone PR (§9.9). Agents never merge into the default branch.
 4. Remove only worktrees and branches this task created.
 5. `lifecycle.py stage ship` closes the record. A later commit or PR for review feedback needs a fresh `lifecycle.py tier ... --new`, or a `wip:` commit.
+
+### Publication scope and authorization evidence
+
+Before external publication, inspect the exact outgoing commits and files, remote
+destination, target branch and prepared PR update against the user's authorization.
+A local commit alone does not authorize a push or PR. If the payload, destination
+or side effects exceed the authorized scope, obtain approval for that change.
+
+Handoffs must preserve the source chat reference and distinguish direct user
+authorization from agent-authored instructions. Quote the relevant authorization
+as evidence with its source; do not present an agent-authored handoff as direct
+user approval or manufacture a human approval claim.
+
+### Publication failures and denial recovery
+
+Use actual command and tool outputs to distinguish repository-hook refusal,
+sandbox restriction, automatic-review denial and Git/remote failure. Quote the
+denying layer's rationale when available. When raw decisions are missing, state
+that evidence limit rather than claiming an internal reviewer cause.
+
+After an explicit denial, do not repeat the unchanged denied request, switch
+execution routes or weaken policy. Direct the user to the supported approval or
+exact-action override mechanism available in their interface, if one exists.
+The Codex TUI's `/approve` is TUI-specific; do not assume a desktop equivalent.
+Only retry through a supported recovery mechanism, within its scope. See the
+[official Auto-review documentation](https://learn.chatgpt.com/docs/sandboxing/auto-review).
+Report partial publication honestly: a successful push followed by a failed PR
+update leaves that update outstanding. Preserve spec/plan approval, Review,
+Verify, retrospective and default-branch merge restrictions throughout recovery.
 
 ## Debugging flow
 
