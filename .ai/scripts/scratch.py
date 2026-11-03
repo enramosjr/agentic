@@ -28,7 +28,7 @@ def require_disk(path: Path) -> Path:
 
 def git_common_dir(repo: Path) -> Path:
     return Path(subprocess.check_output(
-        ["git", "-C", str(repo), "rev-parse", "--path-format=absolute", "--git-common-dir"], text=True,
+        ["git", "-C", str(repo), "rev-parse", "--path-format=absolute", "--git-common-dir"], text=True, encoding='utf-8',
         stderr=subprocess.PIPE).strip())
 
 

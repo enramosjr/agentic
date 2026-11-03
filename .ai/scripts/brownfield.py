@@ -27,7 +27,7 @@ def sha(text):
 
 
 def spec_hash(path):
-    return sha(okf.split_frontmatter(path.read_text())[1].strip())
+    return sha(okf.split_frontmatter(path.read_text(encoding='utf-8'))[1].strip())
 
 
 def read(path):

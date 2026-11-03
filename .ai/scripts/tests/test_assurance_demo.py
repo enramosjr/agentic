@@ -165,14 +165,16 @@ class IsolationTests(Base):  # R4
                  'import assurance_demo\n'
                  'code = assurance_demo.main([])\n'
                  f'names = {sorted(NETWORK)!r}\n'
-                 "print('NETMODS', json.dumps(sorted({m.split('.')[0] for m in sys.modules} & set(names))))\n"
+                 "print('NETMODS', json.dumps(sorted(m for m in sys.modules if m.split('.')[0] in names)))\n"
                  'sys.exit(code)\n')
         env = {**os.environ, 'TMPDIR': str(self.base), 'PYTHONDONTWRITEBYTECODE': '1'}
         result = subprocess.run([sys.executable, '-c', probe], cwd=ROOT, env=env, capture_output=True, text=True, timeout=300)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(snapshot(), before)
         loaded = json.loads(re.search(r'^NETMODS (.*)$', result.stdout, re.M).group(1))
-        self.assertEqual(set(loaded) - {'socket'}, set(), loaded)  # scratch may pull socket transitively
+        # Python 3.9 pathlib imports urllib.parse for quoting paths; it performs
+        # no I/O. Keep full names so urllib.request cannot hide behind that root.
+        self.assertEqual(set(loaded) - {'socket', 'urllib', 'urllib.parse'}, set(), loaded)
         tree = ast.parse((SCRIPTS / 'assurance_demo.py').read_text())
         imported = set()
         for node in ast.walk(tree):

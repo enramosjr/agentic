@@ -16,6 +16,7 @@ from unittest import mock
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1]
@@ -188,7 +189,7 @@ if name in edits:
 class EvalRunnerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.scratch = Path(tempfile.mkdtemp()).resolve()
-        self.addCleanup(shutil.rmtree, self.scratch)
+        self.addCleanup(disk_tmp.remove_tree, self.scratch)
 
     def agent(self, source: str) -> list[str]:
         path = self.scratch / "agent.py"
@@ -295,7 +296,10 @@ class ScenarioContractTests(unittest.TestCase):
                     self.assertTrue(lifecycle_eval.validate(candidate))
 
     def test_setup_paths_and_commands(self):
-        for name in ("/absolute", "../escape", "a/../../escape", ".git/config", "a/../.git/config"):
+        names = ["/absolute", "../escape", "a/../../escape", ".git/config", "a/../.git/config"]
+        if os.name == 'nt':
+            names.extend(['C:relative', 'C:.', 'C:\\absolute', '\\rooted'])
+        for name in names:
             candidate = self.scenario(); candidate["setup"] = {"files": {name: "x"}}
             self.assertTrue(lifecycle_eval.validate(candidate), name)
         for setup in ({"files": []}, {"files": {"a": 1}}, {"commands": "echo x"},
@@ -307,7 +311,11 @@ class ScenarioContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); work = root / "work"; work.mkdir()
             outside = root / "outside"; outside.mkdir()
-            (work / "escape").symlink_to(outside, target_is_directory=True)
+            if os.name == 'nt':
+                subprocess.run(['cmd.exe', '/d', '/c', 'mklink', '/J', str(work / 'escape'),
+                                str(outside)], check=True, capture_output=True)
+            else:
+                (work / "escape").symlink_to(outside, target_is_directory=True)
             candidate = self.scenario(); candidate["setup"] = {"files": {"escape/marker": "bad"}}
             with self.assertRaises(lifecycle_eval.EvalError):
                 lifecycle_eval.prepare(candidate, work)
@@ -321,6 +329,25 @@ class ScenarioContractTests(unittest.TestCase):
                 (directory / (name + ".json")).write_text(json.dumps(self.scenario()))
             with self.assertRaises(lifecycle_eval.EvalError):
                 lifecycle_eval.load_scenarios(directory)
+
+    def test_unicode_scenario_and_setup_roundtrip_under_legacy_encoding(self):
+        root = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(disk_tmp.remove_tree, root)
+        scenarios = root / 'scenarios'; scenarios.mkdir()
+        work = root / 'work'; work.mkdir()
+        scenario = self.scenario()
+        scenario['prompt'] = '\u4e2d\u6587 prompt'
+        scenario['setup'] = {'files': {'\u6d4b\u8bd5.txt': '\u4e2d\u6587 body'}}
+        (scenarios / 'unicode.json').write_text(json.dumps(scenario, ensure_ascii=False), encoding='utf-8')
+        source = (f"import sys;sys.path.insert(0,{str(SCRIPTS)!r});import lifecycle_eval as e;"
+                  "from pathlib import Path;"
+                  f"s=e.load_scenarios(Path({str(scenarios)!r}))[0];"
+                  "assert s['prompt']=='\\u4e2d\\u6587 prompt',ascii(s['prompt']);"
+                  f"w=Path({str(work)!r});e.prepare(s,w);"
+                  "assert (w/'\\u6d4b\\u8bd5.txt').read_text(encoding='utf-8')=='\\u4e2d\\u6587 body'")
+        result = subprocess.run([sys.executable, '-c', source], capture_output=True,
+                                env={**os.environ, 'PYTHONUTF8': '0', 'PYTHONIOENCODING': 'cp1252'}, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr.decode('utf-8', errors='replace'))
 
 
 class NativeRuntimeTests(unittest.TestCase):
@@ -346,7 +373,7 @@ class NativeRuntimeTests(unittest.TestCase):
         kernel.OpenProcess.return_value = 123
         kernel.TerminateProcess.return_value = True
         kernel.WaitForSingleObject.return_value = 0
-        with mock.patch.object(process_runtime.os, 'name', 'nt'), \
+        with mock.patch.object(process_runtime, 'os', SimpleNamespace(name='nt')), \
                 mock.patch.object(process_runtime, '_job_api', return_value=kernel), \
                 mock.patch.object(process_runtime, '_windows_state', side_effect=PermissionError('uncertain')), \
                 mock.patch.object(process_runtime, '_windows_handle_state', create=True,
@@ -362,7 +389,7 @@ class NativeRuntimeTests(unittest.TestCase):
         kernel.OpenProcess.return_value = 123
         kernel.TerminateProcess.return_value = True
         kernel.WaitForSingleObject.return_value = 0
-        with mock.patch.object(process_runtime.os, 'name', 'nt'), \
+        with mock.patch.object(process_runtime, 'os', SimpleNamespace(name='nt')), \
                 mock.patch.object(process_runtime, '_job_api', return_value=kernel), \
                 mock.patch.object(process_runtime, '_windows_state', side_effect=PermissionError('uncertain')), \
                 mock.patch.object(process_runtime, '_windows_handle_state', create=True,
@@ -384,7 +411,7 @@ class NativeRuntimeTests(unittest.TestCase):
             return True
 
         kernel.GetProcessTimes.side_effect = times
-        with mock.patch.object(process_runtime.os, 'name', 'nt'), \
+        with mock.patch.object(process_runtime, 'os', SimpleNamespace(name='nt')), \
                 mock.patch.object(process_runtime, '_job_api', return_value=kernel), \
                 mock.patch.object(process_runtime, '_windows_state', side_effect=PermissionError('separate probe denied')):
             process_runtime.terminate_tree(1234, '42')
@@ -606,6 +633,23 @@ class ProcessTests(unittest.TestCase):
                                  self.scratch, dict(os.environ), self.scratch, timeout=1)
         self.assertFalse(marker.exists())
 
+    def test_supervisor_failure_keeps_its_actual_diagnostic(self):
+        broken = self.scratch / 'broken-supervisor.py'
+        broken.write_text("import sys\nsys.stderr.write('specific supervisor failure\\n')\nraise SystemExit(17)\n")
+        with mock.patch.object(eval_process, '__file__', str(broken)):
+            with self.assertRaisesRegex(eval_process.ProcessError, 'specific supervisor failure'):
+                eval_process.run([sys.executable, '-c', 'raise SystemExit(0)'],
+                                 self.scratch, dict(os.environ), self.scratch, timeout=1)
+
+    def test_publication_sharing_retry_preserves_data_and_refuses_persistent_denial(self):
+        path = self.scratch / 'launch.json'
+        path.write_text('{"token":"exact-token"}', encoding='utf-8')
+        with mock.patch.object(Path, 'read_text', side_effect=[PermissionError('sharing'), '{"token":"exact-token"}']):
+            self.assertEqual(eval_process.read_publication(path, time.time() + 1), {'token': 'exact-token'})
+        with mock.patch.object(Path, 'read_text', side_effect=PermissionError('access denied')):
+            with self.assertRaises(PermissionError):
+                eval_process.read_publication(path, time.time() + 0.01)
+
     def test_public_cli_success_failure_and_unknown_selection(self):
         marker = self.scratch / "scripted-launches"
         source = COMPLIANT + f"\nPath({str(marker)!r}).write_text('observed')\n"
@@ -679,11 +723,12 @@ lifecycle.state_path(Path.cwd()).write_text('[]')
                 source = COMPLIANT + f"\nPath({str(marker)!r}).touch()\n"
                 command = RepeatResultTests.command(self, source, "--checks-dir", str(checks))
                 wrapper = self.scratch / "timed-fixture.py"
-                wrapper.write_text(f"import sys\nsys.path.insert(0, {str(SCRIPTS)!r})\nimport lifecycle_eval, eval_process\n"
+                wrapper.write_text(f"import sys\nfrom pathlib import Path\nsys.path.insert(0, {str(SCRIPTS)!r})\nimport lifecycle_eval, eval_process\n"
                     f"lifecycle_eval.load_scenarios = lambda: [{scenario!r}]\n"
                     "original = eval_process.run\n"
                     "def timed(*args, **kwargs):\n"
-                    "    if kwargs.get('timeout') == 60: kwargs['timeout'] = 0.2\n"
+                    "    argv = args[0]\n"
+                    "    if (len(argv) > 1 and Path(argv[1]).name == 'slow.py') or 'import time; time.sleep(10)' in argv: kwargs['timeout'] = 1\n"
                     "    return original(*args, **kwargs)\n"
                     f"eval_process.run = timed\nraise SystemExit(lifecycle_eval.main({command[2:]!r}))\n")
                 result = subprocess.run([sys.executable, str(wrapper)], capture_output=True, text=True, timeout=20)
@@ -876,7 +921,7 @@ class OutcomeTests(FrozenBehaviorChecks, unittest.TestCase):
                 self.assertEqual(self.check(work, base, state)[0], [])
                 (work / "cli.py").write_text("print('inconsistent')")
                 self.assertTrue(any("anchor" in f for f in self.check(work, base, state)[0]))
-                shutil.rmtree(work)
+                disk_tmp.remove_tree(work)
 
     def test_missing_failed_and_uncovered_convergence_and_audit_edits(self):
         for tier in ("L2", "L3"):
@@ -894,7 +939,7 @@ class OutcomeTests(FrozenBehaviorChecks, unittest.TestCase):
                     self.assertTrue(failures, change)
                     expected = {"missing": "missing convergence", "failed": "failed", "coverage": "cover", "tree": "anchor", "artifact": "audit"}
                     self.assertTrue(any(expected[change] in f for f in failures), failures)
-            shutil.rmtree(work)
+            disk_tmp.remove_tree(work)
 
     def test_review_identity_candidate_order_and_write_mismatches(self):
         for tier in ("L2", "L3"):
@@ -908,7 +953,7 @@ class OutcomeTests(FrozenBehaviorChecks, unittest.TestCase):
                     self.assertTrue(self.check(work, base, state, observations)[0], field)
             observations = self.observations(work, state); observations["reviewers"] = []
             self.assertTrue(self.check(work, base, state, observations)[0])
-            shutil.rmtree(work)
+            disk_tmp.remove_tree(work)
 
     def test_reviewer_report_body_binding(self):
         import eval_outcome
@@ -1002,19 +1047,22 @@ class OutcomeTests(FrozenBehaviorChecks, unittest.TestCase):
         state = lifecycle_eval.lifecycle.load(root)
         self.assertEqual(self.check(root, base, state)[0], [])
         original = copy.deepcopy(state)
-        capability = case.cap.read_text()
-        case.cap.write_text(capability.replace("UTF-16", "corrupted"))
+        capability_bytes = case.cap.read_bytes()
+        capability = capability_bytes.decode('utf-8')
+        case.cap.write_bytes(capability.replace("UTF-16", "corrupted").encode('utf-8'))
         self.assertTrue(any("stale target" in f for f in self.check(root, base, state)[0]))
-        case.cap.write_text(capability)
+        case.cap.write_bytes(capability_bytes)
+        self.assertEqual(self.check(root, base, state)[0], [])
         state.pop("merge"); lifecycle_eval.lifecycle.save(root, state)
         self.assertTrue(any("added ID already exists" in f for f in self.check(root, base, state)[0]))
         lifecycle_eval.lifecycle.save(root, original)
         record_path = lifecycle_eval.lifecycle.record_path(root, original)
-        published = json.loads(record_path.read_text()); published.pop("merge")
-        record_path.write_text(json.dumps(published))
+        published = json.loads(record_path.read_text(encoding='utf-8')); published.pop("merge")
+        record_path.write_bytes(json.dumps(published).encode('utf-8'))
         self.commit(root)
         lifecycle_eval.lifecycle.save(root, original)
-        self.assertTrue(any("publishing" in f for f in self.check(root, base, original)[0]))
+        failures = self.check(root, base, original)[0]
+        self.assertTrue(any("publishing" in f for f in failures), failures)
 
 
 def scripted_observation(work, state):

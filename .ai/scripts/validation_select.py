@@ -71,7 +71,7 @@ def main():
                         help="shared package whose change selects the broad baseline (repeatable)")
     args = parser.parse_args()
     try:
-        root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip())
+        root = Path(subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True, encoding='utf-8').strip())
         def git(*argv):
             return subprocess.check_output(["git", *argv], cwd=root)
         paths = set(git("diff", "--no-renames", "--name-only", "-z", args.base, "--").decode().rstrip("\0").split("\0"))
@@ -81,7 +81,7 @@ def main():
         if (root / "Cargo.toml").is_file():
             metadata = json.loads(subprocess.check_output(["cargo", "metadata", "--format-version", "1", "--no-deps", "--offline", "--locked"], cwd=root))
             members = set(metadata["workspace_members"])
-            packages = [{"name": p["name"], "directory": str(Path(p["manifest_path"]).parent.relative_to(root)),
+            packages = [{"name": p["name"], "directory": Path(p["manifest_path"]).parent.relative_to(root).as_posix(),
                          "dependencies": [d["name"] for d in p["dependencies"]]} for p in metadata["packages"] if p["id"] in members]
         result = select(sorted(paths), packages, args.full, args.core)
         result["changed_paths"] = sorted(paths)

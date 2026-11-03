@@ -16,7 +16,7 @@ import review_guard
 def okf(root, *args):
     runner = review_guard.run_owned if args[:1] in (('stamp',), ('log',)) else subprocess.run
     return runner([sys.executable, str(root / '.ai/scripts/okf.py'), *args],
-                  cwd=root, capture_output=True, text=True, timeout=60)
+                  cwd=root, capture_output=True, text=True, encoding='utf-8', timeout=60)
 
 
 def diagnostic(root, *args):

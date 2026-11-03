@@ -5,6 +5,7 @@ import os
 import json
 import hashlib
 import shlex
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -37,7 +38,8 @@ class GitEnvironmentTests(unittest.TestCase):
 
     def test_unicode_input_mutation_invalidates_proof_under_legacy_encoding(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory) / '\u4f60\u597d project'
+            root.mkdir()
             name = '\u4f60\u597d.txt'
             (root / name).write_bytes(b'value')
             tests = root / 'tests'
@@ -151,6 +153,78 @@ class ProcessLifetimeTests(unittest.TestCase):
             child.kill()
             child.wait()
         self.assertFalse(process_runtime.alive(child.pid, identity['birth']))
+
+
+class PersistedTextEncodingTests(unittest.TestCase):
+    def test_unicode_repository_git_metadata_export_and_scan_under_legacy_encoding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / '\u4f60\u597d project'
+            scripts = root / '.ai/scripts'
+            shutil.copytree(SCRIPTS, scripts, ignore=shutil.ignore_patterns('tests', '__pycache__'))
+            (scripts / 'tests').mkdir()
+            for name in ('test_run_tests.py', 'disk_tmp.py'):
+                shutil.copy2(SCRIPTS / 'tests' / name, scripts / 'tests' / name)
+            (root / '.agentic.json').write_bytes(b'{"repository_kind":"framework"}')
+            name = '\u4f60\u597d.py'
+            (root / name).write_bytes(b'def greet():\n    return 1\n')
+            document = root / '.ai/docs/notice.md'
+            document.parent.mkdir()
+            document.write_bytes('# \u4e81\n'.encode('utf-8'))
+            for arguments in [('init', '-q'), ('add', '.'), ('-c', 'user.name=Test', '-c',
+                    'user.email=test@example.com', 'commit', '-qm', 'fixture')]:
+                subprocess.run(['git', '-C', str(root), *arguments], check=True)
+            values = {**os.environ, 'PYTHONUTF8': '0', 'PYTHONIOENCODING': 'cp1252'}
+            code = ('import sys,json;from pathlib import Path;sys.path.insert(0,sys.argv[1]);'
+                'import scratch,eval_outcome,pr_sync,scan,completion;root=Path(sys.argv[2]);'
+                'print(json.dumps([scratch.git_common_dir(root).as_posix(),'
+                'Path(eval_outcome.git(root,"rev-parse","--show-toplevel")).as_posix(),'
+                'Path(pr_sync._git(root,"rev-parse","--show-toplevel").stdout.strip()).as_posix(),'
+                'scan._git(root,"ls-files","-z"),completion.okf(root,"show",".ai/docs/notice.md").stdout]))')
+            result = subprocess.run([sys.executable, '-c', code, str(SCRIPTS), str(root)],
+                                    cwd=root, env=values, capture_output=True, encoding='utf-8', timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            common, outcome, sync, inventory, text = json.loads(result.stdout)
+            self.assertEqual((common, outcome, sync), ((root / '.git').as_posix(), root.as_posix(), root.as_posix()))
+            self.assertIn(name + '\0', inventory)
+            self.assertIn('\u4e81', text)
+            command = [sys.executable if os.name == 'nt' else 'python3',
+                       '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests', '-p', 'test_run_tests.py']
+            exported = subprocess.run([sys.executable, str(scripts / 'assurance_inputs.py'), '--json', '--', *command],
+                cwd=root, env=values, capture_output=True, encoding='utf-8', timeout=30)
+            self.assertEqual(exported.returncode, 0, exported.stdout + exported.stderr)
+            self.assertTrue(json.loads(exported.stdout)['ok'])
+            (root / name).write_bytes(b'def greet():\n    pass # TODO\n')  # lifecycle:allow C2-pass-todo -- Deliberately broken owned scanner fixture; its denial is asserted below.
+            scanned = subprocess.run([sys.executable, str(scripts / 'lifecycle.py'), 'scan-diff'],
+                cwd=root, env=values, capture_output=True, encoding='utf-8', timeout=30)
+            self.assertEqual(scanned.returncode, 1, scanned.stdout + scanned.stderr)
+            self.assertIn(name, scanned.stdout)
+            selected = subprocess.run([sys.executable, str(scripts / 'validation_select.py'), '--base', 'HEAD'],
+                cwd=root, env=values, capture_output=True, encoding='utf-8', timeout=30)
+            self.assertEqual(selected.returncode, 0, selected.stdout + selected.stderr)
+            self.assertIn(name, json.loads(selected.stdout)['changed_paths'])
+
+    def test_delta_hash_and_durable_audit_use_utf8_under_legacy_encoding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            body = '# \u89c4\u8303\n\n\u4f60\u597d\n'
+            (root / 'spec.md').write_bytes(body.encode('utf-8'))
+            state = {'task': 'fixture', 'stages': {}, 'description': '\u4e81'}
+            (root / 'record.json').write_bytes(json.dumps(state, ensure_ascii=False).encode('utf-8'))
+            code = (
+                'import sys,json;from pathlib import Path;from unittest.mock import patch;'
+                'sys.path.insert(0,sys.argv[1]);import brownfield,eval_outcome;'
+                'root=Path(sys.argv[2]);state=json.loads((root/"record.json").read_text(encoding="utf-8"));\n'
+                'with patch.object(eval_outcome,"audit_view",return_value=[]), '
+                'patch.object(eval_outcome.lifecycle,"complete",return_value=True), '
+                'patch.object(eval_outcome.lifecycle,"record_path",return_value=root/"record.json"):\n'
+                ' failures,_=eval_outcome.completion(root,"unused",state,None)\n'
+                'print(json.dumps([brownfield.spec_hash(root/"spec.md"),failures]))\n')
+            values = {**os.environ, 'PYTHONUTF8': '0', 'PYTHONIOENCODING': 'cp1252'}
+            result = subprocess.run([sys.executable, '-c', code, str(SCRIPTS), str(root)],
+                                    env=values, capture_output=True, encoding='utf-8', timeout=20)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(result.stdout), [hashlib.sha256(body.strip().encode('utf-8')).hexdigest(),
+                ['missing convergence for the approved spec']])
 
 
 class FixtureCleanupTests(unittest.TestCase):

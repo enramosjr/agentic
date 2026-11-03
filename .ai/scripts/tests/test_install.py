@@ -625,7 +625,12 @@ class ManifestTests(InstallerCase):
         self.assertEqual(set(data), {"format", "template_version", "files", "hooks", "agents_block", "skills_link"})
         self.assertEqual(data["format"], 1)
         self.assertEqual(data["template_version"], (self.template / ".ai/VERSION").read_text().strip())
-        self.assertEqual(data["agents_block"], hashlib.sha256((self.template / "AGENTS.md").read_bytes()).hexdigest())
+        installed = (self.target / 'AGENTS.md').read_bytes()
+        prefix, body = installed.split(install.BEGIN + b'\n', 1)
+        body, suffix = body.split(install.END + b'\n', 1)
+        self.assertEqual((prefix, suffix), (b'', b''))
+        self.assertEqual(body, (self.template / 'AGENTS.md').read_bytes().replace(b'\r\n', b'\n'))
+        self.assertEqual(data["agents_block"], hashlib.sha256(body).hexdigest())
         self.assertEqual((self.target / ".ai/install-manifest.json").read_text(), json.dumps(data, indent=2, sort_keys=True) + "\n")
         for name, digest in data["files"].items():
             self.assertEqual(digest, hashlib.sha256((self.target / name).read_bytes()).hexdigest())

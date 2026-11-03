@@ -60,16 +60,24 @@ def worker(start: Path, name: str, result_path: Path) -> int:
 
 
 def run_group(start: Path, name: str, expected: int) -> dict:
+    progress = os.environ.get('AGENTIC_TEST_PROGRESS') == '1'
+    if progress:
+        print(f'START {name}', flush=True)
     with tempfile.TemporaryDirectory() as tmp:
         result_path = Path(tmp) / "result.json"
         process = subprocess.run(
             [sys.executable, str(Path(__file__).resolve()), "-s", str(start), "--worker", name, "--result", str(result_path)],
             capture_output=True, text=True, encoding='utf-8', errors="replace")
         if result_path.is_file():
-            return json.loads(result_path.read_text(encoding='utf-8'))
-    output = (process.stdout + process.stderr)[-4000:]
-    return {"run": expected, "failures": [], "errors": [[name, f"worker exited {process.returncode}\n{output}"]],
-            "unexpected": [], "skipped": 0}
+            result = json.loads(result_path.read_text(encoding='utf-8'))
+        else:
+            output = (process.stdout + process.stderr)[-4000:]
+            result = {"run": expected, "failures": [], "errors": [[name, f"worker exited {process.returncode}\n{output}"]],
+                      "unexpected": [], "skipped": 0}
+    if progress:
+        print(f'FINISH {name}: run={result["run"]} failures={len(result["failures"])} '
+              f'errors={len(result["errors"])} unexpected={len(result["unexpected"])}', flush=True)
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:

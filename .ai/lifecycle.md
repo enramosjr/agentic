@@ -338,7 +338,7 @@ import ast
 from pathlib import Path
 import sys
 
-nodes = ast.walk(ast.parse(Path('src/calc.py').read_text()))
+nodes = ast.walk(ast.parse(Path('src/calc.py').read_text(encoding='utf-8')))
 for node in nodes:
     names = [alias.name for alias in node.names] if isinstance(node, ast.Import) else []
     if isinstance(node, ast.ImportFrom):

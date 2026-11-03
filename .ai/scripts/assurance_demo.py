@@ -95,7 +95,7 @@ class Session:
 
     def exec(self, argv: list[str], ok: tuple[int, ...] = (0,)) -> subprocess.CompletedProcess:
         try:
-            result = subprocess.run(argv, cwd=self.repo, env=self.env, capture_output=True, text=True, timeout=120)
+            result = subprocess.run(argv, cwd=self.repo, env=self.env, capture_output=True, text=True, encoding='utf-8', timeout=120)
         except subprocess.TimeoutExpired:
             raise DemoFailure(f"timed out: {' '.join(argv[:3])}")
         if result.returncode not in ok:

@@ -62,7 +62,7 @@ def _run(command: list[str], cwd: Path, *, check: bool = True) -> subprocess.Com
         mutating = (len(command) > 1 and command[1] in {'fetch', 'worktree', 'merge', 'reset', 'push'}
                     or command[1:3] in (['pr', 'ready'], ['pr', 'comment']))
         runner = review_guard.run_owned if mutating else subprocess.run
-        result = runner(command, cwd=cwd, capture_output=True, text=True, check=False)
+        result = runner(command, cwd=cwd, capture_output=True, text=True, encoding='utf-8', check=False)
     except FileNotFoundError as error:
         raise SyncError(f"{command[0]} not found ({error})") from error
     if check and result.returncode != 0:

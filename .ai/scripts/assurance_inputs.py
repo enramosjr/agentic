@@ -359,7 +359,7 @@ def suggest(root, argv, extra=(), profiles=None, cwd=None):
     if Path(cwd if cwd is not None else Path.cwd()).resolve() != root:
         raise ValueError('invoke the exporter from its repository root')
     result = subprocess.run(['git', '-C', str(root), 'rev-parse', '--show-toplevel'],
-                            capture_output=True, text=True, timeout=10, check=False)
+                            capture_output=True, text=True, encoding='utf-8', timeout=10, check=False)
     if result.returncode or Path(result.stdout.strip()).resolve() != root:
         raise ValueError('exporter location must be the Git worktree root')
     catalog = catalog_checked(PROFILES if profiles is None else profiles)

@@ -42,6 +42,9 @@ Focused checks guide implementation; final parity requires the complete suite:
 python .ai/scripts/run_tests.py -j 4
 ```
 
+Set `AGENTIC_TEST_PROGRESS=1` in the shell environment to print each test class's
+start and completion during a long run. The inventory and final verdict are unchanged.
+
 The `Framework parity` CI workflow runs that shared inventory on Windows and
 Linux, on the supported Python floor and Python 3.15, with full repository history.
 The installed-qualification test exercises an uncommitted upgrade and its actual

@@ -70,6 +70,17 @@ def publish(path: Path, data: dict) -> None:
         os.close(descriptor)
 
 
+def read_publication(path: Path, deadline: float) -> dict:
+    """A renamed Windows file can remain briefly locked by its publishing handle."""
+    while True:
+        try:
+            return json.loads(path.read_text(encoding='utf-8'))
+        except PermissionError:
+            if time.time() >= deadline:
+                raise
+            time.sleep(min(0.01, max(0, deadline - time.time())))
+
+
 def stop_group(pid: int) -> None:
     if os.name == 'nt':
         process_runtime.terminate_tree(pid)
@@ -90,7 +101,7 @@ def supervise(directory: Path) -> int:
                 or not (directory / "request.json").exists()):
             return 1
         time.sleep(0.01)
-    if json.loads(arm.read_text(encoding='utf-8')).get("token") != request["token"]:
+    if read_publication(arm, request['deadline']).get("token") != request["token"]:
         return 1
     child = None
     tree = process_runtime.ProcessTree()
@@ -190,19 +201,25 @@ def run(argv: list[str], cwd: Path, env: dict[str, str], storage: Path, *,
                    "output_limit": output_limit, "token": uuid.uuid4().hex, "context": context}
         (directory / "input").write_text(input_text, encoding="utf-8")
         publish(directory / "request.json", request)
-        supervisor = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), str(directory)],
-                                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                      stderr=subprocess.DEVNULL, **process_runtime.detached_options(),
-                                      env={**env, "PYTHONDONTWRITEBYTECODE": "1"})
+        diagnostic = directory / 'supervisor-error'
+        with diagnostic.open('wb') as errors:
+            supervisor = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), str(directory)],
+                                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                          stderr=errors, **process_runtime.detached_options(),
+                                          env={**env, "PYTHONDONTWRITEBYTECODE": "1"})
+        def supervision_failure(message):
+            with diagnostic.open('rb') as errors:
+                detail = errors.read(8192).decode('utf-8', errors='replace').strip()
+            return ProcessError('supervision', message + (': ' + detail if detail else ''))
         armed = False
         try:
             ready = directory / "ready.json"
             handshake_deadline = min(request["deadline"], time.time() + 5)
             while not ready.exists():
                 if supervisor.poll() is not None or time.time() >= handshake_deadline:
-                    raise ProcessError("supervision", "independent deadline owner did not become ready")
+                    raise supervision_failure("independent deadline owner did not become ready")
                 time.sleep(0.01)
-            identity = json.loads(ready.read_text(encoding='utf-8'))
+            identity = read_publication(ready, handshake_deadline)
             if identity != {"pid": supervisor.pid, "token": request["token"]}:
                 raise ProcessError("supervision", "deadline owner identity mismatch")
             identity.update(directory=str(directory), deadline=request["deadline"])
@@ -213,6 +230,8 @@ def run(argv: list[str], cwd: Path, env: dict[str, str], storage: Path, *,
             armed = True
             publish(directory / "launch.json", {"token": request["token"]})
             supervisor.wait(timeout=max(0.1, request["deadline"] - time.time()) + 5)
+            if not (directory / 'result.json').is_file():
+                raise supervision_failure(f'independent deadline owner exit {supervisor.returncode} without result')
             result = json.loads((directory / "result.json").read_text(encoding='utf-8'))
             with (directory / "output").open("rb") as output:
                 transcript = output.read(output_limit).decode("utf-8", errors="replace")

@@ -47,7 +47,7 @@ class ScanError(Exception):
 
 
 def _git(root: Path, *args: str) -> str:
-    result = subprocess.run(["git", "-C", str(root), "-c", "core.quotePath=false", *args], capture_output=True, text=True, errors="replace")
+    result = subprocess.run(["git", "-C", str(root), "-c", "core.quotePath=false", *args], capture_output=True, text=True, encoding='utf-8', errors="replace")
     if result.returncode != 0:
         raise ScanError(f"git {args[0]} failed: {(result.stderr.strip().splitlines() or ['no output'])[0]}")
     return result.stdout
