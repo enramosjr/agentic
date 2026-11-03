@@ -47,6 +47,8 @@ start and completion during a long run. The inventory and final verdict are unch
 
 The `Framework parity` CI workflow runs that shared inventory on Windows and
 Linux, on the supported Python floor and Python 3.15, with full repository history.
+Both native Windows preflights must pass before the complete matrix starts.
+The preflight retains individual failure traces and fails if any selected class fails.
 The installed-qualification test exercises an uncommitted upgrade and its actual
 qualification commands; the installer also tests a new clone with pinned snapshots.
 No platform is considered verified from startup-only checks or a submitted job.
