@@ -34,6 +34,41 @@ def snapshot(root):
             for p in root.rglob('*') if p.is_file() or p.is_symlink()}
 
 
+def assert_prior_guide_paragraphs(case, root, baseline, guide):
+    """Permit only the reviewed explicit UTF-8 read in the current demo snippet."""
+    import ast
+    old_read = "Path('src/calc.py').read_text()"
+    utf8_read = "Path('src/calc.py').read_text(encoding='utf-8')"
+    source = (root / '.ai/scripts/assurance_architecture_demo.py').read_text(encoding='utf-8')
+    assignment = next(node for node in ast.parse(source).body if isinstance(node, ast.Assign)
+                      and any(isinstance(target, ast.Name) and target.id == 'CHECK' for target in node.targets))
+    check = ast.literal_eval(assignment.value)
+    case.assertEqual((check.count(old_read), check.count(utf8_read)), (0, 1),
+                     'review current demo encoding substitution')
+    case.assertEqual((baseline.count(old_read), baseline.count(utf8_read)), (1, 0),
+                     'review historical guide encoding substitution')
+    case.assertEqual((guide.count(old_read), guide.count(utf8_read)), (0, 1),
+                     'review current guide encoding substitution')
+    case.assertIn(check.rstrip(), guide, 'current demo CHECK differs from the guide')
+    for paragraph in baseline.split('\n\n'):
+        case.assertIn(paragraph.replace(old_read, utf8_read), guide, 'previous guide paragraph changed')
+
+
+class CurrentGuideCompatibilityTests(unittest.TestCase):
+    def test_encoding_allowance_rejects_unrelated_edits_and_duplicate_substitutions(self):
+        root = SCRIPTS.parents[1]
+        baseline = read_baseline(AGENTS_BUDGET_HEAD, '.ai/lifecycle.md')
+        guide = (root / '.ai/lifecycle.md').read_text(encoding='utf-8')
+        self.assertEqual(guide.count('## Router\n'), 1)
+        variants = [
+            (guide.replace('## Router\n', '## Unrelated router change\n', 1), 'previous guide paragraph changed'),
+            (guide + "\nPath('src/calc.py').read_text(encoding='utf-8')\n", 'review current guide encoding substitution'),
+        ]
+        for changed, diagnostic in variants:
+            with self.subTest(diagnostic=diagnostic), self.assertRaisesRegex(AssertionError, diagnostic):
+                assert_prior_guide_paragraphs(self, root, baseline, changed)
+
+
 class Fixture(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -1699,7 +1734,7 @@ class InstallerDocDependencyTests(InstallerDocFixture):  # R2
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (INSTALLER_DOC_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 14)
+        self.assertEqual(len(variants), 15)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = InstallerDocDependencyTests('test_order_scope_and_independent_oracle')
@@ -2158,7 +2193,7 @@ class ValidationPolicyDependencyTests(ValidationPolicyFixture):  # R2
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (VALIDATION_POLICY_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 14)
+        self.assertEqual(len(variants), 15)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = ValidationPolicyDependencyTests('test_order_scope_and_independent_oracle')
@@ -2631,7 +2666,7 @@ class AuditDocDependencyTests(AuditDocFixture):  # R2
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (AUDIT_DOC_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 14)
+        self.assertEqual(len(variants), 15)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = AuditDocDependencyTests('test_order_scope_and_independent_oracle')
@@ -3120,7 +3155,7 @@ class AnalysisConvergenceDocDependencyTests(AnalysisConvergenceDocFixture):  # R
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (ANALYSIS_CONVERGENCE_DOC_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 14)
+        self.assertEqual(len(variants), 15)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = AnalysisConvergenceDocDependencyTests('test_order_scope_and_independent_oracle')
@@ -3614,7 +3649,7 @@ class StageDocDependencyTests(StageDocFixture):  # R2
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (STAGE_DOC_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 14)
+        self.assertEqual(len(variants), 15)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = StageDocDependencyTests('test_order_scope_and_independent_oracle')
@@ -4750,8 +4785,7 @@ class AssuranceDocCompatibilityTests(AssuranceDocFixture):  # R4
                        *ASSURANCE_DOC_INPUTS):
             self.assertIn(phrase, guide)
         baseline_source = read_baseline('22c65521b281fce485ec5d10e45359cded53ec3f', '.ai/lifecycle.md')
-        for paragraph in baseline_source.split('\n\n'):
-            self.assertIn(paragraph, guide, 'previous guide paragraph changed')
+        assert_prior_guide_paragraphs(self, self.root, baseline_source, guide)
 
 
 class AssuranceDocFrameworkEndToEndTests(AssuranceDocFixture):  # R5
@@ -5195,7 +5229,7 @@ class AgentsBudgetDependencyTests(AgentsBudgetFixture):  # R2
                     addition = '__import__("pathlib").Path("unrelated.md").read_text()\n'
                     if body == ('import-helper',):
                         helper = '.ai/scripts/tests/unreviewed_budget_helper.py'
-                        case.write(helper, addition)
+                        (case.root / helper).write_bytes(addition.encode('utf-8'))
                         case.assertEqual((case.root / helper).read_bytes(), addition.encode('utf-8'))
                         case.assertNotIn(helper, ledger.input_paths(case.root, AGENTS_BUDGET_INPUTS))
                         addition = 'import unreviewed_budget_helper\n'
@@ -5259,8 +5293,7 @@ class AgentsBudgetCompatibilityTests(AgentsBudgetFixture):  # R4
                        'eleven prior profiles', *AGENTS_BUDGET_INPUTS):
             self.assertIn(phrase, guide)
         baseline_source = read_baseline(AGENTS_BUDGET_HEAD, '.ai/lifecycle.md')
-        for paragraph in baseline_source.split('\n\n'):
-            self.assertIn(paragraph, guide, 'previous guide paragraph changed')
+        assert_prior_guide_paragraphs(self, self.root, baseline_source, guide)
 
 
 class AgentsBudgetFrameworkEndToEndTests(AgentsBudgetFixture):  # R5
@@ -5681,7 +5714,7 @@ for path, body in ((".ai/agents/reviewer.md#Passes", passes), (".claude/skills/r
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (SEMANTIC_LENS_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 15)
+        self.assertEqual(len(variants), 16)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = SemanticLensDependencyTests('test_order_scope_and_independent_oracle')
@@ -5701,7 +5734,7 @@ for path, body in ((".ai/agents/reviewer.md#Passes", passes), (".claude/skills/r
                     addition = '__import__("pathlib").Path("unrelated.md").read_text()\n'
                     if body == ('import-helper',):
                         helper = '.ai/scripts/tests/unreviewed_semantic_helper.py'
-                        case.write(helper, addition)
+                        (case.root / helper).write_bytes(addition.encode('utf-8'))
                         case.assertEqual((case.root / helper).read_bytes(), addition.encode('utf-8'))
                         case.assertNotIn(helper, ledger.input_paths(case.root, SEMANTIC_LENS_INPUTS))
                         addition = 'import unreviewed_semantic_helper\n'
@@ -5764,8 +5797,7 @@ class SemanticLensCompatibilityTests(SemanticLensFixture):  # R4
                        *SEMANTIC_LENS_INPUTS):
             self.assertIn(phrase, guide)
         baseline_source = read_baseline(SEMANTIC_LENS_HEAD, '.ai/lifecycle.md')
-        for paragraph in baseline_source.split('\n\n'):
-            self.assertIn(paragraph, guide, 'previous guide paragraph changed')
+        assert_prior_guide_paragraphs(self, self.root, baseline_source, guide)
 
 
 class SemanticLensFrameworkEndToEndTests(SemanticLensFixture):  # R5
@@ -6272,7 +6304,7 @@ class SkillFrontmatterDependencyTests(SkillFrontmatterFixture):  # R2
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (SKILL_FRONTMATTER_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 15)
+        self.assertEqual(len(variants), 16)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = SkillFrontmatterDependencyTests('test_order_scope_and_independent_oracle')
@@ -6292,8 +6324,8 @@ class SkillFrontmatterDependencyTests(SkillFrontmatterFixture):  # R2
                     addition = '__import__("pathlib").Path("unrelated.md").read_text()\n'
                     if body == ('import-helper',):
                         helper = '.ai/scripts/tests/unreviewed_skill_helper.py'
-                        case.write(helper, addition)
-                        case.assertEqual((case.root / helper).read_bytes(), addition.encode())
+                        (case.root / helper).write_bytes(addition.encode('utf-8'))
+                        case.assertEqual((case.root / helper).read_bytes(), addition.encode('utf-8'))
                         case.assertNotIn(helper, ledger.input_paths(case.root, SKILL_FRONTMATTER_INPUTS))
                         addition = 'import unreviewed_skill_helper\n'
                     if body and body != ('import-helper',):
@@ -6355,8 +6387,7 @@ class SkillFrontmatterCompatibilityTests(SkillFrontmatterFixture):  # R4
                        *SKILL_FRONTMATTER_INPUTS):
             self.assertIn(phrase, guide)
         baseline_source = read_baseline(SKILL_FRONTMATTER_HEAD, '.ai/lifecycle.md')
-        for paragraph in baseline_source.split('\n\n'):
-            self.assertIn(paragraph, guide, 'previous guide paragraph changed')
+        assert_prior_guide_paragraphs(self, self.root, baseline_source, guide)
 
 
 SKILL_FRONTMATTER_FRESH = [*SKILL_FRONTMATTER_DOCS, *SKILL_FRONTMATTER_TESTS,

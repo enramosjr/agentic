@@ -169,7 +169,7 @@ class PersistedTextEncodingTests(unittest.TestCase):
             (root / name).write_bytes(b'def greet():\n    return 1\n')
             document = root / '.ai/docs/notice.md'
             document.parent.mkdir()
-            document.write_bytes('# \u4e81\n'.encode('utf-8'))
+            document.write_bytes('# Notice\n\n\u4e81 content\n'.encode('utf-8'))
             for arguments in [('init', '-q'), ('add', '.'), ('-c', 'user.name=Test', '-c',
                     'user.email=test@example.com', 'commit', '-qm', 'fixture')]:
                 subprocess.run(['git', '-C', str(root), *arguments], check=True)
@@ -179,7 +179,7 @@ class PersistedTextEncodingTests(unittest.TestCase):
                 'print(json.dumps([scratch.git_common_dir(root).as_posix(),'
                 'Path(eval_outcome.git(root,"rev-parse","--show-toplevel")).as_posix(),'
                 'Path(pr_sync._git(root,"rev-parse","--show-toplevel").stdout.strip()).as_posix(),'
-                'scan._git(root,"ls-files","-z"),completion.okf(root,"show",".ai/docs/notice.md").stdout]))')
+                'scan._git(root,"ls-files","-z"),completion.okf(root,"show",".ai/docs/notice.md","--body").stdout]))')
             result = subprocess.run([sys.executable, '-c', code, str(SCRIPTS), str(root)],
                                     cwd=root, env=values, capture_output=True, encoding='utf-8', timeout=30)
             self.assertEqual(result.returncode, 0, result.stderr)
