@@ -2,13 +2,14 @@
 """Native review callbacks and lifecycle integration; Python 3.9+, stdlib only.
 
 Synthetic callbacks exercise this contract, not actual native-runtime qualification.
-The CLI accepts callbacks only beneath an identifiable native launcher on Linux.
+The CLI accepts callbacks only beneath an identifiable native launcher.
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import ntpath
 import os
 from pathlib import Path
 import re
@@ -26,7 +27,7 @@ def configuration(root: Path, adapter: str) -> str:
     name = '.claude/settings.json' if adapter == 'claude' else '.codex/hooks.json'
     path = root / name
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding='utf-8'))
         hooks = data['hooks']
         for event in EVENTS:
             matches = [hook for group in hooks.get(event, []) for hook in group.get('hooks', [])
@@ -44,18 +45,25 @@ def configuration(root: Path, adapter: str) -> str:
 def native_launcher(adapter: str) -> dict:
     """Native process ancestry is execution evidence, not a parent role/trust flag."""
     pid = os.getppid()
+    child_birth = int(guard.process_runtime.identity()['birth'])
     for _ in range(32):
         try:
-            process = Path(f'/proc/{pid}')
-            argv = [os.fsdecode(word) for word in (process / 'cmdline').read_bytes().split(b'\0') if word]
-            names = {Path(word).name for word in argv[:3]}
+            process = guard.process_runtime.process_info(pid)
+            if not process.get('birth'):
+                break
+            birth = int(process['birth'])
+            if birth > child_birth:
+                break  # Windows parent IDs can outlive the original parent process.
+            names = {ntpath.basename(word) for word in process['argv'][:3]}
+            if os.name == 'nt':
+                names = {name.lower() for name in names}
             if names & {adapter, adapter + '.exe', adapter + '.js'}:
-                return guard.identity(pid)
-            fields = (process / 'stat').read_text().rsplit(')', 1)[1].split()
-            pid = int(fields[1])
+                return {'pid': pid, 'birth': process['birth']}
+            child_birth = birth
+            pid = int(process['parent'])
             if pid <= 1:
                 break
-        except (OSError, ValueError, IndexError):
+        except (OSError, ValueError, IndexError, KeyError):
             break
     raise guard.ReviewError('native launcher cannot be identified; mechanical capture is unavailable on this runtime')
 
@@ -109,7 +117,7 @@ def candidate(root: Path, state: dict) -> dict:
             'native_session': value['sessions'].get(request['adapter'] + ':' + request['session']),
             'task_contract': {key: state.get(key) for key in ('task', 'tier', 'kind', 'user_set')},
             'redgreen': state.get('redgreen', []),
-            'report_metadata': metadata(report_path.read_text()),
+            'report_metadata': metadata(report_path.read_text(encoding='utf-8')),
             'report_executable': bool(report_path.stat().st_mode & 0o111)}
 
 
@@ -156,7 +164,7 @@ def problem(root: Path, state: dict, report: Path | None = None) -> str | None:
         issue = guard.evidence_problem(root, state)
         if issue:
             return issue
-        content = (report or destination).read_text()
+        content = (report or destination).read_text(encoding='utf-8')
         issue = guard.qualification_problem(root, state['task'], candidate(root, state), content)
         if issue:
             return issue
@@ -173,22 +181,51 @@ def identity(root: Path) -> dict:
             'capture_sha256', 'completion_sha256', 'report_sha256')}
 
 
+def redirects_git(environment: dict) -> bool:
+    if os.name == 'nt':
+        environment = {key.upper(): value for key, value in environment.items()}
+    if any(key in guard.GIT_TARGET_ENV for key in environment):
+        return True
+    keys = {key for key in environment if key.startswith('GIT_CONFIG_')}
+    if not keys:
+        return False
+    try:
+        count = int(environment.get('GIT_CONFIG_COUNT', '-1'))
+    except (TypeError, ValueError):
+        return True
+    if count < 0:
+        return True
+    expected = {'GIT_CONFIG_COUNT'}
+    for n in range(count):
+        key, value = f'GIT_CONFIG_KEY_{n}', f'GIT_CONFIG_VALUE_{n}'
+        expected.update((key, value))
+        if (not isinstance(environment.get(key), str) or environment[key].lower() != 'safe.directory'
+                or not isinstance(environment.get(value), str)):
+            return True
+    return keys != expected
+
+
 def full_index_commit(command: str, environment: dict | None = None) -> bool:
     """Path-limited commits select a different tree than the checked full index."""
     try:
-        tokens = shlex.split(command)
+        import pr_hook
+        tokens = pr_hook.split_words(command)
         if any(word.partition('=')[0] in guard.GIT_TARGET_ENV or word.startswith('GIT_CONFIG_') for word in tokens):
             return False
         if any(word.partition('=')[0] in ('--git-dir', '--work-tree') for word in tokens):
             return False
         effective = os.environ if environment is None else environment
-        if any(key in guard.GIT_TARGET_ENV or key.startswith('GIT_CONFIG_') for key in effective):
+        if redirects_git(effective):
             return False
         invocations = guard.git_invocations(command, Path.cwd(), os.environ if environment is None else environment)
+        if any(redirects_git(invocation['env']) for invocation in invocations):
+            return False
         if any(word == '-c' or word.startswith('-c') or word.startswith('--config-env')
                for invocation in invocations for word in invocation['prefix']):
             return False
-        offset = next(n for n, word in enumerate(tokens) if Path(word).name == 'git') + 1
+        offset = next(n for n, word in enumerate(tokens)
+                      if (ntpath.basename(word).lower() if os.name == 'nt' else ntpath.basename(word))
+                      in ('git', 'git.exe')) + 1
         while offset < len(tokens) and tokens[offset].startswith('-'):
             offset += 2 if tokens[offset] in ('-C', '-c', '--git-dir', '--work-tree', '--namespace') else 1
         if offset >= len(tokens) or tokens[offset] != 'commit':
@@ -369,10 +406,29 @@ def native_tool(root: Path, adapter: str, data: dict, runtime: dict) -> None:
 
 def driver_invocation(root: Path, data: dict, command: str) -> bool:
     try:
-        words = shlex.split(command)
+        import pr_hook
+        words, offset, call_operator = [], 0, False
+        pattern = pr_hook.WINDOWS_TOKEN if os.name == 'nt' else pr_hook.TOKEN
+        for match in pattern.finditer(command):
+            if command[offset:match.start()].strip():
+                return False
+            raw, offset = match.group(), match.end()
+            if raw in pr_hook.OPERATORS:
+                if os.name == 'nt' and raw == '&' and not words and not call_operator:
+                    call_operator = True
+                    continue  # PowerShell's direct literal invocation operator.
+                return False
+            if pr_hook._dynamic(raw):
+                return False
+            decoded = pr_hook.split_words(raw)
+            if len(decoded) != 1:
+                return False
+            words.append(decoded[0])
+        if command[offset:].strip():
+            return False
     except ValueError:
         return False
-    if not words or any(word in ('&&', ';', '||', '|', '&') for word in words):
+    if not words:
         return False
     if words[:1] == ['env']:
         words.pop(0)
@@ -382,6 +438,8 @@ def driver_invocation(root: Path, data: dict, command: str) -> bool:
         return False
     invoked = words.pop(0)
     executable = Path(invoked).name
+    if os.name == 'nt':
+        executable = executable.lower()
     if re.fullmatch(r'python(?:\d+(?:\.\d+)*)?(?:\.exe)?', executable):
         while words and words[0] in ('-u', '-B', '-E', '-I', '-s', '-S', '-O', '-OO', '-q', '--'):
             words.pop(0)
@@ -407,7 +465,7 @@ def prepare_report(root: Path, state: dict, name: str) -> str:
         raise guard.ReviewError('report must be a fresh repo-relative path')
     if any(p.is_symlink() for p in [destination, *destination.parents] if p != root.parent):
         raise guard.ReviewError('report path contains a symlink')
-    tracked = subprocess.check_output(['git', '-C', str(root), 'ls-files', '--', name], text=True)
+    tracked = subprocess.check_output(['git', '-C', str(root), 'ls-files', '--', name], text=True, encoding='utf-8')
     if destination.exists() or tracked.strip():
         raise guard.ReviewError('report path is pre-existing/tracked; choose a fresh destination')
     for entry in state.get('ledger', []):
@@ -421,16 +479,16 @@ def prepare_report(root: Path, state: dict, name: str) -> str:
         base = [sys.executable, str(root / '.ai/scripts/okf.py')]
         result = guard.run_owned([*base, 'new', relative, '--type', 'Review', '--title', 'Native review',
                                  '--description', 'Pending native independent review; no approval yet.'],
-                                cwd=root, capture_output=True, text=True, timeout=60)
+                                cwd=root, capture_output=True, text=True, encoding='utf-8', timeout=60)
         if result.returncode:
             raise guard.ReviewError(result.stdout + result.stderr)
         result = guard.run_owned([*base, 'log', f'Mechanical review prepared at {name}; awaiting native reviewer completion.'],
-                                cwd=root, capture_output=True, text=True, timeout=60)
+                                cwd=root, capture_output=True, text=True, encoding='utf-8', timeout=60)
         if result.returncode:
             raise guard.ReviewError(result.stdout + result.stderr)
     else:
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text('# Pending native review\n\nNo approval recorded.\n')
+        destination.write_text('# Pending native review\n\nNo approval recorded.\n', encoding='utf-8')
     lifecycle.save(root, state)
     return name
 
@@ -507,13 +565,13 @@ def command(args) -> int:
                 if issue:
                     raise guard.ReviewError(issue)
                 path = root / request['report']
-                existing = path.read_text()
+                existing = path.read_text(encoding='utf-8')
                 if guard.report_hash(existing) == interval['report_sha256']:
                     return 0
                 # Only the pending scaffold may be replaced; never overwrite another report.
                 if guard.report_hash(existing) != request.get('pending_sha256'):
                     raise guard.ReviewError('reserved report has conflicting content; restart instead')
-                path.write_text(metadata(existing) + '\n\n' + guard.body(interval['report']))
+                path.write_text(metadata(existing) + '\n\n' + guard.body(interval['report']), encoding='utf-8')
                 return 0
         guard.enable(root, state['task'], adapter, session, name)
     print('Mechanical review requested; awaiting qualified native reviewer start/completion.')
@@ -549,4 +607,6 @@ def main(argv=None):
 
 
 if __name__ == '__main__':
+    import process_runtime
+    process_runtime.configure_windows_environment()
     raise SystemExit(main())

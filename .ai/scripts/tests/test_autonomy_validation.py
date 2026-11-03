@@ -1,6 +1,8 @@
 """Contracts for immutable managed validation and observed source-work tracking."""
 import json
 import hashlib
+import errno
+import io
 import os
 from pathlib import Path
 import subprocess
@@ -11,6 +13,7 @@ from unittest import mock
 
 from test_autonomy import AutonomyTestCase, HAS_GIT, SCRIPTS
 import autonomy_validation
+import process_runtime
 
 
 @unittest.skipUnless(HAS_GIT, "git not installed")
@@ -23,8 +26,9 @@ class ValidationTests(AutonomyTestCase):
         self.runtime.mkdir()
 
     def command(self, code="print('contract asserted')"):
+        # Success contracts allow native process startup; deadline cases override.
         return {"label": "contract-" + hashlib.sha256(code.encode()).hexdigest()[:8], "argv": [sys.executable, "-c", code],
-                "timeout_seconds": .5, "coverage": ["A"]}
+                "timeout_seconds": 5, "coverage": ["A"]}
 
     def test_plan_rejects_missing_coverage_duplicates_and_unbounded_time(self):
         for value in ([], {}, {"requirements": ["A"], "commands": []},
@@ -180,14 +184,16 @@ class ValidationTests(AutonomyTestCase):
     def git_head(self):
         return autonomy_validation.git(self.repo, "rev-parse", "HEAD")
 
-    @unittest.skipUnless(Path("/dev/full").exists(), "requires a failing evidence device")
     def test_successful_command_cannot_pass_when_evidence_storage_is_full(self):
         request = self.runtime / "request.json"
         request.write_text(json.dumps({"candidate": self.git_head(), "requirements": ["A"], "commands": [self.command()]}))
         original = Path.open
+        class FullEvidenceDevice(io.StringIO):
+            def write(self, text):
+                raise OSError(errno.ENOSPC, 'No space left on evidence device')
         def failing_log(path, *args, **kwargs):
             if path.name == "command-1.log":
-                return original(Path("/dev/full"), "w")
+                return FullEvidenceDevice()
             return original(path, *args, **kwargs)
         with mock.patch.object(Path, "open", failing_log):
             result = autonomy_validation.run(request, self.repo, time.monotonic() + 5, .05, lambda *args: None, lambda: None)
@@ -224,11 +230,11 @@ class ValidationTests(AutonomyTestCase):
     def test_incremental_validation_retains_and_resumes_passes_without_repeating_them(self):
         counter = self.runtime / "counter"
         first = self.command("from pathlib import Path; p=Path(" + repr(str(counter)) + "); p.write_text(p.read_text()+'run' if p.exists() else 'run'); print('first asserted')")
-        second = self.command("import time; time.sleep(.4); print('second asserted')")
-        second["timeout_seconds"] = 2
+        # Spend the run budget in the second command, not in OS process startup.
+        second = self.command("import time; time.sleep(3); print('second asserted')")
         commands = [first, second]
         request = self.request(self.runtime / "first", commands)
-        result = autonomy_validation.run(request, self.repo, time.monotonic() + .25, .02, lambda *args: None, lambda: None)
+        result = autonomy_validation.run(request, self.repo, time.monotonic() + 2, .02, lambda *args: None, lambda: None)
         original = json.loads(result.read_text())
         self.assertEqual(original["state"], "BUDGET_EXHAUSTED")
         self.assertEqual(original["commands"][0]["state"], "PASS")
@@ -315,8 +321,10 @@ class ValidationTests(AutonomyTestCase):
         for path in ("missing.py", "AGENTS.md"):
             if path == "AGENTS.md":
                 (self.repo / path).unlink()
-                (self.repo / path).symlink_to("knowledge/log.md")
-                self.commit_all("linked input")
+                blob = subprocess.run(['git', '-C', str(self.repo), 'hash-object', '-w', '--stdin'],
+                                      input='knowledge/log.md', text=True, capture_output=True, check=True).stdout.strip()
+                self.git('update-index', '--add', '--cacheinfo', f'120000,{blob},{path}')
+                self.git('commit', '-m', 'linked input')
             with self.subTest(path=path), self.assertRaisesRegex(ValueError, "no tracked files|symlink or submodule"):
                 autonomy_validation.source_inputs({"inputs": [path]}, self.repo, self.git_head())
         self.git("update-index", "--add", "--cacheinfo", f"160000,{self.git_head()},vendor")
@@ -541,8 +549,7 @@ class ValidationTests(AutonomyTestCase):
         self.assertEqual(result["state"], "FAIL")
         self.assertEqual({row["label"]: row["state"] for row in result["commands"]}, {"peer": "CANCELLED", "fail": "FAIL"})
         self.assertFalse(marker.exists())
-        with self.assertRaises(ProcessLookupError):
-            os.kill(int(pid.read_text()), 0)
+        self.assertFalse(process_runtime.alive(int(pid.read_text())))
 
     def test_supervisor_loss_cancels_all_running_peers_and_retains_results(self):
         pids = [self.runtime / f"pid-{number}" for number in range(2)]
@@ -560,20 +567,18 @@ class ValidationTests(AutonomyTestCase):
         self.assertEqual(result["validation_kind"], "model-backed")
         self.assertEqual([entry["state"] for entry in result["commands"]], ["CANCELLED", "CANCELLED"])
         for pid in pids:
-            with self.assertRaises(ProcessLookupError):
-                os.kill(int(pid.read_text()), 0)
+            self.assertFalse(process_runtime.alive(int(pid.read_text())))
 
     def test_command_timeout_cancels_peer_and_preserves_timeout_state(self):
         pid = self.runtime / "peer-pid"
         peer = {**self.command(f"from pathlib import Path; import os,time; Path({str(pid)!r}).write_text(str(os.getpid())); time.sleep(10)"),
                 "label": "peer", "resources": ["peer"], "timeout_seconds": 20}
         timeout = {**self.command("import time; time.sleep(10)"), "label": "timeout",
-                   "resources": ["timeout"], "timeout_seconds": .15}
+                   "resources": ["timeout"], "timeout_seconds": 1}
         result = self.run_commands([peer, timeout], max_parallel=2)
         self.assertEqual(result["state"], "TIMED_OUT")
         self.assertEqual({row["label"]: row["state"] for row in result["commands"]}, {"peer": "CANCELLED", "timeout": "TIMED_OUT"})
-        with self.assertRaises(ProcessLookupError):
-            os.kill(int(pid.read_text()), 0)
+        self.assertFalse(process_runtime.alive(int(pid.read_text())))
 
     def test_parallelism_never_exceeds_declared_limit(self):
         state = self.runtime / "concurrency.json"
@@ -581,12 +586,15 @@ class ValidationTests(AutonomyTestCase):
         state.write_text(json.dumps({"active": 0, "maximum": 0}))
         commands = []
         for number in range(4):
-            code = ("from pathlib import Path; import fcntl,json,time\n"
-                    f"p=Path({str(state)!r}); lock=open({str(mutex)!r},'a')\n"
-                    "fcntl.flock(lock,fcntl.LOCK_EX); value=json.loads(p.read_text()); value['active']+=1; "
-                    "value['maximum']=max(value['maximum'],value['active']); p.write_text(json.dumps(value)); "
-                    "fcntl.flock(lock,fcntl.LOCK_UN); time.sleep(.1)\n"
-                    "fcntl.flock(lock,fcntl.LOCK_EX); value=json.loads(p.read_text()); value['active']-=1; "
+            code = ("from pathlib import Path; import json,time,sys\n"
+                    f"sys.path.insert(0,{str(SCRIPTS)!r}); from process_runtime import file_lock\n"
+                    f"p=Path({str(state)!r}); mutex=Path({str(mutex)!r})\n"
+                    "with file_lock(mutex):\n"
+                    " value=json.loads(p.read_text()); value['active']+=1; "
+                    "value['maximum']=max(value['maximum'],value['active']); p.write_text(json.dumps(value))\n"
+                    "time.sleep(.1)\n"
+                    "with file_lock(mutex):\n"
+                    " value=json.loads(p.read_text()); value['active']-=1; "
                     f"p.write_text(json.dumps(value)); print({number})")
             commands.append({**self.command(code), "resources": [], "timeout_seconds": 2})
         result = self.run_commands(commands, max_parallel=2)
@@ -602,8 +610,7 @@ class ValidationTests(AutonomyTestCase):
         result = self.run_commands([peer, drift], max_parallel=2)
         self.assertEqual(result["state"], "INVALIDATED")
         self.assertEqual(result["commands"][0]["state"], "CANCELLED")
-        with self.assertRaises(ProcessLookupError):
-            os.kill(int(pid.read_text()), 0)
+        self.assertFalse(process_runtime.alive(int(pid.read_text())))
 
     def test_parallel_resume_reuses_pass_but_dependency_change_invalidates_consumer(self):
         counter = self.runtime / "counter"

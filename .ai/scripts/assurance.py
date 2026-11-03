@@ -15,6 +15,7 @@ import dataclasses
 from dataclasses import dataclass
 import datetime
 import json
+import os
 from pathlib import Path
 import re
 import shlex
@@ -25,6 +26,7 @@ from urllib.parse import unquote
 sys.dont_write_bytecode = True  # Bytecode beside the scripts would dirty the work tree.
 
 import brownfield  # noqa: E402
+from process_runtime import python_hint
 import ledger  # noqa: E402
 import review_evidence  # noqa: E402
 
@@ -138,6 +140,16 @@ def _parse(rid: str, capability: str, raw: str) -> Obligation:
     return Obligation(rid, capability, argv=argv, globs=globs, risk=risk)
 
 
+def _unmaterialized_link(root: Path, path: Path) -> bool:
+    path = Path(os.path.abspath(path))
+    if path.is_symlink() or not path.is_relative_to(root.resolve()):
+        return False
+    name = path.relative_to(root.resolve()).as_posix()
+    result = subprocess.run(['git', '-C', str(root), 'ls-files', '--stage', '-z', '--', ':(literal)' + name],
+                            capture_output=True, check=False, timeout=10)
+    return result.returncode == 0 and result.stdout.startswith(b'120000 ')
+
+
 def parse(rid: str, capability: str, raw: str, *, root: Path | None = None) -> Obligation:
     """Attach declared governance to every obligation outcome without changing its evidence scope."""
     obligation = _parse(rid, capability, raw)
@@ -167,7 +179,10 @@ def parse(rid: str, capability: str, raw: str, *, root: Path | None = None) -> O
         if not value or SCHEME.match(value) or value.startswith('//'):
             raise ValueError('must link to a local Markdown document within the knowledge bundle')
         source = bundle / capability.lstrip('/') if capability.startswith('/') else root / capability
-        target = (bundle / value.lstrip('/') if value.startswith('/') else source.parent / value).resolve()
+        unresolved = bundle / value.lstrip('/') if value.startswith('/') else source.parent / value
+        if _unmaterialized_link(root, unresolved):
+            raise ValueError('must resolve to a materialized document, not Git symlink text')
+        target = unresolved.resolve()
         if not target.is_relative_to(bundle.resolve()) or not target.is_relative_to(root):
             raise ValueError('must resolve within the knowledge bundle')
         if target.suffix != '.md' or not target.is_file():
@@ -267,7 +282,10 @@ def _review_target(root: Path, stage: object) -> Path | None:
         return None
     if Path(stage['ref']).is_absolute():
         return None
-    target = (root / stage['ref']).resolve()
+    unresolved = root / stage['ref']
+    if _unmaterialized_link(root, unresolved):
+        return None
+    target = unresolved.resolve()
     if not target.is_relative_to(root.resolve()) or not target.is_file():
         return None
     return target
@@ -387,7 +405,7 @@ def evaluate(root: Path, obligation: Obligation, items: list[Evidence], tree: st
     mine = [item for item in items if item.entry.get('label') == label]
     matching = [item for item in mine if item.entry.get('argv') == list(obligation.argv)
                 and (item.entry.get('inputs') or []) == obligation.evidence_globs]
-    hint = f'run `python3 .ai/scripts/lifecycle.py assure --run {obligation.id}`'
+    hint = f'run `{python_hint()} .ai/scripts/lifecycle.py assure --run {obligation.id}`'
     if not matching:
         if mine:
             return result(obligation, 'UNVERIFIED', f'evidence is for a different command or inputs; {hint}')
@@ -520,7 +538,7 @@ def gate_problem(root: Path, state: dict, records_dir: Path, tree: str) -> str |
     if failing:
         return 'assurance gate refused:\n' + '\n'.join(
             f"  {item['id']} {item['status']}: {item['reason']}; repair invalid declarations if needed, "
-            f"then run `python3 .ai/scripts/lifecycle.py assure --run {item['id']}` and retry Verify"
+            f"then run `{python_hint()} .ai/scripts/lifecycle.py assure --run {item['id']}` and retry Verify"
             for item in failing)
     return None
 

@@ -16,6 +16,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import repo  # noqa: E402
+import disk_tmp
 
 FILES = {
     "app/lib/main.dart": "void main() {}\n",
@@ -30,7 +31,7 @@ FILES = {
 class RepoTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.root = Path(tempfile.mkdtemp()).resolve()
-        self.addCleanup(shutil.rmtree, self.root)
+        self.addCleanup(disk_tmp.remove_tree, self.root)
         for rel, text in FILES.items():
             path = self.root / rel
             path.parent.mkdir(parents=True, exist_ok=True)

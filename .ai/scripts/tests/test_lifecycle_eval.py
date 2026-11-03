@@ -323,6 +323,193 @@ class ScenarioContractTests(unittest.TestCase):
                 lifecycle_eval.load_scenarios(directory)
 
 
+class NativeRuntimeTests(unittest.TestCase):
+    setUp = EvalRunnerTests.setUp
+
+    def test_uncertain_liveness_cannot_authorize_termination_of_a_mismatched_child(self):
+        import process_runtime
+        child = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(30)'])
+        try:
+            with mock.patch.object(process_runtime, '_windows_state', side_effect=PermissionError('identity denied')):
+                try:
+                    process_runtime.terminate_tree(child.pid, 'not-the-child-birth')
+                except PermissionError:
+                    pass
+            self.assertIsNone(child.poll(), 'uncertain identity authorized termination')
+        finally:
+            child.kill()
+            child.wait()
+
+    def test_termination_refuses_denied_identity_on_the_termination_handle(self):
+        import process_runtime
+        kernel = mock.MagicMock()
+        kernel.OpenProcess.return_value = 123
+        kernel.TerminateProcess.return_value = True
+        kernel.WaitForSingleObject.return_value = 0
+        with mock.patch.object(process_runtime.os, 'name', 'nt'), \
+                mock.patch.object(process_runtime, '_job_api', return_value=kernel), \
+                mock.patch.object(process_runtime, '_windows_state', side_effect=PermissionError('uncertain')), \
+                mock.patch.object(process_runtime, '_windows_handle_state', create=True,
+                                  side_effect=PermissionError('termination-handle identity denied')):
+            with self.assertRaises(PermissionError):
+                process_runtime.terminate_tree(1234, 'expected-birth')
+        kernel.TerminateProcess.assert_not_called()
+        kernel.CloseHandle.assert_called_once_with(123)
+
+    def test_termination_refuses_birth_mismatch_on_the_termination_handle(self):
+        import process_runtime
+        kernel = mock.MagicMock()
+        kernel.OpenProcess.return_value = 123
+        kernel.TerminateProcess.return_value = True
+        kernel.WaitForSingleObject.return_value = 0
+        with mock.patch.object(process_runtime.os, 'name', 'nt'), \
+                mock.patch.object(process_runtime, '_job_api', return_value=kernel), \
+                mock.patch.object(process_runtime, '_windows_state', side_effect=PermissionError('uncertain')), \
+                mock.patch.object(process_runtime, '_windows_handle_state', create=True,
+                                  return_value=('different-birth', True)):
+            process_runtime.terminate_tree(1234, 'expected-birth')
+        kernel.TerminateProcess.assert_not_called()
+        kernel.CloseHandle.assert_called_once_with(123)
+
+    def test_termination_queries_and_terminates_the_same_matching_handle(self):
+        import process_runtime
+        kernel = mock.MagicMock()
+        kernel.OpenProcess.return_value = 123
+        kernel.TerminateProcess.return_value = True
+        kernel.WaitForSingleObject.side_effect = [258, 0]
+
+        def times(handle, created, exited, system, user):
+            created._obj.dwHighDateTime = 0
+            created._obj.dwLowDateTime = 42
+            return True
+
+        kernel.GetProcessTimes.side_effect = times
+        with mock.patch.object(process_runtime.os, 'name', 'nt'), \
+                mock.patch.object(process_runtime, '_job_api', return_value=kernel), \
+                mock.patch.object(process_runtime, '_windows_state', side_effect=PermissionError('separate probe denied')):
+            process_runtime.terminate_tree(1234, '42')
+        kernel.OpenProcess.assert_called_once_with(0x00101001, False, 1234)
+        self.assertEqual(kernel.GetProcessTimes.call_args.args[0], 123)
+        kernel.TerminateProcess.assert_called_once_with(123, 1)
+        kernel.CloseHandle.assert_called_once_with(123)
+
+    def test_verified_birth_can_terminate_an_owned_child(self):
+        import process_runtime
+        child = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(30)'],
+                                 **process_runtime.detached_options())
+        try:
+            birth = process_runtime.identity(child.pid)['birth']
+            process_runtime.terminate_tree(child.pid, birth)
+            child.wait(timeout=5)
+            self.assertIsNotNone(child.poll())
+        finally:
+            child.kill()
+            child.wait()
+
+    def test_python_repair_hint_preserves_linux_and_quotes_windows_executable(self):
+        import process_runtime
+        with mock.patch.object(process_runtime.os, 'name', 'posix'):
+            self.assertEqual(process_runtime.python_hint(), 'python3')
+        with mock.patch.object(process_runtime.os, 'name', 'nt'):
+            with mock.patch.object(sys, 'executable', "C:\\Python's folder\\python.exe"):
+                self.assertEqual(process_runtime.python_hint(), "& 'C:\\Python''s folder\\python.exe'")
+
+    def test_python_repair_hint_native_copy_paste_roundtrip(self):
+        import process_runtime
+        arguments = ['argument with spaces', "quote'argument"]
+        code = 'import json,sys;print(json.dumps(sys.argv[1:]))'
+        if os.name == 'nt':
+            literal = lambda value: "'" + value.replace("'", "''") + "'"
+            command = (process_runtime.python_hint() + ' -c ' + literal(code) + ' ' +
+                       ' '.join(literal(value) for value in arguments))
+            shell = Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
+            result = subprocess.run([str(shell), '-NoProfile', '-NonInteractive', '-Command', command],
+                                    capture_output=True, text=True, timeout=10)
+        else:
+            result = subprocess.run([process_runtime.python_hint(), '-c', code, *arguments],
+                                    capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), arguments)
+
+    def test_real_exit_code_259_is_not_mistaken_for_a_live_process(self):
+        import process_runtime
+        child = subprocess.Popen([sys.executable, '-c', 'raise SystemExit(259)'])
+        child.wait(timeout=5)
+        self.assertFalse(process_runtime.alive(child.pid))
+
+    def test_capture_bounds_and_nonzero_exit_are_preserved(self):
+        with self.assertRaises(eval_process.ProcessError) as caught:
+            eval_process.run([sys.executable, '-c', 'import sys; sys.stdout.write("x"*10000)'],
+                             self.scratch, dict(os.environ), self.scratch, timeout=2, output_limit=1024)
+        self.assertEqual(caught.exception.code, 'output-limit')
+        self.assertEqual(len(caught.exception.output), 1024)
+        with self.assertRaises(eval_process.ProcessError) as caught:
+            eval_process.run([sys.executable, '-c', 'import sys; print("exit proof");sys.exit(7)'],
+                             self.scratch, dict(os.environ), self.scratch, timeout=2)
+        self.assertEqual(caught.exception.code, 'exit')
+        self.assertIn('exit proof', caught.exception.output)
+
+    def test_os_metadata_has_real_parent_and_exact_argv(self):
+        import process_runtime
+        child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)',
+                                  'argument with spaces', 'quote"argument'])
+        try:
+            value = process_runtime.process_info(child.pid)
+            self.assertEqual(value['parent'], os.getpid())
+            self.assertEqual(value['argv'][-2:], ['argument with spaces', 'quote"argument'])
+            self.assertEqual(value['birth'], process_runtime.identity(child.pid)['birth'])
+        finally:
+            child.kill()
+            child.wait()
+
+    def test_owned_tree_stops_descendants_and_proves_terminal_state(self):
+        import process_runtime
+        started, late = self.scratch / 'started', self.scratch / 'late'
+        descendant = (f'from pathlib import Path;import time;Path({str(started)!r}).touch();'
+                      f'time.sleep(.5);Path({str(late)!r}).touch()')
+        command = ('import subprocess,sys,time;'
+                   f'subprocess.Popen([sys.executable,"-c",{descendant!r}]);time.sleep(30)')
+        tree = process_runtime.ProcessTree()
+        child = tree.start([sys.executable, '-c', command])
+        try:
+            deadline = time.monotonic() + 5
+            while not started.exists() and child.poll() is None and time.monotonic() < deadline:
+                time.sleep(.01)
+            self.assertTrue(started.exists())
+            self.assertFalse(process_runtime.tree_stopped(tree.descriptor))
+        finally:
+            tree.close()
+            child.wait()
+        time.sleep(.6)
+        self.assertFalse(late.exists())
+        # POSIX zombie descendants remain members until init reaps them; Windows
+        # Job accounting exposes terminal membership without that procfs detail.
+        if os.name == 'nt':
+            self.assertTrue(process_runtime.tree_stopped(tree.descriptor))
+
+    def test_nonblocking_lock_refuses_a_live_owner_and_recovers_on_exit(self):
+        import process_runtime
+        locked, ready = self.scratch / 'lock', self.scratch / 'locked'
+        code = (f'import sys,time;from pathlib import Path;sys.path.insert(0,{str(SCRIPTS)!r});'
+                'import process_runtime\n'
+                f'with process_runtime.file_lock(Path({str(locked)!r})):\n'
+                f' Path({str(ready)!r}).touch()\n time.sleep(30)\n')
+        child = subprocess.Popen([sys.executable, '-c', code])
+        try:
+            deadline = time.monotonic() + 5
+            while not ready.exists() and child.poll() is None and time.monotonic() < deadline:
+                time.sleep(.01)
+            self.assertTrue(ready.exists())
+            with self.assertRaises(BlockingIOError):
+                with process_runtime.file_lock(locked, blocking=False):
+                    self.fail('concurrent lock owner admitted')
+        finally:
+            child.kill()
+            child.wait()
+        with process_runtime.file_lock(locked, blocking=False):
+            pass
+
+
 class ProcessTests(unittest.TestCase):
     """R4: matching artifacts cannot turn a crashed process into a PASS."""
 

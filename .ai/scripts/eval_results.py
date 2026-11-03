@@ -18,6 +18,7 @@ import eval_outcome
 import eval_process
 import install
 import scratch
+import process_runtime
 
 
 STATUSES = ("PASS", "FAIL", "ERROR", "NOT_RUN", "RUNNING")
@@ -367,20 +368,20 @@ def reconcile(launch: dict, storage: str, *, inspect_only=False) -> None:
     request_path = directory / "request.json"
     if request_path.is_symlink() or hashlib.sha256(request_path.read_bytes()).hexdigest() != launch["request_sha256"]:
         raise ResultError("supervisor request identity changed; recovery refused")
-    request = json.loads(request_path.read_text())
-    ready = json.loads((directory / "ready.json").read_text())
+    request = json.loads(request_path.read_text(encoding='utf-8'))
+    ready = json.loads((directory / "ready.json").read_text(encoding='utf-8'))
     if (request["token"] != launch["token"] or request["deadline"] != launch["deadline"]
             or request.get("context") != launch.get("context")
             or ready != {"pid": launch["pid"], "token": launch["token"]}):
         raise ResultError("supervisor token/deadline/identity mismatch")
     supervisor_alive = eval_process.alive(launch)
     if supervisor_alive:
-        arguments = Path(f"/proc/{launch['pid']}/cmdline").read_bytes().split(b"\x00")
-        expected = [os.fsencode(os.path.realpath(os.sys.executable)), os.fsencode(str(Path(eval_process.__file__).resolve())), os.fsencode(str(directory))]
-        if len(arguments) < 3 or [os.fsencode(os.path.realpath(os.fsdecode(arguments[0]))), *arguments[1:3]] != expected:
+        arguments = process_runtime.process_info(launch['pid'])['argv']
+        expected = [os.path.realpath(os.sys.executable), str(Path(eval_process.__file__).resolve()), str(directory)]
+        if len(arguments) < 3 or [os.path.normcase(os.path.realpath(word)) for word in arguments[:3]] != [os.path.normcase(word) for word in expected]:
             raise ResultError("live supervisor command identity mismatch")
     child_path = directory / "child.json"
-    child = json.loads(child_path.read_text()) if child_path.exists() else None
+    child = json.loads(child_path.read_text(encoding='utf-8')) if child_path.exists() else None
     if child and child.get("token") != launch["token"]: raise ResultError("child token mismatch")
     if inspect_only:
         return
@@ -445,18 +446,16 @@ def run(path: Path, root: Path, scenarios: list[dict], agent: list[str], options
         options.check_digest = eval_outcome.digest({name: hashlib.sha256(data).hexdigest() for name, data in snapshots.items()})
         if options.continue_unstarted:
             # Keep the lock inode: unlinking it allows waiters to lock different files.
-            import fcntl
-            with path.with_name(path.name + ".execution-lock").open("a") as lock:
-                try:
-                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                except BlockingIOError as error:
-                    raise ResultError("campaign continuation already has an execution owner") from error
-                return run_frozen(path, root, scenarios, agent, options, execute)
+            try:
+                with process_runtime.file_lock(path.with_name(path.name + ".execution-lock"), blocking=False):
+                    return run_frozen(path, root, scenarios, agent, options, execute)
+            except BlockingIOError as error:
+                raise ResultError("campaign continuation already has an execution owner") from error
         return run_frozen(path, root, scenarios, agent, options, execute)
 
 
 def continue_report(path: Path, scenarios: list[dict], options, frozen: dict) -> dict:
-    report = json.loads(path.read_text())
+    report = json.loads(path.read_text(encoding='utf-8'))
     problems = validate(report)
     if problems: raise ResultError("; ".join(problems))
     if eval_process.alive(report["owner"]):
@@ -572,7 +571,7 @@ def results_check(path: Path, *, recover_interrupted=False, require_real=False, 
     paths = sorted(path.glob("*.json")) if path.is_dir() else [path]
     if not paths: return ["no result records"]
     problems, reports = [], []
-    loaded = [(record_path, json.loads(record_path.read_text())) for record_path in paths]
+    loaded = [(record_path, json.loads(record_path.read_text(encoding='utf-8'))) for record_path in paths]
     for _, report in loaded:
         problems.extend(validate(report))
     if problems:
@@ -652,7 +651,7 @@ def evidence_pair(red_path: Path, green_path: Path, scenario: str) -> list[str]:
         problems.extend(results_check(path, require_real=True))
     if problems:
         return problems
-    red, green = (json.loads(path.read_text()) for path in (red_path, green_path))
+    red, green = (json.loads(path.read_text(encoding='utf-8')) for path in (red_path, green_path))
     before, after = red["provenance"], green["provenance"]
     if before["policy"]["digest"] == after["policy"]["digest"]:
         problems.append("pair does not identify a policy change")

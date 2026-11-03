@@ -10,25 +10,31 @@ import json
 import os
 from pathlib import Path
 import signal
-import selectors
+import queue
 import subprocess
 import sys
 import tempfile
 import time
 import uuid
+import threading
+
+import process_runtime
 
 
 OUTPUT_LIMIT = 4 * 1024 * 1024
 
 
 def process_identity(pid: int) -> dict:
-    """Linux birth identity prevents PID reuse from authorizing recovery signals."""
+    """Native birth identity prevents PID reuse from authorizing recovery signals."""
+    if os.name == 'nt':
+        value = process_runtime.identity(pid)
+        return {'pid': pid, 'start_ticks': value['birth'], 'boot': 'windows'}
     try:
-        stat = Path(f"/proc/{pid}/stat").read_text().rsplit(") ", 1)[1].split()
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding='utf-8').rsplit(") ", 1)[1].split()
         if stat[0] == "Z":
             raise ProcessLookupError(pid)
         return {"pid": pid, "start_ticks": stat[19],
-                "boot": Path("/proc/sys/kernel/random/boot_id").read_text().strip()}
+                "boot": Path("/proc/sys/kernel/random/boot_id").read_text(encoding='utf-8').strip()}
     except (OSError, IndexError, ValueError) as error:
         raise ProcessLookupError(pid) from error
 
@@ -55,6 +61,8 @@ def publish(path: Path, data: dict) -> None:
         stream.flush()
         os.fsync(stream.fileno())
     os.replace(temp, path)
+    if os.name == 'nt':
+        return  # fsync(file) plus atomic rename; directory handles are not POSIX fds.
     descriptor = os.open(path.parent, os.O_RDONLY)
     try:
         os.fsync(descriptor)
@@ -63,6 +71,9 @@ def publish(path: Path, data: dict) -> None:
 
 
 def stop_group(pid: int) -> None:
+    if os.name == 'nt':
+        process_runtime.terminate_tree(pid)
+        return
     try:
         os.killpg(pid, signal.SIGKILL)
     except ProcessLookupError:
@@ -70,7 +81,7 @@ def stop_group(pid: int) -> None:
 
 
 def supervise(directory: Path) -> int:
-    request = json.loads((directory / "request.json").read_text())
+    request = json.loads((directory / "request.json").read_text(encoding='utf-8'))
     # The runner must observe readiness before publishing its launch authorization.
     publish(directory / "ready.json", {"pid": os.getpid(), "token": request["token"]})
     arm = directory / "launch.json"
@@ -79,18 +90,20 @@ def supervise(directory: Path) -> int:
                 or not (directory / "request.json").exists()):
             return 1
         time.sleep(0.01)
-    if json.loads(arm.read_text()).get("token") != request["token"]:
+    if json.loads(arm.read_text(encoding='utf-8')).get("token") != request["token"]:
         return 1
     child = None
+    tree = process_runtime.ProcessTree()
+    reader = None
+    stop_reader = threading.Event()
     status = {"code": "launch", "exit": None, "message": "command did not launch"}
     try:
         with (directory / "output").open("wb") as output, (directory / "input").open("rb") as prompt:
             if time.time() >= request["deadline"] or (directory / "cancel.json").exists():
                 raise ProcessError("timeout", "deadline expired before command launch")
             child_env = {**request["env"], "LIFECYCLE_EVAL_DEADLINE": str(request["deadline"])}
-            child = subprocess.Popen(request["argv"], cwd=request["cwd"], env=child_env,
-                                     stdin=prompt, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                     start_new_session=True)
+            child = tree.start(request["argv"], cwd=request["cwd"], env=child_env,
+                               stdin=prompt, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             try:
                 child_identity = process_identity(child.pid)
             except ProcessLookupError:
@@ -98,31 +111,56 @@ def supervise(directory: Path) -> int:
                 child_identity = {"pid": child.pid, "start_ticks": None, "boot": None}
             publish(directory / "child.json", {**child_identity, "token": request["token"]})
             size, eof = 0, False
-            with selectors.DefaultSelector() as selector:
-                selector.register(child.stdout, selectors.EVENT_READ)
-                while True:
-                    if (directory / "cancel.json").exists():
-                        raise ProcessError("interrupted", "command cancelled by runner")
-                    if time.time() >= request["deadline"]:
-                        raise ProcessError("timeout", "command timed out")
-                    for key, _ in selector.select(timeout=0.01):
-                        chunk = os.read(key.fileobj.fileno(), 65536)
+            chunks = queue.Queue(maxsize=8)
+
+            def capture():
+                try:
+                    while not stop_reader.is_set():
+                        chunk = os.read(child.stdout.fileno(), 65536)
+                        while not stop_reader.is_set():
+                            try:
+                                chunks.put(chunk, timeout=0.05)
+                                break
+                            except queue.Full:
+                                pass
                         if not chunk:
-                            eof = True
-                            selector.unregister(key.fileobj)
-                            continue
-                        remaining = request["output_limit"] - size
-                        output.write(chunk[:remaining])
-                        size += len(chunk)
-                        if size > request["output_limit"]:
-                            raise ProcessError("output-limit", "command exceeded output limit")
-                    code = child.poll()
-                    if code is not None:
-                        stop_group(child.pid)
-                        if eof:
-                            status = {"code": "ok" if code == 0 else "exit", "exit": code,
-                                      "message": f"command exit {code}"}
-                            break
+                            return
+                except OSError as error:
+                    while not stop_reader.is_set():
+                        try:
+                            chunks.put(error, timeout=0.05)
+                            return
+                        except queue.Full:
+                            pass
+
+            reader = threading.Thread(target=capture, daemon=True)
+            reader.start()
+            while True:
+                if (directory / "cancel.json").exists():
+                    raise ProcessError("interrupted", "command cancelled by runner")
+                if time.time() >= request["deadline"]:
+                    raise ProcessError("timeout", "command timed out")
+                try:
+                    chunk = chunks.get(timeout=0.01)
+                except queue.Empty:
+                    chunk = None
+                if isinstance(chunk, OSError):
+                    raise chunk
+                if chunk == b'':
+                    eof = True
+                elif chunk is not None:
+                    remaining = request["output_limit"] - size
+                    output.write(chunk[:remaining])
+                    size += len(chunk)
+                    if size > request["output_limit"]:
+                        raise ProcessError("output-limit", "command exceeded output limit")
+                code = child.poll()
+                if code is not None:
+                    tree.stop()
+                    if eof:
+                        status = {"code": "ok" if code == 0 else "exit", "exit": code,
+                                  "message": f"command exit {code}"}
+                        break
     except ProcessError as error:
         status = {"code": error.code, "exit": None, "message": str(error)}
     except (OSError, ValueError) as error:
@@ -130,8 +168,11 @@ def supervise(directory: Path) -> int:
     finally:
         if child is not None:
             # Also remove background descendants left after an otherwise successful exit.
-            stop_group(child.pid)
+            tree.close()
             child.wait()
+            stop_reader.set()
+            if reader is not None:
+                reader.join(timeout=2)
             child.stdout.close()
         publish(directory / "result.json", status)
     return 0
@@ -140,8 +181,6 @@ def supervise(directory: Path) -> int:
 def run(argv: list[str], cwd: Path, env: dict[str, str], storage: Path, *,
         timeout: float, input_text: str = "", output_limit: int = OUTPUT_LIMIT,
         before_launch=None, deadline: float | None = None, context: dict | None = None) -> subprocess.CompletedProcess:
-    if os.name != "posix":
-        raise ProcessError("supervision", "independent process-group supervision requires POSIX")
     if timeout <= 0:
         raise ProcessError("timeout", "command has no remaining time allowance")
     with tempfile.TemporaryDirectory(prefix="eval-process-", dir=storage) as temp:
@@ -153,7 +192,7 @@ def run(argv: list[str], cwd: Path, env: dict[str, str], storage: Path, *,
         publish(directory / "request.json", request)
         supervisor = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), str(directory)],
                                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                      stderr=subprocess.DEVNULL, start_new_session=True,
+                                      stderr=subprocess.DEVNULL, **process_runtime.detached_options(),
                                       env={**env, "PYTHONDONTWRITEBYTECODE": "1"})
         armed = False
         try:
@@ -163,7 +202,7 @@ def run(argv: list[str], cwd: Path, env: dict[str, str], storage: Path, *,
                 if supervisor.poll() is not None or time.time() >= handshake_deadline:
                     raise ProcessError("supervision", "independent deadline owner did not become ready")
                 time.sleep(0.01)
-            identity = json.loads(ready.read_text())
+            identity = json.loads(ready.read_text(encoding='utf-8'))
             if identity != {"pid": supervisor.pid, "token": request["token"]}:
                 raise ProcessError("supervision", "deadline owner identity mismatch")
             identity.update(directory=str(directory), deadline=request["deadline"])
@@ -174,7 +213,7 @@ def run(argv: list[str], cwd: Path, env: dict[str, str], storage: Path, *,
             armed = True
             publish(directory / "launch.json", {"token": request["token"]})
             supervisor.wait(timeout=max(0.1, request["deadline"] - time.time()) + 5)
-            result = json.loads((directory / "result.json").read_text())
+            result = json.loads((directory / "result.json").read_text(encoding='utf-8'))
             with (directory / "output").open("rb") as output:
                 transcript = output.read(output_limit).decode("utf-8", errors="replace")
             if result["code"] != "ok":
@@ -187,7 +226,7 @@ def run(argv: list[str], cwd: Path, env: dict[str, str], storage: Path, *,
                 # On handled cancellation, stop the known child before its supervisor.
                 child_file = directory / "child.json"
                 if child_file.exists():
-                    child = json.loads(child_file.read_text())
+                    child = json.loads(child_file.read_text(encoding='utf-8'))
                     if child.get("token") == request["token"]:
                         stop_group(child["pid"])
                 if armed:
@@ -201,4 +240,6 @@ def run(argv: list[str], cwd: Path, env: dict[str, str], storage: Path, *,
 
 
 if __name__ == "__main__":
+    import process_runtime
+    process_runtime.configure_windows_environment()
     raise SystemExit(supervise(Path(sys.argv[1])))

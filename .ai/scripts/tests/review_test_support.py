@@ -1,5 +1,6 @@
 """Explicit snapshot treatment of successfully closed producer administration only."""
 import json
+import os
 from pathlib import Path
 
 import review_guard
@@ -18,6 +19,7 @@ def closed_coordination_snapshot(root: Path, files: dict) -> dict:
         raise AssertionError('protected invocation left live or unresolved owners')
     result = {}
     for name, value in files.items():
+        name = name.replace('\\', '/')
         path = root / name
         try:
             relative = path.relative_to(namespace)
@@ -27,7 +29,8 @@ def closed_coordination_snapshot(root: Path, files: dict) -> dict:
         if relative.as_posix() == 'journal.json':
             continue  # Every field, including policy/history, is compared below.
         if relative.as_posix() == 'guard.lock':
-            if path.stat().st_size:
+            expected = b'\0' if os.name == 'nt' else b''
+            if path.read_bytes() != expected:
                 raise AssertionError('unexpected guard lock contents')
             continue
         if len(relative.parts) == 3 and relative.parts[0] == 'producers' and relative.name == 'owner.json':

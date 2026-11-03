@@ -31,7 +31,8 @@ try {
             $candidates += $command.Source
         }
     }
-    foreach ($pattern in @("$env:LOCALAPPDATA\Python\pythoncore-*\python.exe",
+    foreach ($pattern in @("$env:PYTHONHOME\python.exe",
+                           "$env:LOCALAPPDATA\Python\pythoncore-*\python.exe",
                            "$env:LOCALAPPDATA\Programs\Python\Python*\python.exe",
                            "$env:ProgramFiles\Python*\python.exe",
                            "$env:LOCALAPPDATA\Programs\Python\Launcher\py.exe",

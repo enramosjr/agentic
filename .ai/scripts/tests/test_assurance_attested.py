@@ -2,6 +2,7 @@
 from datetime import date
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import sys
@@ -11,7 +12,8 @@ SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import brownfield  # noqa: E402
-from test_assurance import CAP, RECORDS, SCOPED, Case  # noqa: E402
+from test_assurance import CAP, RECORDS, SCOPED, Case, PYTHON, CHECK_COMMAND  # noqa: E402
+from process_runtime import python_hint
 
 MANUAL_REQ = '- CALC-R2: The calculator MUST look right.\n  - Verify: manual - needs a UX review\n  - Scenario look: it looks right.\n'
 REPORT = '# Review\n\n## Verdict\n\n{verdict}\n\n## Validation Reviewed\n\n{cited}\n'
@@ -19,6 +21,9 @@ REPORT = '# Review\n\n## Verdict\n\n{verdict}\n\n## Validation Reviewed\n\n{cite
 
 def normalise(text):
     """Strip the values that differ per run: short heads, timestamps and task-id record names."""
+    if os.name == 'nt':
+        native = python_hint()
+        text = text.replace(json.dumps(native)[1:-1], 'python3').replace(native, 'python3')
     text = re.sub(r'head=[0-9a-f]{7}', 'head=HEAD', text)
     text = re.sub(r'at=\d{4}-\d\d-\d\dT[\d:]+(?:\.[0-9]{1,6})?Z', 'at=NOW', text)
     text = re.sub(r'"at": "[^"]+"', '"at": "NOW"', text)
@@ -72,9 +77,9 @@ def review_digest(path):
 GOLDEN_REQUIREMENTS = (
     SCOPED
     + '- CALC-R2: The calculator MUST look right.\n  - Verify: manual - needs a UX review\n  - Scenario look: it looks right.\n'
-    + '- CALC-R3: Stale MUST be shown.\n  - Verify: `python3 check.py`\n  - Inputs: `stale.txt`\n'
-    + '- CALC-R4: Failure MUST be shown.\n  - Verify: `python3 failcheck.py`\n  - Inputs: `failcheck.py`\n'
-    + '- CALC-R5: Never run MUST be unverified.\n  - Verify: `python3 check.py --unrun`\n  - Inputs: `src/**`\n'
+    + f'- CALC-R3: Stale MUST be shown.\n  - Verify: `{CHECK_COMMAND}`\n  - Inputs: `stale.txt`\n'
+    + f'- CALC-R4: Failure MUST be shown.\n  - Verify: `{PYTHON} failcheck.py`\n  - Inputs: `failcheck.py`\n'
+    + f'- CALC-R5: Never run MUST be unverified.\n  - Verify: `{CHECK_COMMAND} --unrun`\n  - Inputs: `src/**`\n'
     + '- CALC-R6: Undeclared MUST be shown.\n  - Scenario nothing: nothing declared.\n'
     + '- CALC-R7: Prose verify MUST be invalid.\n  - Verify: run the tests\n')
 
@@ -265,6 +270,10 @@ class GoldenCase(AttestedCase):
         for key, args in (('text', ()), ('strict', ('--strict',)), ('json', ('--json',)),
                           ('changed', ('--json', '--changed', '--base', 'HEAD~1'))):
             result = self.lc('assure', *args, code=None)
+            if os.name == 'nt' and 'assure --run' in result.stdout:
+                self.assertNotIn('`python3 .ai/scripts/lifecycle.py', result.stdout)
+                hint = python_hint()
+                self.assertTrue(hint in result.stdout or json.dumps(hint)[1:-1] in result.stdout)
             out[key] = (result.returncode, normalise(result.stdout))
         return out
 
@@ -368,7 +377,7 @@ class FailClosedTests(AttestedCase):  # R2
         self.reviewed(committed=True)
         self.task(new=True)
         path = self.record_for('reviews/r1.md')
-        (self.root / 'reviews/link.md').symlink_to(outside)
+        self.link_reference(self.root / 'reviews/link.md', outside)
         for ref in ('../outside.md', str(outside), 'reviews/link.md'):
             data = json.loads(path.read_text())
             data['stages']['review'].update(ref=ref, sha256=review_digest(outside))
@@ -511,7 +520,7 @@ class NoUpgradeTests(GoldenCase):  # R5
 def risk_capability(*lines, verify=True):
     body = '- CALC-R1: The calculator MUST add.\n'
     if verify:
-        body += '  - Verify: `python3 check.py`\n  - Inputs: `check.py` `src/**`\n'
+            body += f'  - Verify: `{CHECK_COMMAND}`\n  - Inputs: `check.py` `src/**`\n'
     body += ''.join(f'  - {line}\n' for line in lines)
     return body + '  - Scenario add: 1 + 1 is 2.\n'
 
@@ -541,7 +550,7 @@ class RiskSyntaxTests(AttestedCase):  # R6
         self.invalid('Accept-risk: 2999-12-31 by human:x - a', 'Accept-risk: 2999-12-31 by human:x - b', reason='duplicate Accept-risk: line')
 
     def test_line_after_a_scenario_is_invalid(self):
-        self.capability('- CALC-R1: The calculator MUST add.\n  - Verify: `python3 check.py`\n'
+        self.capability(f'- CALC-R1: The calculator MUST add.\n  - Verify: `{CHECK_COMMAND}`\n'
                         '  - Scenario add: 1 + 1 is 2.\n  - Accept-risk: 2999-12-31 by human:x - r\n')
         item = self.status('CALC-R1')
         self.assertEqual(item['status'], 'INVALID')

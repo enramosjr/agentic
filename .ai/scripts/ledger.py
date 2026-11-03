@@ -49,7 +49,7 @@ def matches(glob: str, path: str) -> bool:
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
+    return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True, encoding='utf-8')
 
 
 def default_inputs(argv):
@@ -135,7 +135,7 @@ def infer_inputs(root, argv):
     if profile and profile[0] == 'cargo-workspace':
         try:
             result = subprocess.run(['cargo', 'metadata', '--format-version', '1', '--no-deps', '--offline', '--locked'],
-                                    cwd=root, capture_output=True, text=True, timeout=15, check=True)
+                                    cwd=root, capture_output=True, text=True, encoding='utf-8', timeout=15, check=True)
             globs = package_inputs(root, argv, json.loads(result.stdout))
             return ('cargo-packages', globs) if globs else None
         except (OSError, ValueError, KeyError, subprocess.SubprocessError):
@@ -150,6 +150,15 @@ def inputs_snapshot(root: Path, globs: list[str]) -> dict:
         try:
             data = path.read_bytes()
             metadata = [path.lstat().st_mode, os.readlink(path) if path.is_symlink() else None]
+            if os.name == 'nt':
+                aliases = []
+                for parent in (path, *path.parents):
+                    if parent == root:
+                        break
+                    if getattr(parent.lstat(), 'st_file_attributes', 0) & 0x400:
+                        aliases.append([parent.relative_to(root).as_posix(), os.readlink(parent)])
+                if aliases:
+                    metadata.append(aliases)
         except OSError:
             data = b'<missing>'
             metadata = None

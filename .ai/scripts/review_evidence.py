@@ -67,12 +67,12 @@ def approved(text: str) -> bool:
 
 
 def read_verdict(path: Path) -> str:
-    return verdict(path.read_text())
+    return verdict(path.read_text(encoding='utf-8'))
 
 
 def _digest(path: Path, text: str | None = None) -> str:
     if path.suffix == '.md':
-        return hashlib.sha256(body(path.read_text() if text is None else text).strip().encode()).hexdigest()
+        return hashlib.sha256(body(path.read_text(encoding='utf-8') if text is None else text).strip().encode()).hexdigest()
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
@@ -83,7 +83,7 @@ def ref_hash(path: Path) -> str:
 
 def load_review(path: Path) -> tuple[str, str]:
     """(digest, text) of a review report, reading it once."""
-    text = path.read_text()
+    text = path.read_text(encoding='utf-8')
     return _digest(path, text), text
 
 

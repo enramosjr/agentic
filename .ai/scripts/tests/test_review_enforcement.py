@@ -1,6 +1,7 @@
 """Mechanical review R1-R8: leases, native capture and advancement boundaries."""
 import json
 import os
+import shlex
 from pathlib import Path
 import subprocess
 import sys
@@ -33,6 +34,161 @@ REPORT = ('# Review Report\n\n## Verdict\n\nApproved\n\n## Scope\n\nTask.\n\n'
           '## Validation Reviewed\n\nR1 passed.\n\n## Residual Risks\n\nNone.\n')
 
 
+class NativeRuntimeTests(unittest.TestCase):
+    def test_native_location_alias_prefix_routes_pr_to_literal_directory(self):
+        import pr_hook
+        path = str(Path.cwd())
+        prefixes = ('Set-Location -LiteralPath', 'set-location -Path', 'sl', 'CHDIR', 'CD') if os.name == 'nt' else ('cd',)
+        for prefix in prefixes:
+            separator = ';' if os.name == 'nt' else '&&'
+            command = f"{prefix} '{path.replace(chr(39), chr(39) * 2)}' {separator} gh pr create --title checked"
+            with self.subTest(prefix=prefix):
+                self.assertEqual(pr_hook.recognize(command).directory, path)
+
+    def test_arbitrary_native_environment_assignments_and_removals_feed_config_env(self):
+        from unittest import mock
+        cwd = Path.cwd()
+        commands = ("$env:TARGET='C:/new-worktree'; git --config-env=core.worktree=TARGET add data",
+                    'Remove-Item Env:TARGET; git --config-env=core.worktree=TARGET add data')
+        with mock.patch.object(guard.os, 'name', 'nt'):
+            assigned, = guard.git_invocations(commands[0], cwd, {'TARGET': 'C:/old-worktree'})
+            removed, = guard.git_invocations(commands[1], cwd, {'TARGET': 'C:/old-worktree'})
+        self.assertEqual(assigned['env']['TARGET'], 'C:/new-worktree')
+        self.assertNotIn('TARGET', removed['env'])
+
+    def test_unproved_native_environment_values_cannot_select_git_config(self):
+        from unittest import mock
+        cwd = Path.cwd()
+        with mock.patch.object(guard.os, 'name', 'nt'):
+            with self.assertRaisesRegex(guard.ReviewError, 'config-env'):
+                guard.git_invocations('$env:TARGET = $selected; git --config-env=core.worktree=TARGET add data',
+                                      cwd, {'TARGET': 'C:/old-worktree'})
+
+    def test_copyable_python_driver_hint_is_direct_but_wrappers_are_not(self):
+        import review_native
+        root = Path(__file__).resolve().parents[3]
+        command = f'{guard.process_runtime.python_hint()} .ai/scripts/autonomy_driver.py --help'
+        data = {'cwd': str(root), 'tool_name': 'Bash', 'tool_input': {'command': command}}
+        self.assertTrue(guard.command_mutates(command))
+        self.assertTrue(review_native.driver_invocation(root, data, command))
+        for wrapped in (command + '; git status', command + ' && git status',
+                        command + ' | another-command',
+                        '& ' + command,
+                        '& $python .ai/scripts/autonomy_driver.py --help',
+                        'python -c "import autonomy_driver"'):
+            with self.subTest(command=wrapped):
+                self.assertFalse(review_native.driver_invocation(root, data, wrapped))
+
+    def test_drive_relative_native_guard_selectors_are_rejected_before_resolution(self):
+        from unittest import mock
+        cwd = Path.cwd()
+        for command, environment in (('cd C:. ; git add data', {}), ('git -C C:relative add data', {}),
+                                     ('git --git-dir=C:relative add data', {}),
+                                     ('git add data', {'GIT_INDEX_FILE': 'C:relative'})):
+            with self.subTest(command=command, environment=environment), mock.patch.object(guard.os, 'name', 'nt'):
+                with self.assertRaisesRegex(guard.ReviewError, 'drive-relative'):
+                    guard.git_invocations(command, cwd, environment)
+
+    def test_full_index_commit_accepts_native_git_and_injected_trust_only(self):
+        import review_native
+        trust = {'GIT_CONFIG_COUNT': '1', 'GIT_CONFIG_KEY_0': 'safe.directory',
+                 'GIT_CONFIG_VALUE_0': 'C:/work/repo'}
+        self.assertTrue(review_native.full_index_commit('git commit -am tested', trust))
+        self.assertTrue(review_native.full_index_commit('git.exe commit -m tested', {}))
+        self.assertFalse(review_native.full_index_commit('git commit -m tested',
+            {**trust, 'GIT_CONFIG_KEY_0': 'core.worktree'}))
+
+    def test_windows_literal_git_paths_and_environment_select_the_actual_target(self):
+        from unittest import mock
+        cwd = Path.cwd()
+        command = r"$env:GIT_DIR = 'C:\metadata\repo.git'; git -C C:\work\repo add data"
+        with mock.patch.object(guard.os, 'name', 'nt'):
+            invocation, = guard.git_invocations(command, cwd, {})
+        self.assertEqual(invocation['prefix'], ['-C', r'C:\work\repo'])
+        self.assertEqual(invocation['env']['GIT_DIR'], r'C:\metadata\repo.git')
+
+    def test_windows_environment_removal_updates_git_routing(self):
+        from unittest import mock
+        cwd = Path.cwd()
+        with mock.patch.object(guard.os, 'name', 'nt'):
+            invocation, = guard.git_invocations('Remove-Item -LiteralPath Env:GIT_DIR; git add data',
+                                                cwd, {'GIT_DIR': r'C:\metadata\repo.git'})
+        self.assertNotIn('GIT_DIR', invocation['env'])
+
+    def test_windows_git_paths_preserve_native_quoted_apostrophes_and_trailing_separator(self):
+        from unittest import mock
+        cwd = Path.cwd()
+        with mock.patch.object(guard.os, 'name', 'nt'):
+            invocations = guard.git_invocations(
+                "git -C 'C:\\target''s' add data; git -C \"C:\\target\\\" add data", cwd, {})
+        self.assertEqual([item['prefix'][1] for item in invocations], ["C:\\target's", 'C:\\target\\'])
+
+    def test_native_git_executable_and_environment_keys_are_case_insensitive(self):
+        from unittest import mock
+        cwd = Path.cwd()
+        with mock.patch.object(guard.os, 'name', 'nt'):
+            invocation, = guard.git_invocations("& 'C:\\tools\\git.EXE' add data", cwd,
+                                                {'git_index_file': 'C:/foreign/index'})
+        self.assertEqual(invocation['verb'], 'add')
+        self.assertEqual(invocation['env']['GIT_INDEX_FILE'], 'C:/foreign/index')
+
+    def test_real_native_launcher_ancestry_uses_os_process_metadata(self):
+        import shutil
+        import tempfile
+        source = str(Path(guard.__file__).parent)
+        probe = ('import json,review_native; '
+                 'print(json.dumps(review_native.native_launcher("codex")))')
+        parent = ('import json,os,subprocess,sys; '
+                  f'p=subprocess.run([{sys.executable!r},"-c",{probe!r}],capture_output=True,text=True); '
+                  'print(json.dumps([os.getpid(),p.returncode,p.stdout,p.stderr]))')
+        with tempfile.TemporaryDirectory() as temp:
+            launcher = Path(temp) / ('codex.exe' if os.name == 'nt' else 'codex')
+            shutil.copy2(sys.executable, launcher)
+            result = subprocess.run([str(launcher), '-c', parent], capture_output=True,
+                text=True, timeout=15, env={**os.environ, 'PYTHONPATH': source,
+                                          'PYTHONHOME': sys.base_prefix})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        pid, code, stdout, stderr = json.loads(result.stdout)
+        self.assertEqual(code, 0, stderr)
+        runtime = json.loads(stdout)
+        self.assertEqual(runtime['pid'], pid)
+        self.assertTrue(runtime['birth'])
+
+    def test_launcher_uses_native_ancestry_and_creation_identity(self):
+        from unittest import mock
+        import review_native
+        processes = {
+            42: {'pid': 42, 'birth': '200', 'parent': 100, 'argv': ['python.exe', 'hook.py']},
+            100: {'pid': 100, 'birth': '100', 'parent': 1, 'argv': ['C:/tools/codex.exe']},
+        }
+        with mock.patch.object(review_native.os, 'getppid', return_value=42), \
+                mock.patch.object(guard.process_runtime, 'process_info', side_effect=processes.__getitem__, create=True):
+            self.assertEqual(review_native.native_launcher('codex'), {'pid': 100, 'birth': '100'})
+
+    def test_reused_parent_pid_cannot_become_native_launcher_proof(self):
+        from unittest import mock
+        import review_native
+        processes = {
+            42: {'pid': 42, 'birth': '200', 'parent': 100, 'argv': ['python.exe', 'hook.py']},
+            100: {'pid': 100, 'birth': '300', 'parent': 1, 'argv': ['codex.exe']},
+        }
+        with mock.patch.object(review_native.os, 'getppid', return_value=42), \
+                mock.patch.object(guard.process_runtime, 'process_info', side_effect=processes.__getitem__, create=True):
+            with self.assertRaises(guard.ReviewError):
+                review_native.native_launcher('codex')
+
+    def test_launcher_rejects_unknown_or_incomplete_native_identity(self):
+        from unittest import mock
+        import review_native
+        for argv, birth in ((['python.exe', 'user.py'], 'birth'), (['codex.exe'], None)):
+            with self.subTest(argv=argv, birth=birth), \
+                    mock.patch.object(review_native.os, 'getppid', return_value=42), \
+                    mock.patch.object(guard.process_runtime, 'process_info', return_value={
+                        'pid': 42, 'birth': birth, 'parent': 1, 'argv': argv}, create=True):
+                with self.assertRaises(guard.ReviewError):
+                    review_native.native_launcher('codex')
+
+
 class NativeCase(GuardCase):
     def prepare_native(self, adapter, *, enable=True):
         import review_native as native
@@ -44,13 +200,14 @@ class NativeCase(GuardCase):
                  for event in ('SessionStart', 'SubagentStart', 'SubagentStop', 'PreToolUse', 'PostToolUse')}
         self.write(config, json.dumps({'hooks': hooks}))
         self.write('docs/spec.md', '# Task\n\n## Requirements\n- R1: Tool MUST pass.\n'
-                   '## Acceptance\n- R1: `python3 -V` passes.\n'
+                   f'## Acceptance\n- R1: `{shlex.quote(sys.executable)} -V` passes.\n'
                    '## Non-goals\nOther work.\n## Open questions\nNone.\n')
         self.write('docs/plan.md', '# Plan\nR1: implement and check.\n')
         self.lc('tier', 'L2', '--reason', 'native fixture')
         self.lc('stage', 'intent', '--ref', 'docs/spec.md', '--approved-by', 'human:test')
         self.lc('stage', 'plan', '--ref', 'docs/plan.md')
         self.lc('converge', 'docs/spec.md')
+        self.lc('assure', '--run', 'CALC-R1')
         self.event('SessionStart')
         if enable:
             self.lc('review', 'enable', '--adapter', adapter, '--session', 'parent',
@@ -68,7 +225,7 @@ class NativeCase(GuardCase):
         self.cli('okf.py', 'records')
         before = self.git('status', '--porcelain')
         self.event('SubagentStart', agent_id='child', agent_type='reviewer')
-        self.lc('run', 'blocked', '--', 'python3', '-V', code=1)
+        self.lc('run', 'blocked', '--', sys.executable, '-V', code=1)
         self.event('SubagentStop', agent_id='child', agent_type='reviewer', last_assistant_message=REPORT)
         self.assertEqual(self.git('status', '--porcelain'), before)
         path = self.root / 'knowledge/history/reviews/native.md'
@@ -78,7 +235,8 @@ class NativeCase(GuardCase):
         self.assertEqual(lifecycle.ref_hash(path), guard.report_hash(REPORT))
         self.cli('okf.py', 'records')
         self.lc('stage', 'review', '--ref', str(path.relative_to(self.root)))
-        self.lc('run', 'validation', '--', 'python3', '-V')
+        self.lc('run', 'validation', '--', sys.executable, '-V')
+        self.lc('assure', '--run', 'CALC-R1')
         self.assertIsNone(guard.evidence_problem(self.root, lifecycle.load(self.root)))
 
 
@@ -360,6 +518,7 @@ class FreshnessTests(NativeCase):  # R6
         guard.atomic(path, original)
         archive = guard.document(base / 'capture.json')
         archive['archive'][0]['entry'] = 'rewritten'
+        (base / 'capture.json').chmod(0o644)  # Deliberate local tampering, beyond read-only protection.
         guard.atomic(base / 'capture.json', archive)
         self.assertIn('archive', guard.evidence_problem(self.root, state))
 
@@ -401,10 +560,10 @@ class FreshnessTests(NativeCase):  # R6
                    ' def test_value(self):\n'
                    '  self.assertEqual(Path("src/calc.py").read_text(), "ok\\n")\n')
         self.capability('- CALC-R1: Tool MUST pass.\n'
-                        '  - Verify: `python3 -m unittest test_fixture`\n'
+                        f'  - Verify: `{shlex.quote(sys.executable)} -m unittest test_fixture`\n'
                         '  - Inputs: `**`\n')
         self.lc('converge', 'docs/spec.md')
-        self.lc('run', 'before', '--', 'python3', '-m', 'unittest', 'test_fixture')
+        self.lc('run', 'before', '--', sys.executable, '-m', 'unittest', 'test_fixture')
         original = lifecycle.load(self.root)['ledger'][-1]
         self.assertIn('**', original['inputs'])
         self.assertIn('!knowledge/history/lifecycle/**', original['inputs'])
@@ -425,10 +584,10 @@ class FreshnessTests(NativeCase):  # R6
         status = json.loads(self.lc('assure', '--json', code=1).stdout)
         self.assertEqual(status['requirements'][0]['status'], 'STALE')
         self.lc('stage', 'review', '--ref', 'knowledge/history/reviews/native.md')
-        self.lc('run', 'after', '--', 'python3', '-m', 'unittest', 'test_fixture')
+        self.lc('run', 'after', '--', sys.executable, '-m', 'unittest', 'test_fixture')
         self.lc('assure', '--run', 'CALC-R1')
         children = [subprocess.Popen([sys.executable, str(self.scripts / 'lifecycle.py'), 'run',
-                    f'parallel-{n}', '--', 'python3', '-V'], cwd=self.root, env=self.env,
+                    f'parallel-{n}', '--', sys.executable, '-V'], cwd=self.root, env=self.env,
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for n in range(2)]
         for child in children:
             stdout, stderr = child.communicate(timeout=15)
@@ -511,7 +670,14 @@ class CompatibilityTests(NativeCase):  # R8
     def test_guard_namespace_rejects_system_temp_symlinks_before_writes(self):
         root = self.root.parent / 'git-only'
         subprocess.run(['git', 'init', '-q', str(root)], check=True)
-        (root / '.git/okf-scratch').symlink_to('/tmp', target_is_directory=True)
+        link = root / '.git/okf-scratch'
+        if os.name == 'nt':
+            # Directory junctions exercise the same physical-path escape without
+            # requiring Windows' optional symbolic-link creation privilege.
+            subprocess.run(['cmd.exe', '/d', '/c', 'mklink', '/J', str(link),
+                            str(Path('/tmp').resolve())], check=True, capture_output=True)
+        else:
+            link.symlink_to('/tmp', target_is_directory=True)
         with self.assertRaisesRegex(guard.ReviewError, 'outside system temporary'):
             guard.directory(root)
         with self.assertRaisesRegex(guard.ReviewError, 'outside system temporary'):
@@ -549,7 +715,8 @@ class CompatibilityTests(NativeCase):  # R8
     def test_windows_lifetime_probe_never_sends_a_signal(self):
         from unittest import mock
         with mock.patch.object(guard.os, 'name', 'nt'), mock.patch.object(guard.os, 'kill',
-                side_effect=AssertionError('a Windows lifetime probe must never signal the owner')):
+                side_effect=AssertionError('a Windows lifetime probe must never signal the owner')), \
+                mock.patch.object(guard.process_runtime, 'alive', return_value=True):
             self.assertFalse(guard.stopped({'pid': 123, 'birth': None}))
 
     def test_both_deployed_hook_families_and_docs_declare_the_contract(self):
@@ -569,6 +736,77 @@ class CompatibilityTests(NativeCase):  # R8
 
 
 class ReadOnlyTests(NativeCase):  # R3
+    def test_native_location_commands_match_actual_shell_worktree_and_freeze(self):
+        target = self.root.parent / 'location-target'
+        self.git('worktree', 'add', '-qb', 'location-target', str(target))
+        with guard.transaction(target) as value:
+            value['interval'] = {'phase': 'active', 'task': 'protected-location'}
+        quoted = str(target).replace("'", "''")
+        prefixes = ('Set-Location -LiteralPath', 'Set-Location -Path', 'sl', 'chdir', 'CD') if os.name == 'nt' else ('cd',)
+        for prefix in prefixes:
+            setup = f"{prefix} '{quoted}'"
+            command = setup + '; git restore --worktree notes.txt'
+            roots = guard.operation_roots({'cwd': str(self.root), 'tool_name': 'Bash',
+                                          'tool_input': {'command': command}})
+            self.assertIn(target.resolve(), roots)
+            shell = ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command'] if os.name == 'nt' else ['bash', '-c']
+            result = subprocess.run([*shell, setup + '; git rev-parse --show-toplevel'], cwd=self.root,
+                                    env=self.env, capture_output=True, text=True, encoding='utf-8', timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(Path(result.stdout.strip()).resolve(), target.resolve())
+            pr_command = setup + (';' if os.name == 'nt' else ' &&') + ' gh pr create --title checked'
+            pr_roots = guard.operation_roots({'cwd': str(self.root), 'tool_name': 'Bash',
+                                              'tool_input': {'command': pr_command}})
+            self.assertEqual(pr_roots, [target.resolve()])
+        with self.assertRaisesRegex(guard.ReviewError, 'active review'):
+            with guard.producer(target):
+                self.fail('the shell-selected worktree accepted a protected writer')
+
+    def test_directory_stack_changes_are_tracked_or_refused_without_proof(self):
+        target = self.root.parent / 'stack-target'
+        self.git('worktree', 'add', '-qb', 'stack-target', str(target))
+        quoted = str(target).replace("'", "''")
+        push, pop = ('Push-Location', 'Pop-Location') if os.name == 'nt' else ('pushd', 'popd')
+        command = f"{push} '{quoted}'; {pop}; git restore --worktree notes.txt"
+        invocation, = guard.git_invocations(command, self.root, self.env)
+        self.assertEqual(invocation['cwd'], self.root.resolve())
+        shell = ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command'] if os.name == 'nt' else ['bash', '-c']
+        result = subprocess.run([*shell, f"{push} '{quoted}'; {pop}; git rev-parse --show-toplevel"],
+                                cwd=self.root, env=self.env, capture_output=True, text=True,
+                                encoding='utf-8', timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(Path(result.stdout.strip().splitlines()[-1]).resolve(), self.root.resolve())
+        with self.assertRaisesRegex(guard.ReviewError, 'directory stack'):
+            guard.git_invocations(f'{pop}; git restore --worktree notes.txt', self.root, self.env)
+
+    def test_native_config_env_assignment_reaches_real_git_in_owned_worktrees(self):
+        target = self.root.parent / 'config-target'
+        self.git('worktree', 'add', '-qb', 'config-target', str(target))
+        target_value = str(target).replace("'", "''")
+        if os.name == 'nt':
+            command = f"$env:TARGET='{target_value}'; git --config-env=core.worktree=TARGET add notes.txt"
+        else:
+            command = f'TARGET={shlex.quote(str(target))} git --config-env=core.worktree=TARGET add notes.txt'
+        invocation, = guard.git_invocations(command, self.root, {**os.environ, 'TARGET': str(self.root)})
+        self.assertEqual(invocation['env']['TARGET'], str(target))
+        self.assertEqual(Path(guard.git_probe(invocation, ['config', 'core.worktree'])[0]).resolve(), target.resolve())
+        self.write('notes.txt', 'source root\n')
+        (target / 'notes.txt').write_text('selected target\n', encoding='utf-8')
+        guard.git_probe(invocation, ['add', 'notes.txt'])
+        staged = self.git('show', ':notes.txt')
+        self.assertIn(staged, ('source root\n', 'selected target\n'))
+        # Git versions may ignore CLI core.worktree during implicit setup. Use
+        # actual staged bytes as the independent witness of the affected owner.
+        affected = target if staged == 'selected target\n' else self.root
+        roots = guard.operation_roots({'cwd': str(self.root), 'tool_name': 'Bash',
+            'tool_input': {'command': command, 'env': {'TARGET': str(self.root)}}})
+        self.assertIn(affected.resolve(), roots)
+        with guard.transaction(affected) as value:
+            value['interval'] = {'phase': 'active', 'task': 'protected-target'}
+        with self.assertRaisesRegex(guard.ReviewError, 'active review'):
+            with guard.producer(affected):
+                self.fail('the selected worktree accepted a protected writer')
+
     def test_pr_prefix_native_callback_uses_target_freeze(self):
         from unittest import mock
         self.prepare_native('codex')
@@ -813,7 +1051,8 @@ class ReadOnlyTests(NativeCase):  # R3
 
     def test_driver_launch_does_not_hold_a_whole_session_native_lease(self):
         self.prepare_native('codex')
-        tool = {'tool_name': 'Bash', 'tool_input': {'command': 'python3 .ai/scripts/autonomy_driver.py'},
+        tool = {'tool_name': 'Bash', 'tool_input': {'command':
+                f'{guard.process_runtime.python_hint()} .ai/scripts/autonomy_driver.py --help'},
                 'tool_use_id': 'driver-session'}
         self.event('PreToolUse', **tool)
         self.assertFalse(guard.read(self.root)['writers'])
@@ -881,7 +1120,7 @@ class ReadOnlyTests(NativeCase):  # R3
         with guard.transaction(self.root) as journal:
             journal['interval'] = {'phase': 'active', 'task': 'task'}
         before = self.git('status', '--porcelain')
-        result = self.lc('run', 'forbidden', '--', 'python3', '-c',
+        result = self.lc('run', 'forbidden', '--', sys.executable, '-c',
                          "open('unexpected','w').write('bad')", code=1)
         self.assertIn('active review', result.stderr)
         self.cli('okf.py', 'log', 'Unexpected', code=1)
@@ -976,19 +1215,33 @@ class RecoveryTests(NativeCase):  # R7
                 pids = json.loads(marker.read_text())
                 owner.kill()
                 owner.wait(timeout=5)
-                if with_descendant:
-                    os.kill(pids[0], signal.SIGKILL)
                 with self.assertRaisesRegex(guard.ReviewError, 'producer|borrower'):
                     guard.recover_writers(self.root)
+                if with_descendant:
+                    os.kill(pids[0], signal.SIGTERM if os.name == 'nt' else signal.SIGKILL)
+                    if os.name == 'nt':
+                        # A Windows Job owns descendants even after the product
+                        # leader exits; wrapper completion reaps the whole job.
+                        deadline = time.monotonic() + 5
+                        while any(guard.process_runtime.alive(pid) for pid in pids) and time.monotonic() < deadline:
+                            time.sleep(.01)
+                        self.assertFalse(any(guard.process_runtime.alive(pid) for pid in pids))
+                        guard.recover_writers(self.root)
+                    else:
+                        with self.assertRaisesRegex(guard.ReviewError, 'producer|borrower'):
+                            guard.recover_writers(self.root)
             finally:
                 if owner.poll() is None:
                     owner.kill()
                     owner.wait(timeout=5)
                 for pid in pids:
-                    try:
-                        os.kill(pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
+                    if os.name == 'nt':
+                        guard.process_runtime.terminate_tree(pid)
+                    else:
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
             deadline = time.monotonic() + 5
             while any(not guard.stopped(guard.identity(pid)) for pid in pids) and time.monotonic() < deadline:
                 time.sleep(.01)
@@ -1026,7 +1279,7 @@ class RecoveryTests(NativeCase):  # R7
             with self.assertRaisesRegex(guard.ReviewError, 'borrower'):
                 guard.recover_writers(self.root)
         finally:
-            os.kill(child_pid, signal.SIGKILL)
+            os.kill(child_pid, signal.SIGTERM if os.name == 'nt' else signal.SIGKILL)
         deadline = time.monotonic() + 5
         while not guard.stopped(guard.identity(child_pid)) and time.monotonic() < deadline:
             time.sleep(.01)

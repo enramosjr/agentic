@@ -61,13 +61,13 @@ def stop(bundle: Path, event: dict[str, object]) -> dict[str, object] | None:
 
     counter = _continue_count(str(event.get("session_id", "")), bundle)
     try:
-        count = int(counter.read_text()) if counter.is_file() else 0
+        count = int(counter.read_text(encoding='utf-8')) if counter.is_file() else 0
     except ValueError:
         count = 0
     limit = int(os.environ.get("OKF_AUTONOMOUS_MAX_CONTINUES", DEFAULT_MAX_CONTINUES))
     if count >= limit:
         return None
-    counter.write_text(str(count + 1))
+    counter.write_text(str(count + 1), encoding='utf-8')
 
     return {
         "decision": "block",
@@ -103,4 +103,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    import process_runtime
+    process_runtime.configure_windows_environment()
     sys.exit(main())

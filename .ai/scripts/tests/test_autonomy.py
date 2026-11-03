@@ -25,6 +25,7 @@ import disk_tmp  # noqa: E402,F401
 import okf  # noqa: E402
 import autonomy_driver  # noqa: E402
 import pr_sync  # noqa: E402
+import process_runtime  # noqa: E402
 
 HAS_GIT = shutil.which("git") is not None
 
@@ -65,7 +66,7 @@ TASKS = """
 class AutonomyTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.repo = Path(tempfile.mkdtemp()).resolve()
-        self.addCleanup(shutil.rmtree, self.repo)
+        self.addCleanup(disk_tmp.remove_tree, self.repo)
         self.bundle = self.repo / "knowledge"
         (self.repo / "AGENTS.md").write_text("# Agents\n")
         self.run_ok("init", "--autonomous")
@@ -537,6 +538,7 @@ import json, os, subprocess, sys
 from pathlib import Path
 sys.path.insert(0, {scripts!r})
 import okf
+import process_runtime
 
 log, mode, prompt = Path(sys.argv[1]), sys.argv[2], sys.argv[-1]
 with log.open("a") as handle:
@@ -691,8 +693,7 @@ if mode in ("rotate", "recover", "crash", "unsafe-recovery", "stuck-recovery"):
             time.sleep(60)
     elif recovering:
         pid = log.with_suffix(".pid").read_text()
-        proc = Path("/proc/" + pid + "/stat")
-        assert not proc.exists() or proc.read_text().split()[2] == "Z", "previous owner still running"
+        assert not process_runtime.alive(int(pid)), "previous owner still running"
         assert (Path.cwd() / "unfinished.txt").read_text() == "preserved implementation\\n"
         if mode == "unsafe-recovery":
             sys.exit(0)
@@ -989,18 +990,13 @@ class DriverTests(AutonomyTestCase):
                 self.assertLess(time.monotonic(), deadline)
                 time.sleep(.01)
         self.assertEqual(json.loads((directory / "documentation-audit.json").read_text())["state"], "CANCELLED")
-        proc = Path("/proc") / pid_file.read_text() / "stat"
         # Waiting for the direct parent does not order the grandchild's terminal
         # transition. Still require actual termination well before its 60s lifetime.
         deadline = time.monotonic() + 3
         while True:
-            try:
-                status = proc.read_text()
-            except FileNotFoundError:
+            if not process_runtime.alive(int(pid_file.read_text())):
                 break
-            if status.split()[2] == 'Z':
-                break
-            self.assertLess(time.monotonic(), deadline, f'audit child still live: {proc}: {status}')
+            self.assertLess(time.monotonic(), deadline, 'audit child still live')
             time.sleep(.01)
 
     def test_conflict_brief_requalifies_integrated_batches_and_preserves_milestone_gate(self) -> None:
@@ -1047,7 +1043,8 @@ class DriverTests(AutonomyTestCase):
         self.assertEqual(autonomy_driver.delivery_marker(self.bundle), {"A"})
 
     def test_session_and_run_deadlines_stop_hung_agent_and_descendant(self) -> None:
-        for session_limit, run_limit, launches in ((.2, 10, 2), (10, .5, 1)):
+        # Each budget admits startup before proving actual hung-tree termination.
+        for session_limit, run_limit, launches in ((.75, 10, 2), (10, 3, 1)):
             with self.subTest(session_limit=session_limit, run_limit=run_limit):
                 previous = len(self.sessions())
                 result = self.drive("hang", "--max-session-seconds", str(session_limit),
@@ -1057,9 +1054,7 @@ class DriverTests(AutonomyTestCase):
                 self.assertIn("owned process group stopped", result.stderr)
                 self.assertIn('"exit_code": 124', result.stderr)
                 pid = int(self.log.with_suffix(".pid").read_text())
-                proc = Path(f"/proc/{pid}/stat")
-                if proc.exists():
-                    self.assertEqual(proc.read_text().split()[2], "Z", "agent descendant is still running")
+                self.assertFalse(process_runtime.alive(pid), 'agent descendant is still running')
 
     def test_checkpoint_window_finishes_current_check_then_continues_fresh(self) -> None:
         events = self.tmp / "progress.jsonl"
@@ -1305,8 +1300,7 @@ class DriverTests(AutonomyTestCase):
                 self.assertEqual(autonomy_driver.delivery_marker(self.bundle), {"A"})
                 self.assertTrue(Path(job["commands"][0]["log"]).exists())
                 if state == "TIMED_OUT":
-                    proc = Path("/proc") / self.log.with_suffix(".test.pid").read_text() / "stat"
-                    self.assertTrue(not proc.exists() or proc.read_text().split()[2] == "Z")
+                    self.assertFalse(process_runtime.alive(int(self.log.with_suffix('.test.pid').read_text())))
 
     def test_managed_validation_rejects_source_mutation_and_repeated_handoffs(self) -> None:
         result = self.drive("validation-repeat", "--validation-reserve-seconds", ".05")
@@ -1407,9 +1401,7 @@ class DriverTests(AutonomyTestCase):
         stdout, stderr = process.communicate(timeout=8)
         self.assertEqual(process.returncode, 1, stderr)
         self.assertIn("acknowledgement missing or expired", stderr)
-        proc = Path(f"/proc/{int(marker.read_text())}/stat")
-        if proc.exists():
-            self.assertEqual(proc.read_text().split()[2], "Z", "unattended descendant survived")
+        self.assertFalse(process_runtime.alive(int(marker.read_text())), 'unattended descendant survived')
 
     def test_renewed_chat_acknowledgement_allows_long_test_to_complete(self) -> None:
         process, progress, ack, marker, release = self.chat_process()

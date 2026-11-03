@@ -22,6 +22,7 @@ from compatibility_baselines import HEAD_BASELINE, read_baseline  # noqa: E402
 
 # Handwritten read oracle, deliberately independent of the exporter's catalog.
 COMMAND = ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests', '-p', 'test_run_tests.py']
+OTHER_PYTHON = str(Path(sys.executable).with_name('other-python.exe')) if os.name == 'nt' else sys.executable
 READS = ['.ai/scripts/tests/test_run_tests.py', '.ai/scripts/tests/disk_tmp.py',
          '.ai/scripts/scratch.py', '.ai/scripts/run_tests.py']
 EXCLUDE = '!knowledge/history/lifecycle/**'
@@ -36,6 +37,7 @@ class Fixture(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
+        self.addCleanup(disk_tmp.remove_tree, Path(self.temp.name))
         self.root = Path(self.temp.name) / 'repo with spaces'
         scripts = self.root / '.ai/scripts'
         scripts.mkdir(parents=True)
@@ -59,6 +61,10 @@ class Fixture(unittest.TestCase):
         return path
 
     def process(self, argv, cwd=None):
+        # Literal profile declarations stay unchanged; only launched interpreters
+        # use the interpreter running this test rather than a platform alias.
+        if argv and argv[0] == 'python3':
+            argv = [sys.executable, *argv[1:]]
         return subprocess.run(argv, cwd=cwd or self.root, env=self.env,
                               capture_output=True, text=True, timeout=120)
 
@@ -86,7 +92,14 @@ class Fixture(unittest.TestCase):
         return value
 
     def refused(self, **kwargs):
-        result = self.export(**kwargs)
+        try:
+            result = self.export(**kwargs)
+        finally:
+            linked = getattr(self, '_linked_index', None)
+            if linked:
+                name, mode, blob = linked
+                self.git('update-index', '--cacheinfo', f'{mode},{blob},{name}')
+                self._linked_index = None
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
         value = json.loads(result.stdout)
         self.assertFalse(value['ok'])
@@ -95,6 +108,18 @@ class Fixture(unittest.TestCase):
         for key in ('inputs', 'inputs_line', 'lifecycle_inputs_argv'):
             self.assertNotIn(key, value)
         return value
+
+    def link_input(self, path, outside):
+        if os.name != 'nt':
+            path.symlink_to(outside)
+            return
+        name = path.relative_to(self.root).as_posix()
+        row = self.git('ls-files', '--stage', '--', name).split()
+        self._linked_index = (name, row[0], row[1])
+        path.write_text(str(outside))
+        result = subprocess.run(['git', '-C', str(self.root), 'hash-object', '-w', '--stdin'],
+                                input=str(outside), text=True, capture_output=True, check=True)
+        self.git('update-index', '--add', '--cacheinfo', f'120000,{result.stdout.strip()},{name}')
 
     def module(self):
         source = SCRIPTS / 'assurance_inputs.py'
@@ -137,9 +162,32 @@ class ReadOnlyTests(Fixture):  # R1
 
 
 class ProfileTests(Fixture):  # R2
+    def test_native_interpreter_profile_preserves_exact_argv_and_executes(self):
+        native = [sys.executable, *COMMAND[1:]]
+        module = self.module()
+        for profile in module.PROFILES:
+            candidate = [sys.executable, *profile['argv'][1:]]
+            self.assertEqual(module.exact_profile_command(profile['argv'], candidate), os.name == 'nt')
+            self.assertFalse(module.exact_profile_command(profile['argv'], candidate + ['-v']))
+        if os.name != 'nt':
+            self.refused(argv=native)
+            return
+        value = self.suggestion(argv=native)
+        self.assertEqual(value['profile_id'], 'python-runner-test')
+        self.assertEqual(value['argv'], native)
+        self.assertEqual(value['inputs'], READS)
+        executed = self.process(native)
+        self.assertEqual(executed.returncode, 0, executed.stdout + executed.stderr)
+        counts = re.findall(r'Ran (\d+) tests? in ', executed.stdout + executed.stderr)
+        self.assertTrue(counts)
+        self.assertGreater(int(counts[-1]), 0)
+        for altered in ([OTHER_PYTHON, *native[1:]], ['python', *native[1:]],
+                        [sys.executable, '-u', *native[1:]], native + ['-v']):
+            self.refused(argv=altered)
+
     def test_exact_command_and_root_only(self):
         self.suggestion()
-        variants = [COMMAND + ['-v'], [sys.executable, *COMMAND[1:]],
+        variants = [COMMAND + ['-v'], [OTHER_PYTHON, *COMMAND[1:]],
                     COMMAND[:-1] + ['test_ledger.py'], ['python3', '.ai/scripts/tests/test_run_tests.py']]
         for argv in variants:
             with self.subTest(argv=argv):
@@ -215,7 +263,7 @@ class RefusalTests(Fixture):  # R4
         outside = Path(self.temp.name) / 'outside.py'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         self.refused()
         path.unlink()
         path.write_bytes(original)
@@ -227,7 +275,7 @@ class RefusalTests(Fixture):  # R4
         directory = Path(self.temp.name) / 'external'
         directory.mkdir()
         (directory / 'data.txt').write_text('external')
-        (self.root / 'linked').symlink_to(directory, target_is_directory=True)
+        disk_tmp.directory_link(self.root / 'linked', directory)
         self.refused(extra=('linked/**',))
 
 
@@ -400,7 +448,7 @@ class ArchitectureProfileTests(ArchitectureFixture):  # R1
         self.assertEqual((old['profile_id'], old['inputs']), ('python-runner-test', READS))
         variants = [ARCH_COMMAND[:2], ARCH_COMMAND + ['-v'], ARCH_COMMAND[:2] + ['DeclarationTests'],
                     ARCH_COMMAND[:2] + ['CompatibilityTests.test_ungoverned_public_shape_stays_unchanged'],
-                    [sys.executable, *ARCH_COMMAND[1:]],
+                     [OTHER_PYTHON, *ARCH_COMMAND[1:]],
                     ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                      '-p', 'test_assurance_architecture.py']]
         for argv in variants:
@@ -481,7 +529,7 @@ class ArchitectureExportTests(ArchitectureFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         self.refused()
         path.unlink()
         path.write_bytes(original)
@@ -690,7 +738,7 @@ class HarnessWiringProfileTests(HarnessWiringFixture):  # R1
         for argv in (WIRING_COMMAND[:2], WIRING_COMMAND + ['-v'],
                      WIRING_COMMAND[:2] + ['Distribution'],
                      WIRING_COMMAND[:2] + ['HarnessWiring.test_codex_gates_edits_commits_and_session_start'],
-                     [sys.executable, *WIRING_COMMAND[1:]],
+                     [OTHER_PYTHON, *WIRING_COMMAND[1:]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
             result = self.export(argv=argv)
@@ -790,7 +838,7 @@ class HarnessWiringExportTests(HarnessWiringFixture):  # R3
         outside = Path(self.temp.name) / 'outside.json'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         self.refused()
         path.unlink()
         path.write_bytes(original)
@@ -1093,7 +1141,7 @@ class ReviewerReportProfileTests(ReviewerReportFixture):  # R1
         self.assert_prior_profiles()
         for argv in (REPORT_COMMAND[:2], REPORT_COMMAND[:2] + ['RolesAndSkills'],
                      REPORT_COMMAND[:2] + ['RolesAndSkills.test_every_documented_okf_show_command_resolves'],
-                     REPORT_COMMAND + ['-v'], [sys.executable, *REPORT_COMMAND[1:]],
+                     REPORT_COMMAND + ['-v'], [OTHER_PYTHON, *REPORT_COMMAND[1:]],
                      ['python3', './' + REPORT_COMMAND[1], REPORT_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -1241,7 +1289,7 @@ class ReviewerReportExportTests(ReviewerReportFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -1513,7 +1561,7 @@ class InstallerDocProfileTests(InstallerDocFixture):  # R1
         self.assert_prior_profiles()
         for argv in (INSTALLER_DOC_COMMAND[:2], INSTALLER_DOC_COMMAND[:2] + ['Distribution'],
                      INSTALLER_DOC_COMMAND[:2] + ['Distribution.test_eval_and_installer_share_one_kit_list'],
-                     INSTALLER_DOC_COMMAND + ['-v'], [sys.executable, *INSTALLER_DOC_COMMAND[1:]],
+                     INSTALLER_DOC_COMMAND + ['-v'], [OTHER_PYTHON, *INSTALLER_DOC_COMMAND[1:]],
                      ['python3', './' + INSTALLER_DOC_COMMAND[1], INSTALLER_DOC_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -1568,7 +1616,7 @@ class InstallerDocExportTests(InstallerDocFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -1972,7 +2020,7 @@ class ValidationPolicyProfileTests(ValidationPolicyFixture):  # R1
         self.assert_prior_profiles()
         for argv in (VALIDATION_POLICY_COMMAND[:2], VALIDATION_POLICY_COMMAND[:2] + ['Relocation'],
                      VALIDATION_POLICY_COMMAND[:2] + ['Distribution.test_eval_and_installer_share_one_kit_list'],
-                     VALIDATION_POLICY_COMMAND + ['-v'], [sys.executable, *VALIDATION_POLICY_COMMAND[1:]],
+                     VALIDATION_POLICY_COMMAND + ['-v'], [OTHER_PYTHON, *VALIDATION_POLICY_COMMAND[1:]],
                      ['python3', './' + VALIDATION_POLICY_COMMAND[1], VALIDATION_POLICY_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -2027,7 +2075,7 @@ class ValidationPolicyExportTests(ValidationPolicyFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -2433,7 +2481,7 @@ class AuditDocProfileTests(AuditDocFixture):  # R1
         sibling = self.suggestion(argv=AUDIT_DOC_COMMAND[:2] + ['Tiers.test_analyze_and_converge_are_documented'])
         self.assertEqual(sibling['profile_id'], 'python-analysis-convergence-doc-contract')
         for argv in (AUDIT_DOC_COMMAND[:2], AUDIT_DOC_COMMAND[:2] + ['Tiers'],
-                     AUDIT_DOC_COMMAND + ['-v'], [sys.executable, *AUDIT_DOC_COMMAND[1:]],
+                     AUDIT_DOC_COMMAND + ['-v'], [OTHER_PYTHON, *AUDIT_DOC_COMMAND[1:]],
                      ['python3', './' + AUDIT_DOC_COMMAND[1], AUDIT_DOC_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -2488,7 +2536,7 @@ class AuditDocExportTests(AuditDocFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -2902,7 +2950,7 @@ class AnalysisConvergenceDocProfileTests(AnalysisConvergenceDocFixture):  # R1
         for argv in (ANALYSIS_CONVERGENCE_DOC_COMMAND[:2], ANALYSIS_CONVERGENCE_DOC_COMMAND[:2] + ['Tiers'],
                      ANALYSIS_CONVERGENCE_DOC_COMMAND[:2] + ['Tiers.test_tiers_match'],
                      ANALYSIS_CONVERGENCE_DOC_COMMAND + ['-v'],
-                     [sys.executable, *ANALYSIS_CONVERGENCE_DOC_COMMAND[1:]],
+                     [OTHER_PYTHON, *ANALYSIS_CONVERGENCE_DOC_COMMAND[1:]],
                      ['python3', './' + ANALYSIS_CONVERGENCE_DOC_COMMAND[1], ANALYSIS_CONVERGENCE_DOC_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -2962,7 +3010,7 @@ class AnalysisConvergenceDocExportTests(AnalysisConvergenceDocFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -3400,7 +3448,7 @@ class StageDocProfileTests(StageDocFixture):  # R1
         for argv in (STAGE_DOC_COMMAND[:2], STAGE_DOC_COMMAND[:2] + ['Tiers'],
                      STAGE_DOC_COMMAND[:2] + ['Tiers.test_tiers_match'],
                      STAGE_DOC_COMMAND + ['-v'],
-                     [sys.executable, *STAGE_DOC_COMMAND[1:]],
+                     [OTHER_PYTHON, *STAGE_DOC_COMMAND[1:]],
                      ['python3', './' + STAGE_DOC_COMMAND[1], STAGE_DOC_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -3455,7 +3503,7 @@ class StageDocExportTests(StageDocFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -3932,7 +3980,7 @@ class TierDocProfileTests(TierDocFixture):  # R1
         for argv in (TIER_DOC_COMMAND[:2], TIER_DOC_COMMAND[:2] + ['Tiers'],
                      TIER_DOC_COMMAND[:2] + ['Tiers.test_tiers_match'],
                      TIER_DOC_COMMAND + ['-v'],
-                     [sys.executable, *TIER_DOC_COMMAND[1:]],
+                     [OTHER_PYTHON, *TIER_DOC_COMMAND[1:]],
                      ['python3', './' + TIER_DOC_COMMAND[1], TIER_DOC_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -3988,7 +4036,7 @@ class TierDocExportTests(TierDocFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -4452,7 +4500,7 @@ class AssuranceDocProfileTests(AssuranceDocFixture):  # R1
         self.assert_prior_profiles()
         for argv in (ASSURANCE_DOC_COMMAND[:2], ASSURANCE_DOC_COMMAND[:2] + ['Assurance'],
                      ASSURANCE_DOC_COMMAND[:2] + ['Assurance.test_other'],
-                     ASSURANCE_DOC_COMMAND + ['-v'], [sys.executable, *ASSURANCE_DOC_COMMAND[1:]],
+                     ASSURANCE_DOC_COMMAND + ['-v'], [OTHER_PYTHON, *ASSURANCE_DOC_COMMAND[1:]],
                      ['python3', './' + ASSURANCE_DOC_COMMAND[1], ASSURANCE_DOC_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -4507,7 +4555,7 @@ class AssuranceDocExportTests(AssuranceDocFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -4984,7 +5032,7 @@ class AgentsBudgetProfileTests(AgentsBudgetFixture):  # R1
         self.assert_prior_profiles()
         for argv in (AGENTS_BUDGET_COMMAND[:2], AGENTS_BUDGET_COMMAND[:2] + ['AgentsBudget'],
                      AGENTS_BUDGET_COMMAND[:2] + ['AgentsBudget.test_every_heading_survives'],
-                     AGENTS_BUDGET_COMMAND + ['-v'], [sys.executable, *AGENTS_BUDGET_COMMAND[1:]],
+                     AGENTS_BUDGET_COMMAND + ['-v'], [OTHER_PYTHON, *AGENTS_BUDGET_COMMAND[1:]],
                      ['python3', './' + AGENTS_BUDGET_COMMAND[1], AGENTS_BUDGET_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -5037,7 +5085,7 @@ class AgentsBudgetExportTests(AgentsBudgetFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -5467,7 +5515,7 @@ class SemanticLensProfileTests(SemanticLensFixture):  # R1
         self.assert_prior_profiles()
         for argv in (SEMANTIC_LENS_COMMAND[:2], SEMANTIC_LENS_COMMAND[:2] + ['RolesAndSkills'],
                      SEMANTIC_LENS_COMMAND[:2] + ['RolesAndSkills.test_codex_skills_are_a_symlink_to_the_claude_skills'],
-                     SEMANTIC_LENS_COMMAND + ['-v'], [sys.executable, *SEMANTIC_LENS_COMMAND[1:]],
+                     SEMANTIC_LENS_COMMAND + ['-v'], [OTHER_PYTHON, *SEMANTIC_LENS_COMMAND[1:]],
                      ['python3', './' + SEMANTIC_LENS_COMMAND[1], SEMANTIC_LENS_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -5522,7 +5570,7 @@ class SemanticLensExportTests(SemanticLensFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -6060,7 +6108,7 @@ class SkillFrontmatterProfileTests(SkillFrontmatterFixture):  # R1
         self.assert_prior_profiles()
         for argv in (SKILL_FRONTMATTER_COMMAND[:2], SKILL_FRONTMATTER_COMMAND[:2] + ['RolesAndSkills'],
                      SKILL_FRONTMATTER_COMMAND[:2] + [SKILL_FRONTMATTER_SIBLING],
-                     SKILL_FRONTMATTER_COMMAND + ['-v'], [sys.executable, *SKILL_FRONTMATTER_COMMAND[1:]],
+                     SKILL_FRONTMATTER_COMMAND + ['-v'], [OTHER_PYTHON, *SKILL_FRONTMATTER_COMMAND[1:]],
                      ['python3', './' + SKILL_FRONTMATTER_COMMAND[1], SKILL_FRONTMATTER_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -6115,7 +6163,7 @@ class SkillFrontmatterExportTests(SkillFrontmatterFixture):  # R3
         outside = Path(self.temp.name) / 'outside.py'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:

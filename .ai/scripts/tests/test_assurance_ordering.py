@@ -12,7 +12,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from test_assurance import Case, CAP, RECORDS, SCOPED, EXCLUDE, SCRIPTS
+from test_assurance import Case, CAP, RECORDS, SCOPED, EXCLUDE, SCRIPTS, PYTHON
 from test_assurance_gate import GateCase, DeltaCase
 import assurance
 import ledger
@@ -47,10 +47,12 @@ def install_clock(scripts):
     path = scripts / 'lifecycle.py'
     original = path.read_bytes()
     source = original.decode()
-    marker = 'from datetime import datetime, timezone\n'
-    if source.count(marker) != 1:
+    markers = list(re.finditer(r'from datetime import datetime, timezone(\r?\n)', source))
+    if len(markers) != 1:
         raise AssertionError('clock seam needs the original single datetime import')
-    changed = source.replace(marker, marker + CLOCK).encode()
+    marker = markers[0].group(0)
+    newline = markers[0].group(1)
+    changed = source.replace(marker, marker + CLOCK.replace('\n', newline)).encode()
     path.write_bytes(changed)
     if path.read_bytes() != changed:
         raise AssertionError('clock seam bytes were not applied')
@@ -240,7 +242,7 @@ class SelectionCase(unittest.TestCase):
         self.obligation = assurance.parse('CALC-R1', CAP, SCOPED)
 
     def event(self, at, outcome=0, record='r.json', index=0, **extra):
-        entry = dict(label='req:CALC-R1', argv=['python3', 'check.py'],
+        entry = dict(label='req:CALC-R1', argv=[sys.executable, 'check.py'],
                      inputs=['check.py', 'src/**', EXCLUDE], at=at, exit=outcome)
         entry.update(extra)
         return assurance.Evidence(record, index, entry)
@@ -374,14 +376,14 @@ class MechanicalOrderingProducerTests(ClockCase, DeltaCase):  # R2
         self.assertIn('input_files', entry)
         self.assertIn('runtime_sha256', entry)
         self.lc('run', 'req:CALC-R1', '--inputs', 'check.py', 'src/**', EXCLUDE,
-                '--', 'python3', 'check.py')
+                '--', sys.executable, 'check.py')
         direct = self.state()['ledger'][-1]
         self.assertRegex(direct['at'], r'\.\d{6}Z$')
         self.assertEqual(direct['inputs'], entry['inputs'])
         self.assertEqual(direct['inputs_sha256'], entry['inputs_sha256'])
         self.assertNotIn('input_files', direct)
         self.assertNotIn('runtime_sha256', direct)
-        self.lc('run', 'ordinary', '--', 'python3', '-V')
+        self.lc('run', 'ordinary', '--', sys.executable, '-V')
         self.assertEqual(self.state()['ledger'][-1]['at'], '2026-10-28T01:00:00Z')
 
     def test_completion_follows_execution_and_fingerprints_precede_it(self):
@@ -407,11 +409,11 @@ class MechanicalOrderingProducerTests(ClockCase, DeltaCase):  # R2
                       'os.environ["C2_FIXTURE_FINISH"] = "2026-10-28T01:00:00.300000Z"\n'
                       'r = subprocess.run([sys.executable, ".ai/scripts/lifecycle.py", "run", "req:CALC-R1", '
                       '"--inputs", "count.py", "src/**", ' + repr(EXCLUDE) + ', '
-                      '"--", "python3", "count.py"])\n'
+                   '"--", sys.executable, "count.py"])\n'
                       'assert r.returncode == 3, r.returncode\n')
         self.write('second.py', second)
         second_block = ('- CALC-R2: Calculator MUST run the second check.\n'
-                        '  - Verify: `python3 second.py`\n  - Inputs: `second.py` `src/**`\n')
+               f'  - Verify: `{PYTHON} second.py`\n  - Inputs: `second.py` `src/**`\n')
         self.capability(SCOPED + second_block)
         second_pin = assurance.requirements(self.root)[0][1].block_sha256
         self.commit('two existing obligations in deterministic command order')
@@ -422,7 +424,7 @@ class MechanicalOrderingProducerTests(ClockCase, DeltaCase):  # R2
         source = source.replace('\n## Added requirements',
                                 '\n- CALC-R2: sha256:' + second_pin + '\n\n## Added requirements', 1)
         source = source.replace('## Constraints',
-            '- CALC-R2: `python3 second.py` passes.\n## Constraints', 1)
+                      f'- CALC-R2: `{PYTHON} second.py` passes.\n## Constraints', 1)
         path.write_text(source)
         self.approve(spec)
         self.env['C2_FIXTURE_FINISH'] = '2026-10-28T01:00:00.200000Z'
@@ -513,7 +515,7 @@ class MechanicalOrderingCompatibilityTests(ClockCase, GateCase):  # R6
         self.commit('framework fixture without requirements')
         self.start()
         self.lc('run', 'req:CALC-R1', '--inputs', 'check.py', 'src/**',
-                '--', 'python3', 'check.py')
+                '--', sys.executable, 'check.py')
         first = self.state()['ledger'][-1]
         self.assertRegex(first['at'], r'\.\d{6}Z$')
         self.assertEqual(first['inputs'], ['check.py', 'src/**'])
@@ -527,7 +529,7 @@ class MechanicalOrderingCompatibilityTests(ClockCase, GateCase):  # R6
     def test_governance_and_status_shapes_are_preserved(self):
         obligation = assurance.parse('CALC-R1', CAP, SCOPED)
         obligation = dataclasses.replace(obligation, governed_by={'basis': 'declared'})
-        entry = {'label': 'req:CALC-R1', 'argv': ['python3', 'check.py'],
+        entry = {'label': 'req:CALC-R1', 'argv': [sys.executable, 'check.py'],
                  'inputs': obligation.evidence_globs, 'at': 'bad', 'exit': 0}
         item = assurance.evaluate(self.root, obligation, [assurance.Evidence('bad.json', 0, entry)], 'tree')
         self.assertEqual(item['status'], 'UNVERIFIED')

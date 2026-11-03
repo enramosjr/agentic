@@ -36,7 +36,6 @@ import hashlib
 import json
 import os
 import math
-import signal
 import shutil
 import subprocess
 import sys
@@ -54,6 +53,7 @@ import timed_check  # noqa: E402
 import autonomy_progress  # noqa: E402
 import autonomy_validation  # noqa: E402
 import scratch  # noqa: E402
+import process_runtime  # noqa: E402
 
 MAX_STALLED_CAP = 4  # Raising the stall limit does not make a batch converge; split it instead (§9.2).
 
@@ -133,8 +133,8 @@ def closure_released(bundle: Path, registry: Path, receipt: Path) -> bool:
     dispatches one still needs normal ownership recovery after interruption.
     """
     try:
-        workers = json.loads(registry.read_text())
-        release = json.loads(receipt.read_text())
+        workers = json.loads(registry.read_text(encoding='utf-8'))
+        release = json.loads(receipt.read_text(encoding='utf-8'))
         return (isinstance(workers, dict) and isinstance(release, dict)
                 and set(workers) == {str(bundle.parent.resolve())}
                 and release.get("head") == okf._git_text(bundle.parent, "rev-parse", "HEAD")
@@ -148,14 +148,15 @@ def documentation_audit(bundle: Path, directory: Path, report, *, command: list[
     """Owned read-only diagnostic; never blocks dispatch or certifies a changing candidate."""
     log_path, result_path = directory / "documentation-audit.log", directory / "documentation-audit.json"
     process = None
+    tree = process_runtime.ProcessTree()
     announced = False
     result = {"advisory": True, "state": "RUNNING", "log": str(log_path)}
-    with log_path.open("x") as log:
+    with log_path.open("x", encoding='utf-8') as log:
         try:
             try:
-                process = subprocess.Popen(command or [sys.executable, str(Path(__file__).with_name("okf.py")), "--bundle", str(bundle),
+                process = tree.start(command or [sys.executable, str(Path(__file__).with_name("okf.py")), "--bundle", str(bundle),
                                                         "validate", "--strict", "--json"], stdout=log, stderr=subprocess.STDOUT,
-                                           cwd=bundle.parent, start_new_session=True)
+                                     cwd=bundle.parent)
             except OSError:
                 result["state"] = "UNAVAILABLE"
             report("audit", "Read-only document audit runs alongside the worker; findings are deferred to handoff and cannot certify delivery."
@@ -173,14 +174,12 @@ def documentation_audit(bundle: Path, directory: Path, report, *, command: list[
             if process is not None:
                 if process.poll() is None:
                     result["state"] = "CANCELLED"
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+                tree.stop()
                 process.wait()
                 if result["state"] == "RUNNING":
                     result["state"] = "PASS" if process.returncode == 0 else "FAIL"
                 result["exit_code"] = process.returncode
+            tree.close()
             autonomy_validation.write_json(result_path, result)
 
 
@@ -263,7 +262,7 @@ def drive(bundle: Path, command: list[str], role: str, max_sessions: int, max_id
         release_receipt = session_dir / "closure-release.json"
         autonomy_validation.register(registry, bundle.parent, bundle.parent)
         prompt = okf.handoff(bundle, "prompt", role=role)
-        closure_only = validation_result is not None and json.loads(validation_result.read_text())["state"] == "PASS"
+        closure_only = validation_result is not None and json.loads(validation_result.read_text(encoding='utf-8'))["state"] == "PASS"
         validation_followup = validation_result is not None
         if validation_result is None and latest_result is not None:
             prompt += f"\nMost recent managed result retained for repair binding: {latest_result}; preserve its evidence across source checkpoints."
@@ -359,11 +358,11 @@ def drive(bundle: Path, command: list[str], role: str, max_sessions: int, max_id
                         source_started = autonomy_validation.source_work(registry)
                         if not source_started and now - started >= max_discovery_seconds and not progress_requested:
                             progress_requested = True
-                            progress_request.write_text("Report inspected source/commands, concrete findings and next executable action. Continue owned work; this is not a handoff or stop request.\n")
+                            progress_request.write_text("Report inspected source/commands, concrete findings and next executable action. Continue owned work; this is not a handoff or stop request.\n", encoding='utf-8')
                             report("progress_requested", f"Session {session}: no source edits observed yet; concrete progress requested while work continues.")
                     if not recovering and now - started >= soft_limit and not request.exists():
                         requested = True
-                        request.write_text("Checkpoint requested: stop dispatch, query workers, report remaining work, settle ownership and exit safely.\n")
+                        request.write_text("Checkpoint requested: stop dispatch, query workers, report remaining work, settle ownership and exit safely.\n", encoding='utf-8')
                         report("handoff", f"Session {session}: checkpoint requested; allowing bounded handoff. " + remaining_summary(bundle))
                     if progress and now - last_heartbeat >= heartbeat_seconds:
                         progress.emit("heartbeat", f"Session {session} still running; {int(now - (deadline - max_run_seconds))}s elapsed in this run. No new acceptance result implied.")
@@ -413,7 +412,7 @@ def drive(bundle: Path, command: list[str], role: str, max_sessions: int, max_id
             report("replacement", "Safe handoff; next session resumes preserved work with fresh context and unchanged budgets.")
             continue
         if validation_request.exists():
-            job = autonomy_validation.plan(json.loads(validation_request.read_text()))
+            job = autonomy_validation.plan(json.loads(validation_request.read_text(encoding='utf-8')))
             repair = autonomy_validation.repair_candidate(job, latest_result, latest_digest, bundle.parent)
             if validation_handoff and not (delivery_marker(bundle) - delivered_before):
                 stalled += 1
@@ -433,10 +432,10 @@ def drive(bundle: Path, command: list[str], role: str, max_sessions: int, max_id
             validation_result = autonomy_validation.run(validation_request, bundle.parent, deadline,
                                                         validation_reserve_seconds, report, validation_tick,
                                                         tick_seconds=min(1, heartbeat_seconds))
-            state = json.loads(validation_result.read_text())["state"]
+            state = json.loads(validation_result.read_text(encoding='utf-8'))["state"]
             latest_result, latest_digest = validation_result, autonomy_validation.digest(validation_result)
             if repair:
-                results = json.loads(validation_result.read_text())["commands"]
+                results = json.loads(validation_result.read_text(encoding='utf-8'))["commands"]
                 regression = next((entry for entry in results if entry["label"] == job["repair"]["regression"]), {})
                 if (regression.get("state") == "PASS" and regression.get("exit_code") == 0
                         and not regression.get("reused_from") and state not in ("INVALIDATED", "CANCELLED")):
@@ -564,4 +563,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    import process_runtime
+    process_runtime.configure_windows_environment()
     sys.exit(main())

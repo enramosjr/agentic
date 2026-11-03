@@ -2,6 +2,9 @@
 import inspect
 from pathlib import Path
 import re
+import os
+import hashlib
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -35,6 +38,19 @@ CITATIONS = (
 
 
 class ParityChecks(unittest.TestCase):
+    def test_utf8_review_digest_is_independent_of_legacy_windows_locale(self):
+        text = '# Review caf\u00e9 \u2603\n\n## Verdict\nApproved\n'
+        with tempfile.TemporaryDirectory() as directory:
+            report = Path(directory) / 'report.md'
+            report.write_bytes(text.encode('utf-8'))
+            code = ('import sys; sys.path.insert(0,sys.argv[1]); import review_evidence; '
+                    'from pathlib import Path; print(review_evidence.ref_hash(Path(sys.argv[2])))')
+            result = subprocess.run([sys.executable, '-c', code, str(SCRIPTS), str(report)],
+                                    env={**os.environ, 'PYTHONUTF8': '0'}, capture_output=True,
+                                    text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), hashlib.sha256(text.strip().encode('utf-8')).hexdigest())
+
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)

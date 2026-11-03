@@ -58,6 +58,7 @@ class NativeWindowsHookTests(unittest.TestCase):
         system = Path(os.environ['SystemRoot']) / 'System32'
         self.env['PATH'] = str(system) + ';' + str(system / 'WindowsPowerShell/v1.0')
         self.env['PYTHONDONTWRITEBYTECODE'] = '1'
+        self.env['PYTHONHOME'] = sys.base_prefix
         self.command_prefix = ''
 
     def command(self, script):
@@ -123,7 +124,14 @@ class NativeWindowsHookTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0, result.stderr)
         self.assertIn('AGENTIC Windows hook', result.stderr)
 
+    def test_custom_python_home_runs_without_python_on_path(self):  # R1
+        self.env['LOCALAPPDATA'] = str(self.root / 'missing local')
+        result = self.run_hook('lifecycle.py', {'hook_event_name': 'SessionStart'})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Lifecycle router', json.loads(result.stdout)['hookSpecificOutput']['additionalContext'])
+
     def test_missing_tools_are_actionable(self):  # R1
+        self.env.pop('PYTHONHOME', None)
         self.env['LOCALAPPDATA'] = str(self.root / 'missing local')
         self.env['PROGRAMFILES'] = str(self.root / 'missing programs')
         self.env['PROGRAMFILES(X86)'] = str(self.root / 'missing x86')

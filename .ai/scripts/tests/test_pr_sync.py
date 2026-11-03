@@ -24,6 +24,7 @@ sys.path.insert(0, str(SCRIPTS))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import okf  # noqa: E402
+import disk_tmp
 from test_autonomy import FAKE_AGENT  # noqa: E402
 
 FAKE_GH = """\
@@ -79,7 +80,7 @@ DAY = "2026-10-13"
 class PrSyncTests(unittest.TestCase):
     def setUp(self) -> None:
         root = Path(tempfile.mkdtemp()).resolve()
-        self.addCleanup(shutil.rmtree, root)
+        self.addCleanup(disk_tmp.remove_tree, root)
         self.root, self.repo, self.remote = root, root / "work", root / "remote.git"
         self.bundle = self.repo / "knowledge"
         self.env = {k: v for k, v in os.environ.items() if not k.startswith(("OKF_", "GIT_"))}
@@ -87,16 +88,20 @@ class PrSyncTests(unittest.TestCase):
         self.gh_state, self.gh_log = root / "prs.json", root / "gh.jsonl"
         self.gh_state.write_text(json.dumps(PRS))
         (root / "gh.py").write_text(FAKE_GH.format(state=str(self.gh_state), log=str(self.gh_log)))
-        self.env["OKF_GH"] = str(root / "gh")
-        (root / "gh").write_text(f"#!/bin/sh\nexec {sys.executable} {root / 'gh.py'} \"$@\"\n")
-        (root / "gh").chmod(0o755)
+        if os.name == 'nt':
+            self.env['OKF_GH'] = str(root / 'gh.cmd')
+            (root / 'gh.cmd').write_text(f'@"{sys.executable}" "{root / "gh.py"}" %*\n')
+        else:
+            self.env["OKF_GH"] = str(root / "gh")
+            (root / "gh").write_text(f"#!/bin/sh\nexec {sys.executable} {root / 'gh.py'} \"$@\"\n")
+            (root / "gh").chmod(0o755)
 
         subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(self.remote)], check=True)
         self.repo.mkdir()
         self.git("init", "-q", "-b", "main")
         scripts = self.repo / ".ai" / "scripts"
         scripts.mkdir(parents=True)
-        for name in ("okf.py", "learning.py", "pr_sync.py", "autonomy_driver.py", "timed_check.py", "autonomy_progress.py", "autonomy_validation.py", "scratch.py", "review_guard.py", "ledger.py"):
+        for name in ("okf.py", "learning.py", "pr_sync.py", "autonomy_driver.py", "timed_check.py", "autonomy_progress.py", "autonomy_validation.py", "scratch.py", "review_guard.py", "ledger.py", "process_runtime.py"):
             shutil.copy(SCRIPTS / name, scripts / name)
         self.okf("init", "--autonomous")  # also registers the merge driver
         # Keep the sync fixture independent of the initialization date.

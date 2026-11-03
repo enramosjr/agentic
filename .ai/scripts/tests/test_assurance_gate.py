@@ -1,15 +1,16 @@
 """Assurance increment 2: R1-R8, real CLI completion and evidence boundaries."""
 import shutil
 import subprocess
+import sys
 import time
 from unittest import mock
 
-from test_assurance import Case, CAP, SCOPED, EXCLUDE, SCRIPTS
+from test_assurance import Case, CAP, SCOPED, EXCLUDE, SCRIPTS, PYTHON, CHECK_COMMAND
 import assurance
 import lifecycle
 
 SPEC = 'docs/task.md'
-COMMAND = 'python3 -c "raise SystemExit(0)"'
+COMMAND = PYTHON + ' -c "raise SystemExit(0)"'
 
 
 class GateCase(Case):
@@ -23,7 +24,7 @@ class GateCase(Case):
         if tier == 'L1':
             self.lc('stage', 'intent', '--note', 'fixture; assert success; no assumptions')
             self.lc('stage', 'plan', '--note', 'fixture')
-            self.lc('run', 'passing', '--', 'python3', '-V')
+            self.lc('run', 'passing', '--', sys.executable, '-V')
             self.lc('stage', 'review', '--note', 'self reviewed')
         else:
             if spec == SPEC:
@@ -84,7 +85,7 @@ class GateStatusTests(GateCase):  # R1
 
     def test_invalid_blocks_with_repair_hint(self):
         self.start()
-        self.capability(SCOPED.replace('`python3 check.py`', 'bad command'))
+        self.capability(SCOPED.replace(f'`{CHECK_COMMAND}`', 'bad command'))
         self.prepare()
         self.assert_blocked('INVALID')
 
@@ -165,13 +166,13 @@ class TouchedScopeTests(GateCase):  # R2
     def test_blocks_unrelated_and_ordered_exclusions(self):
         scoped = SCOPED.replace('`src/**`', '`src/**` `!src/skip*`')
         self.capability(scoped +
-                        '- CALC-R2: Other MUST pass.\n  - Verify: `python3 -V`\n  - Inputs: `other/**`\n')
+                        f'- CALC-R2: Other MUST pass.\n  - Verify: `{PYTHON} -V`\n  - Inputs: `other/**`\n')
         self.commit('scopes')
         self.start()
         self.write('src/skip.py', 'excluded\n')
         self.write('notes.txt', 'unrelated\n')
         self.assertEqual(self.selected(), set())
-        self.capability(scoped.replace('`python3 check.py`', '`python3 check.py --new`'))
+        self.capability(scoped.replace(f'`{CHECK_COMMAND}`', f'`{CHECK_COMMAND} --new`'))
         self.assertEqual(self.selected(), {'CALC-R1'})
         self.prepare()
         self.assert_blocked('UNVERIFIED')
@@ -252,7 +253,7 @@ class DeltaCase(GateCase):
                    'p = Path("runs.md")\np.write_text(p.read_text() + "x" if p.exists() else "x")\n')
         self.commit('counter')
 
-    def delta(self, kind='modified', command='python3 count.py', acceptance=None, scoped=True):
+    def delta(self, kind='modified', command=PYTHON + ' count.py', acceptance=None, scoped=True):
         rid = 'CALC-R2' if kind == 'added' else 'CALC-R1'
         old = assurance.requirements(self.root)[0][0].block_sha256
         pin = 'absent' if kind == 'added' else 'sha256:' + old
@@ -292,7 +293,7 @@ class DeltaEvidenceTests(DeltaCase):  # R6
     def test_nested_run_evidence_survives_converge_publication(self):
         self.write('count.py', 'import subprocess, sys\n'
                    'subprocess.run([sys.executable, ".ai/scripts/lifecycle.py", "run", "inner", "--", '
-                   '"python3", "-V"], check=True)\n')
+                   'sys.executable, "-V"], check=True)\n')
         spec = self.delta()
         self.approve_delta(spec)
         self.lc('converge', spec)
@@ -310,7 +311,7 @@ class DeltaEvidenceTests(DeltaCase):  # R6
                 entries = [e for e in lifecycle.load(self.root)['ledger'] if e['label'] == 'req:' + rid]
                 self.assertEqual(len(entries), 1)
                 [entry] = entries
-                self.assertEqual(entry['argv'], ['python3', 'count.py'])
+                self.assertEqual(entry['argv'], [sys.executable, 'count.py'])
                 self.assertEqual(entry['inputs'], ['count.py', 'src/**', EXCLUDE])
                 self.assertEqual(set(entry['input_files']), {'count.py', 'src/calc.py'})
                 self.assertTrue(entry['runtime_sha256'])
@@ -354,7 +355,7 @@ class EvidenceBoundaryTests(DeltaCase):  # R7
                    'p.write_text("nested")\ntime.sleep(1.1)\n'
                    'subprocess.run([sys.executable, ".ai/scripts/lifecycle.py", "run", "req:CALC-R1", '
                    '"--inputs", "count.py", "src/**", "' + EXCLUDE + '", "--", '
-                   '"python3", "count.py"], check=True)\ntime.sleep(1.1)\nraise SystemExit(3)\n')
+                   'sys.executable, "count.py"], check=True)\ntime.sleep(1.1)\nraise SystemExit(3)\n')
         spec = self.delta()
         self.approve_delta(spec)
         self.lc('converge', spec, code=1)
@@ -391,8 +392,8 @@ class EvidenceBoundaryTests(DeltaCase):  # R7
         self.assertEqual(self.req_entries(), [])
 
     def test_failed_unlaunchable_and_timeout_never_pass(self):
-        for command in ('python3 -c "raise SystemExit(3)"', 'no-such-assurance-command',
-                        'python3 -c "import time; time.sleep(2)"'):
+        for command in (PYTHON + ' -c "raise SystemExit(3)"', 'no-such-assurance-command',
+                        PYTHON + ' -c "import time; time.sleep(2)"'):
             with self.subTest(command=command):
                 spec = self.delta(command=command)
                 self.approve_delta(spec)

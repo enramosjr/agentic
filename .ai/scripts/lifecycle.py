@@ -44,6 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import scratch  # noqa: E402
 import review_guard  # noqa: E402
 import pr_hook  # noqa: E402
+import process_runtime  # noqa: E402
 
 
 def lazy(name: str):
@@ -81,9 +82,9 @@ TEST_FIRST_KINDS = ("bugfix", "logic")
 EDIT_TOOLS = frozenset({"Write", "Edit", "MultiEdit", "NotebookEdit", "apply_patch", "StrReplace", "Delete"})
 SPEC_SECTIONS = ("requirements", "acceptance", "non-goals", "open questions")
 REQ_LINE = re.compile(r"^\s*[-*]\s*`?(R\d+)`?\s*[:.)–—-]\s*(.+?)\s*$")
-HOOK_COMMIT = re.compile(r"\bgit\s+(?:-\S+\s+(?:\S+\s+)?)*commit(?![-\w])")
+HOOK_COMMIT = re.compile(r"\bgit(?:\.exe)?\s+(?:-\S+\s+(?:\S+\s+)?)*commit(?![-\w])")
 HOOK_WIP = re.compile(r"""(?:-[a-zA-Z]*m|--message)[ =]*["']?wip:""")  # Only a message that starts with `wip:` is exempt.
-HOOK_ADD = re.compile(r"\bgit\s+add\b([^;&|]*)")
+HOOK_ADD = re.compile(r"\bgit(?:\.exe)?\s+add\b([^;&|]*)")
 RECORD_DIR = "knowledge/history/lifecycle"
 RUN_ROOTS_ENV = "_AGENTIC_LIFECYCLE_RUN_ROOTS"
 MUTATING_COMMANDS = frozenset({'tier', 'stage', 'redgreen', 'run', 'converge', 'merge', 'learn', 'promote', 'retire', 'retrospect', 'finish', 'assure'})
@@ -124,7 +125,7 @@ def now() -> str:
 
 
 def git(root: Path, *args: str) -> str:
-    return subprocess.check_output(["git", "-C", str(root), *args], text=True, stderr=subprocess.PIPE).strip()
+    return subprocess.check_output(["git", "-C", str(root), *args], text=True, encoding='utf-8', stderr=subprocess.PIPE).strip()
 
 
 def repo_root(start: Path | None = None) -> Path:
@@ -182,9 +183,9 @@ def load(root: Path) -> dict | None:
     if not path.is_file():
         return None
     try:
-        state = json.loads(path.read_text())
+        state = json.loads(path.read_text(encoding='utf-8'))
         if state.get("task") and record_path(root, state).is_file():
-            durable = json.loads(record_path(root, state).read_text())
+            durable = json.loads(record_path(root, state).read_text(encoding='utf-8'))
             learning.reconcile(state, durable)
             if durable.get("merge") is not None:
                 brownfield.receipt_schema(durable["merge"])
@@ -257,12 +258,12 @@ def save(root: Path, state: dict, publish: bool = True) -> None:
         learning.lessons(state)
         learning.closure(state)
         if record_path(root, state).is_file():
-            learning.reconcile(state, json.loads(record_path(root, state).read_text()))
+            learning.reconcile(state, json.loads(record_path(root, state).read_text(encoding='utf-8')))
         first = project_context.kind(root) != 'framework' and not (root / RECORD_DIR).is_dir()
         write_atomic(record_path(root, state), public(state, root))
         if first and (root / "knowledge/index.md").is_file():  # The new directory needs its index once, or `okf.py records` fails.
             try:
-                result = review_guard.run(root, [sys.executable, str(root / ".ai/scripts/okf.py"), "reindex"], cwd=root, capture_output=True, text=True, timeout=60)
+                result = review_guard.run(root, [sys.executable, str(root / ".ai/scripts/okf.py"), "reindex"], cwd=root, capture_output=True, text=True, encoding='utf-8', timeout=60)
                 failed = result.returncode != 0
             except (OSError, subprocess.TimeoutExpired):
                 failed = True
@@ -348,7 +349,7 @@ def duplicates(lines: list[str]) -> list[str]:
 def spec_model(path: Path) -> dict:
     if brownfield.is_delta(path):
         return brownfield.model(path, repo_root(path.parent))
-    found = sections(path.read_text())
+    found = sections(path.read_text(encoding='utf-8'))
     requirements, acceptance = find_section(found, "requirements") or [], find_section(found, "acceptance") or []
     return {
         "found": found,
@@ -395,7 +396,7 @@ def vague_terms(root: Path | None) -> list[str]:
         files = []
     for file in files:
         try:
-            text = file.read_text()
+            text = file.read_text(encoding='utf-8')
         except (OSError, UnicodeDecodeError):
             continue
         for line in sections(text).get("vague terms", []):
@@ -461,7 +462,7 @@ def corpus(root: Path, paths: list[str]) -> str:
         files = [p for p in target.rglob("*") if p.is_file()] if target.is_dir() else [target]
         for file in files:
             try:
-                chunks.append(file.read_text())
+                chunks.append(file.read_text(encoding='utf-8'))
             except (OSError, UnicodeDecodeError):
                 continue
     return "\n".join(chunks)
@@ -470,7 +471,7 @@ def corpus(root: Path, paths: list[str]) -> str:
 def trace(root: Path, spec: Path, plan: Path | None, tests: list[str]) -> list[str]:
     problems: list[str] = list(lint_spec(spec, strict_open=False, root=root))
     reqs = spec_model(spec)["requirements"]
-    plan_text = plan.read_text() if plan else None
+    plan_text = plan.read_text(encoding='utf-8') if plan else None
     test_text = corpus(root, tests) if tests else None
     for rid in reqs:
         pattern = re.compile(rf"(?<![\w-]){re.escape(rid)}(?![\w-])")
@@ -499,13 +500,17 @@ def redgreen_ok(state: dict) -> bool:
 
 def stage_example(tier: str) -> str:
     """The complete commands for intent and plan at this tier, so one error message is enough."""
-    cli = "python3 .ai/scripts/lifecycle.py stage"
+    cli = f"{process_runtime.python_hint()} .ai/scripts/lifecycle.py stage"
     if tier == "L3":
-        return (f"example: {cli} intent --note queue:TASK_ID[,TASK_ID] --approved-by decision:ADR_OR_QUEUE_ENTRY "
-                f"&& {cli} plan --note queue:TASK_ID[,TASK_ID]")
-    if tier == "L2":
-        return f"example: {cli} intent --ref SPEC.md --approved-by human:USER && {cli} plan --ref PLAN.md"
-    return f"example: {cli} intent --note 'goal; success check; assumptions' && {cli} plan --note 'steps'"
+        first = f"{cli} intent --note queue:TASK_ID[,TASK_ID] --approved-by decision:ADR_OR_QUEUE_ENTRY"
+        second = f"{cli} plan --note queue:TASK_ID[,TASK_ID]"
+    elif tier == "L2":
+        first, second = f"{cli} intent --ref SPEC.md --approved-by human:USER", f"{cli} plan --ref PLAN.md"
+    else:
+        first, second = f"{cli} intent --note 'goal; success check; assumptions'", f"{cli} plan --note 'steps'"
+    if os.name == 'nt':
+        return f"example: {first}; if ($LASTEXITCODE -eq 0) {{ {second} }}"
+    return f"example: {first} && {second}"
 
 
 def gate_problem(state: dict, target: str) -> str | None:
@@ -524,13 +529,13 @@ def gate_problem(state: dict, target: str) -> str | None:
         need = REQUIRED[tier]
     missing = [stage for stage in need if not complete(state, stage)]
     if missing:
-        hint = stage_example(tier) if {"intent", "plan"} & set(missing) else "(python3 .ai/scripts/lifecycle.py stage NAME ...)"
+        hint = stage_example(tier) if {"intent", "plan"} & set(missing) else f"({process_runtime.python_hint()} .ai/scripts/lifecycle.py stage NAME ...)"
         return f"tier {tier} requires completed stage(s) before {target}: {', '.join(missing)}\n{hint}"
     if target in ("verify", "ship", "commit") and state.get("kind") in TEST_FIRST_KINDS and not redgreen_ok(state):
         return f"kind {state['kind']} requires red/green evidence (AGENTS.md §8.6): lifecycle.py redgreen red -- CMD, fix, redgreen green -- CMD"
     if tier != 'L0' and target in ('verify', 'ship', 'commit') and learning.closure(state) is None:
-        return ('closing retrospective required: run `python3 .ai/scripts/lifecycle.py retrospect --lessons 1 2` '
-                '(existing lessons with evidence), or `python3 .ai/scripts/lifecycle.py retrospect '
+        return (f'closing retrospective required: run `{process_runtime.python_hint()} .ai/scripts/lifecycle.py retrospect --lessons 1 2` '
+                f'(existing lessons with evidence), or `{process_runtime.python_hint()} .ai/scripts/lifecycle.py retrospect '
                 '--no-new-lessons "REASON"`')
     return None
 
@@ -538,7 +543,7 @@ def gate_problem(state: dict, target: str) -> str | None:
 def ref_hash(path: Path) -> str:
     """sha256 of a stage artifact; for Markdown only the body, so frontmatter stamps do not count as edits."""
     if path.suffix == ".md":
-        return hashlib.sha256(body(path.read_text()).strip().encode()).hexdigest()
+        return hashlib.sha256(body(path.read_text(encoding='utf-8')).strip().encode()).hexdigest()
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
@@ -592,7 +597,7 @@ def record_audit(root: Path, state: dict) -> list[str]:
 
 
 def read_verdict(path: Path) -> str:
-    lines = body(path.read_text()).splitlines()
+    lines = body(path.read_text(encoding='utf-8')).splitlines()
     for index, line in enumerate(lines):
         if re.match(r"^##\s+Verdict\b", line, re.I):
             for follow in lines[index + 1 :]:
@@ -643,7 +648,7 @@ def is_active(state: dict | None, root: Path) -> bool:
 def require_state(root: Path) -> dict:
     state = load(root)
     if not is_active(state, root):
-        raise LifecycleError("no active lifecycle: run `python3 .ai/scripts/lifecycle.py tier L0|L1|L2|L3 --reason TEXT` first")
+        raise LifecycleError(f"no active lifecycle: run `{process_runtime.python_hint()} .ai/scripts/lifecycle.py tier L0|L1|L2|L3 --reason TEXT` first")
     return state
 
 
@@ -757,10 +762,10 @@ def cmd_stage(args: argparse.Namespace) -> int:
             raise LifecycleError(problem)
         if project_context.kind(root) != 'framework' and (root / "knowledge/index.md").is_file():
             okf_cli = [sys.executable, str(root / ".ai/scripts/okf.py")]
-            result = subprocess.run([*okf_cli, "sync-check", "--base", state.get("head") or "HEAD"], cwd=root, capture_output=True, text=True)
+            result = subprocess.run([*okf_cli, "sync-check", "--base", state.get("head") or "HEAD"], cwd=root, capture_output=True, text=True, encoding='utf-8')
             if result.returncode != 0:
                 raise LifecycleError("okf.py sync-check failed:\n" + (result.stdout + result.stderr).strip()[-800:])
-            result = subprocess.run([*okf_cli, "records"], cwd=root, capture_output=True, text=True)
+            result = subprocess.run([*okf_cli, "records"], cwd=root, capture_output=True, text=True, encoding='utf-8')
             if result.returncode != 0:
                 raise LifecycleError("okf.py records failed:\n" + (result.stdout + result.stderr).strip()[-800:])
     elif stage == "ship":
@@ -956,7 +961,7 @@ def cmd_redgreen(args: argparse.Namespace) -> int:
     if not command:
         raise LifecycleError("give the test command after `--`")
     text = " ".join(command)
-    result = review_guard.run(root, command, cwd=root, capture_output=True, text=True, timeout=args.timeout)
+    result = review_guard.run(root, command, cwd=root, capture_output=True, text=True, encoding='utf-8', timeout=args.timeout)
     tail = "\n".join((result.stdout + result.stderr).strip().splitlines()[-12:])
     entry = next((e for e in state["redgreen"] if e["cmd"] == text and "green" not in e), None)
     if args.phase == "red":
@@ -1027,7 +1032,7 @@ def execute_check(root: Path, state: dict, label: str, command: list[str], globs
         raise LifecycleError(f"run refused, nothing was run: {error}") from error
     started, code, output = time.monotonic(), None, ""
     try:
-        result = review_guard.run(root, command, cwd=root, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace", timeout=timeout)
+        result = review_guard.run(root, command, cwd=root, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding='utf-8', errors="replace", timeout=timeout)
         code, output = result.returncode, result.stdout + result.stderr
     except subprocess.TimeoutExpired as error:
         output = decoded(error.stdout) + decoded(error.stderr) + "\ntimeout"
@@ -1181,7 +1186,7 @@ def converge_problem(root: Path, state: dict) -> str | None:
     if state["tier"] not in ("L2", "L3") or not ref:
         return None  # L0, L1 and L3 `queue:` intents are not converged.
     run = state.get("converge")
-    rerun = f"python3 .ai/scripts/lifecycle.py converge {ref}"
+    rerun = f"{process_runtime.python_hint()} .ai/scripts/lifecycle.py converge {ref}"
     if not isinstance(run, dict) or run.get("spec") != ref:
         return f"no converge run for {ref}: run {rerun}"
     results = run.get("results") or []
@@ -1196,7 +1201,7 @@ def converge_problem(root: Path, state: dict) -> str | None:
     if manual:
         review = state["stages"].get("review", {}).get("ref")
         target = root / review if review else None
-        cited = "\n".join(find_section(sections(target.read_text()), "validation reviewed") or []) if target and target.is_file() else ""
+        cited = "\n".join(find_section(sections(target.read_text(encoding='utf-8')), "validation reviewed") or []) if target and target.is_file() else ""
         missing = [rid for rid in manual if not re.search(rf"(?<![\w-]){re.escape(rid)}(?![\w-])", cited)]
         if missing:
             return f"manual check(s) {', '.join(missing)} not cited in '## Validation Reviewed' of {review or 'the review report'}"
@@ -1215,7 +1220,7 @@ def cmd_converge(args: argparse.Namespace) -> int:
         spec = rel(root, args.spec)
         reason = converge_refusal(root, state, spec)
     if reason:
-        raise LifecycleError(f"converge refused, nothing was run: {reason}; check with python3 .ai/scripts/lifecycle.py audit")
+        raise LifecycleError(f"converge refused, nothing was run: {reason}; check with {process_runtime.python_hint()} .ai/scripts/lifecycle.py audit")
     if brownfield.is_delta(root / spec):
         problems = blocking(lint_spec(root / spec, root=root))
         if problems:
@@ -1240,7 +1245,7 @@ def cmd_converge(args: argparse.Namespace) -> int:
         started = time.monotonic()
         snapshot = None
         try:
-            argv = shlex.split(entry["cmd"])
+            argv = pr_hook.split_words(entry["cmd"])
             if not argv:
                 raise ValueError("empty command")
             obligation = obligations.get(rid)
@@ -1252,7 +1257,7 @@ def cmd_converge(args: argparse.Namespace) -> int:
                 if globs:
                     snapshot['input_files'] = ledger.inputs_snapshot(root, globs)
                 snapshot['runtime_sha256'] = ledger.runtime_digest(argv)
-            result = review_guard.run(root, argv, cwd=root, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace", timeout=args.timeout)
+            result = review_guard.run(root, argv, cwd=root, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding='utf-8', errors="replace", timeout=args.timeout)
         except subprocess.TimeoutExpired as error:
             entry["error"], output = "timeout", decoded(error.stdout) + decoded(error.stderr)
         except (ValueError, OSError, subprocess.CalledProcessError) as error:
@@ -1299,7 +1304,7 @@ def merge_bookkeeping(root: Path, model: dict, receipt: dict) -> str | None:
     if not any(isinstance(s, dict) and s.get('resource') == resource for s in model['capmeta'].get('sources', [])):
         return 'missing spec source in ' + model['target']
     log = root / 'knowledge/log.md'
-    if not log.is_file() or receipt['log_id'] not in log.read_text():
+    if not log.is_file() or receipt['log_id'] not in log.read_text(encoding='utf-8'):
         return 'missing merge log ' + receipt['log_id']
     if okf.reindex(root / 'knowledge', check=True):
         return 'incomplete merge indexes; run merge again'
@@ -1375,7 +1380,7 @@ def cmd_merge(args: argparse.Namespace) -> int:
     if rendered != model['captext']:
         okf.write_text(model['cap'], rendered)
     bundle = root / 'knowledge'
-    if not (bundle / 'log.md').is_file() or receipt['log_id'] not in (bundle / 'log.md').read_text():
+    if not (bundle / 'log.md').is_file() or receipt['log_id'] not in (bundle / 'log.md').read_text(encoding='utf-8'):
         okf.append_log(bundle, receipt['log_message'], date.fromisoformat(receipt['log_date']))
     okf.reindex(bundle)
     post = brownfield.model(spec, root)
@@ -1402,7 +1407,7 @@ def cmd_audit(args: argparse.Namespace) -> int:
             raise LifecycleError("the active task has no committed record (L0, or started before the audit trail)")
         path = record_path(root, state)
     try:
-        record = json.loads(path.read_text())
+        record = json.loads(path.read_text(encoding='utf-8'))
     except (OSError, ValueError) as error:
         raise LifecycleError(f"{path.name} is unreadable or unparseable: {error}") from error
     problems = audit_problems(root, record)
@@ -1478,13 +1483,16 @@ def router_text(root: Path) -> str:
     capture = False
     source = root / ".ai/lifecycle.md"
     if source.is_file():
-        for line in source.read_text().splitlines():
+        for line in source.read_text(encoding='utf-8').splitlines():
             if line.startswith("## "):
                 capture = line.strip() == "## Router"
                 continue
             if capture:
                 lines.append(line)
-    text = "Lifecycle router (AGENTS.md §2.5):\n" + "\n".join(lines).strip()
+    guidance = "\n".join(lines).strip()
+    if os.name == 'nt':
+        guidance = guidance.replace('python3 ', process_runtime.python_hint() + ' ')
+    text = "Lifecycle router (AGENTS.md §2.5):\n" + guidance
     try:
         state = load(root)
     except (learning.LearningError, OSError, UnicodeError) as error:
@@ -1493,7 +1501,7 @@ def router_text(root: Path) -> str:
     if is_active(state, root):
         text += f"\nActive: tier {state['tier']}; complete stages: {', '.join(s for s in STAGES if complete(state, s)) or 'none'}."
     else:
-        text += "\nNo tier declared yet: run `python3 .ai/scripts/lifecycle.py tier L0|L1|L2|L3 --reason TEXT` before editing source or committing (add --new when starting a different task)."
+        text += f"\nNo tier declared yet: run `{process_runtime.python_hint()} .ai/scripts/lifecycle.py tier L0|L1|L2|L3 --reason TEXT` before editing source or committing (add --new when starting a different task)."
     block = project_rules_context(root)
     if block:
         text += '\n\n' + block
@@ -1516,15 +1524,20 @@ def session_directory(data: dict) -> Path:
 def git_commit_directory(command: str) -> tuple[list[str], str] | None:
     """Recognize a single Git -C commit, without interpreting shell programs."""
     try:
-        tokens = shlex.split(command)
+        tokens = pr_hook.split_words(command)
     except ValueError:
         return None
-    if not tokens or tokens[0] != "git":
+    if os.name == 'nt' and tokens[:1] == ['&']:
+        tokens = tokens[1:]
+    executable = Path(tokens[0]).name.lower() if tokens else ''
+    if not tokens or (executable not in ('git', 'git.exe') if os.name == 'nt' else tokens[0] != 'git'):
         return None
     has_directory = any(token.startswith("-C") for token in tokens[1:])
     # Remove quoted/escaped text before looking for shell operators; a message
     # such as ';' is a literal argument, while an unquoted ';' starts a command.
     unquoted = re.sub(r"'[^']*'|\"(?:\\.|[^\"\\])*\"|\\.", "", command)
+    if os.name == 'nt' and command.lstrip().startswith('&'):
+        unquoted = unquoted.lstrip()[1:]
     if re.search(r"[;&|()<>\n]", unquoted):
         if has_directory and "commit" in tokens:
             raise LifecycleError("git -C commit routing requires a single command; run the commit separately")
@@ -1544,9 +1557,16 @@ def git_commit_directory(command: str) -> tuple[list[str], str] | None:
             if has_directory and "commit" in tokens:
                 raise LifecycleError("unsupported git -C commit options; use `git -C DIRECTORY commit ...`")
             return None
-    if directories and index < len(tokens) and tokens[index] == "commit":
+    if (directories or os.name == 'nt') and index < len(tokens) and tokens[index] == "commit":
         return directories, shlex.join(["git", *tokens[index:]])
     return None
+
+
+def is_git_commit(command: str) -> bool:
+    if os.name == 'nt':
+        return any(value['verb'] == 'commit' for value in
+                   review_guard.git_invocations(command, Path.cwd(), os.environ))
+    return bool(HOOK_COMMIT.search(command))
 
 
 def operation_directory(data: dict, git_directories: list[str]) -> tuple[Path, Path]:
@@ -1563,6 +1583,7 @@ def operation_directory(data: dict, git_directories: list[str]) -> tuple[Path, P
         if not isinstance(value, str) or not value.strip():
             raise LifecycleError(f"invalid {label}: provide a non-empty directory path inside a Git worktree")
         try:
+            pr_hook.check_directory_spelling(value, label)
             candidate = Path(value).expanduser()
             candidate = (candidate if candidate.is_absolute() else base / candidate).resolve()
             if not candidate.is_dir():
@@ -1594,7 +1615,7 @@ def edit_paths(data: dict, root: Path, directory: Path | None = None) -> list[st
 
 
 NO_TIER = (
-    "No active lifecycle tier (AGENTS.md §2.5). Run `python3 .ai/scripts/lifecycle.py tier L0|L1|L2|L3 --reason TEXT [--kind bugfix|logic|feature|refactor|docs]` "
+    f"No active lifecycle tier (AGENTS.md §2.5). Run `{process_runtime.python_hint()} .ai/scripts/lifecycle.py tier L0|L1|L2|L3 --reason TEXT [--kind bugfix|logic|feature|refactor|docs]` "
     "(add --new when starting a different task), then complete the stages that tier requires."
 )
 
@@ -1626,7 +1647,7 @@ def hook_problem(data: dict, root: Path, directory: Path | None = None) -> str |
         return gate_problem(state, "implement")
     command = (data.get("tool_input") or {}).get("command")
     if tool in ("Bash", "Shell") and isinstance(command, str):
-        committing = bool(HOOK_COMMIT.search(command)) and not HOOK_WIP.search(command)
+        committing = is_git_commit(command) and not HOOK_WIP.search(command)
         if committing or pr_hook.recognize(command):
             if not active:
                 return NO_TIER
@@ -1645,7 +1666,7 @@ def hook_problem(data: dict, root: Path, directory: Path | None = None) -> str |
 
 def words(text: str) -> list[str]:
     try:
-        return shlex.split(text)
+        return pr_hook.split_words(text)
     except ValueError:
         return text.split()
 
@@ -1653,6 +1674,12 @@ def words(text: str) -> list[str]:
 def stages_record(command: str, relative: str) -> bool:
     """True when a `git add` in the same command covers the record: everything, or a path that contains it."""
     covering = {".", "knowledge", "knowledge/history", RECORD_DIR, relative}
+    if os.name == 'nt':
+        for value in review_guard.git_invocations(command, Path.cwd(), os.environ):
+            if value['verb'] == 'add' and any(arg in ('-A', '--all') or arg.replace('\\', '/').rstrip('/') in covering
+                                            for arg in value['arguments']):
+                return True
+        return False
     for match in HOOK_ADD.finditer(command):
         if any(arg in ("-A", "--all") or arg.rstrip("/") in covering for arg in words(match.group(1))):
             return True
@@ -1661,10 +1688,16 @@ def stages_record(command: str, relative: str) -> bool:
 
 def commits_all(command: str) -> bool:
     """True when the commit command itself has -a/--all; flags that take a value end the short-flag cluster."""
-    match = HOOK_COMMIT.search(command)
-    if match is None:
-        return False
-    for arg in words(re.split(r"[;&|]", command[match.end() :], maxsplit=1)[0]):
+    if os.name == 'nt':
+        arguments = next((value['arguments'] for value in
+                          review_guard.git_invocations(command, Path.cwd(), os.environ)
+                          if value['verb'] == 'commit'), [])
+    else:
+        match = HOOK_COMMIT.search(command)
+        if match is None:
+            return False
+        arguments = words(re.split(r"[;&|]", command[match.end() :], maxsplit=1)[0])
+    for arg in arguments:
         if arg == "--all":
             return True
         if arg.startswith("-") and not arg.startswith("--"):
@@ -1685,7 +1718,7 @@ def record_problem(root: Path, state: dict, command: str) -> str | None:
     relative = record_path(root, state).relative_to(root).as_posix()
     if stages_record(command, relative):
         return None
-    status = subprocess.run(["git", "-C", str(root), "status", "--porcelain", "--", relative], capture_output=True, text=True, check=True).stdout
+    status = subprocess.run(["git", "-C", str(root), "status", "--porcelain", "--", relative], capture_output=True, text=True, encoding='utf-8', check=True).stdout
     if not status:
         return None  # Committed and unchanged, or not written at all (nothing to include).
     if status.startswith("??"):
@@ -1731,8 +1764,8 @@ def driver_request() -> str | None:
         if marker.exists():
             continue
         try:
-            text = Path(value).read_text().strip()
-            marker.write_text("")
+            text = Path(value).read_text(encoding='utf-8').strip()
+            marker.write_text("", encoding='utf-8')
         except OSError:
             continue
         return f"autonomy driver {variable}: {text} (delivered once; your next command runs normally)"
@@ -1769,7 +1802,7 @@ def cmd_hook(args: argparse.Namespace) -> int:
             emit(data, 'PreToolUse', str(error))
             return 0
     command = (data.get('tool_input') or {}).get('command')
-    if isinstance(command, str) and (HOOK_COMMIT.search(command) or invocation):
+    if isinstance(command, str) and (is_git_commit(command) or invocation):
         try:
             targets = review_guard.operation_roots(data)
             for target in targets:
@@ -1783,7 +1816,7 @@ def cmd_hook(args: argparse.Namespace) -> int:
                     continue
                 import review_native
                 problem = gate_problem(state, 'commit') or review_native.problem(target, state)
-                if not problem and HOOK_COMMIT.search(command):
+                if not problem and is_git_commit(command):
                     problem = review_native.index_problem(target, state, command,
                         {**os.environ, **((data.get('tool_input') or {}).get('env') or {})})
                 if problem:
@@ -1811,7 +1844,7 @@ def cmd_hook(args: argparse.Namespace) -> int:
             data = {**data, "tool_input": {**data["tool_input"], "command": git_commit[1]}}
             command = git_commit[1]
         if (data.get("tool_name") in ("Bash", "Shell") and isinstance(command, str)
-                and not HOOK_COMMIT.search(command) and not invocation):
+                and not is_git_commit(command) and not invocation):
             emit(data, "PreToolUse", None)
             return 0
         if event.lower() == "sessionstart":
@@ -2005,4 +2038,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    import process_runtime
+    process_runtime.configure_windows_environment()
     sys.exit(main())

@@ -55,7 +55,7 @@ def worker(start: Path, name: str, result_path: Path) -> int:
         "errors": [[test.id(), trace] for test, trace in result.errors],
         "unexpected": [test.id() for test in result.unexpectedSuccesses],
         "skipped": len(result.skipped),
-    }))
+    }), encoding='utf-8')
     return 0
 
 
@@ -64,9 +64,9 @@ def run_group(start: Path, name: str, expected: int) -> dict:
         result_path = Path(tmp) / "result.json"
         process = subprocess.run(
             [sys.executable, str(Path(__file__).resolve()), "-s", str(start), "--worker", name, "--result", str(result_path)],
-            capture_output=True, text=True, errors="replace")
+            capture_output=True, text=True, encoding='utf-8', errors="replace")
         if result_path.is_file():
-            return json.loads(result_path.read_text())
+            return json.loads(result_path.read_text(encoding='utf-8'))
     output = (process.stdout + process.stderr)[-4000:]
     return {"run": expected, "failures": [], "errors": [[name, f"worker exited {process.returncode}\n{output}"]],
             "unexpected": [], "skipped": 0}
@@ -111,4 +111,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    import process_runtime
+    process_runtime.configure_windows_environment()
     sys.exit(main())

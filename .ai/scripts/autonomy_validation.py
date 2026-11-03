@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
-import fcntl
 import hashlib
 import json
 import math
@@ -19,6 +18,7 @@ sys.dont_write_bytecode = True
 import timed_check
 import scratch
 import review_guard
+import process_runtime
 
 
 # These identify the supervising session, not the product under validation.
@@ -39,12 +39,12 @@ def command_environment(repo: Path, command: dict, validation_kind: str) -> dict
 
 
 def git(repo: Path, *args: str) -> str:
-    return subprocess.check_output(["git", "-C", str(repo), *args], text=True).strip()
+    return subprocess.check_output(["git", "-C", str(repo), *args], text=True, encoding='utf-8').strip()
 
 
 def write_json(path: Path, value: dict) -> None:
     temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(value, indent=2) + "\n")
+    temporary.write_text(json.dumps(value, indent=2) + "\n", encoding='utf-8')
     temporary.replace(path)
 
 
@@ -128,7 +128,7 @@ def repair_candidate(job: dict, previous: Path | None, previous_digest: str | No
     if (previous is None or Path(job["repair"]["failed_result"]).resolve() != previous.resolve()
             or digest(previous) != previous_digest):
         raise ValueError("repair must bind the unchanged immediately preceding managed result")
-    result = json.loads(previous.read_text())
+    result = json.loads(previous.read_text(encoding='utf-8'))
     if result["state"] != "FAIL" or result.get("validation_kind", "deterministic") != "deterministic":
         raise ValueError("repair needs a failed deterministic gate, not PASS, timeout or model-backed evidence")
     if digest(previous.with_name("request.json")) != result.get("request_sha256"):
@@ -154,15 +154,14 @@ def register(registry: Path, repo: Path, worktree: Path) -> None:
     worktree = worktree.resolve()
     if Path(git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir")) != Path(git(worktree, "rev-parse", "--path-format=absolute", "--git-common-dir")):
         raise ValueError("worker worktree must belong to the same repository")
-    with registry.with_suffix(".lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        rows = json.loads(registry.read_text()) if registry.exists() else {}
+    with process_runtime.file_lock(registry.with_suffix(".lock")):
+        rows = json.loads(registry.read_text(encoding='utf-8')) if registry.exists() else {}
         rows.setdefault(str(worktree), git(worktree, "rev-parse", "HEAD"))
         write_json(registry, rows)
 
 
 def source_work(registry: Path) -> bool:
-    rows = json.loads(registry.read_text())
+    rows = json.loads(registry.read_text(encoding='utf-8'))
     for worktree, base in rows.items():
         repo = Path(worktree)
         paths = git(repo, "diff", "--name-only", base).splitlines()
@@ -180,7 +179,7 @@ def receipts(job: dict) -> list[dict]:
     if not job.get("resume_from"):
         return []
     previous = Path(job["resume_from"])
-    result = json.loads(previous.read_text())
+    result = json.loads(previous.read_text(encoding='utf-8'))
     if result.get("state") == "INVALIDATED":
         raise ValueError("resume inputs were invalidated; prior checks cannot be reused")
     if digest(previous.with_name("request.json")) != result.get("request_sha256"):
@@ -224,7 +223,7 @@ def execute(command: dict, number: int, log_path: Path, repo: Path, environment:
             raise Cancelled()
     try:
         check_cancel()
-        with log_path.open("x") as log:
+        with log_path.open("x", encoding="utf-8") as log:
             launched, launch_error = review_guard.launch_plan(repo, command['argv'])
             outcome = timed_check.run(launched, label=f"validation-{number}", cwd=repo,
                                       env=environment,
@@ -249,7 +248,7 @@ def execute(command: dict, number: int, log_path: Path, repo: Path, environment:
 
 @review_guard.protected(lambda request, repo, *args, **kwargs: repo)
 def run(request: Path, repo: Path, deadline: float, reserve: float, report, tick, tick_seconds: float = 1) -> Path:
-    job = plan(json.loads(request.read_text()))
+    job = plan(json.loads(request.read_text(encoding='utf-8')))
     candidate = job.get("candidate")
     validation_kind = job.get("validation_kind", "deterministic")
     result_path = request.with_name("result.json")
@@ -415,7 +414,7 @@ def submit_request(args) -> int:
             if args.plan is None and args.resume is None:
                 raise ValueError("submit needs --plan or --resume")
             source = args.plan if args.plan else args.resume.with_name("request.json")
-            value = plan(json.loads(source.read_text()))
+            value = plan(json.loads(source.read_text(encoding='utf-8')))
             value["candidate"] = git(repo, "rev-parse", "HEAD")
             if args.resume:
                 value["resume_from"] = str(args.resume.resolve())
@@ -423,7 +422,7 @@ def submit_request(args) -> int:
             if git(repo, "status", "--porcelain"):
                 raise ValueError("commit a clean SAFE handoff before submitting validation")
             destination = Path(os.environ["OKF_VALIDATION_REQUEST"])
-            with destination.open("x") as stream:
+            with destination.open("x", encoding='utf-8') as stream:
                 json.dump(value, stream, indent=2)
             print(f"Validation submitted for {value['candidate']}; exit this agent session so the driver can execute it.")
         return 0
@@ -433,4 +432,6 @@ def submit_request(args) -> int:
 
 
 if __name__ == "__main__":
+    import process_runtime
+    process_runtime.configure_windows_environment()
     sys.exit(main())

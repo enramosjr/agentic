@@ -11,7 +11,7 @@ import tempfile
 def require_disk(path: Path) -> Path:
     root = path.resolve()
     if any(root == path or path in root.parents for path in
-           (Path("/tmp"), Path("/var/tmp"), Path("/dev/shm"))):
+           (Path("/tmp").resolve(), Path("/var/tmp").resolve(), Path("/dev/shm").resolve())):
         raise ValueError(f"scratch must be outside system temporary storage: {root}")
     mounts = Path("/proc/self/mountinfo")
     if mounts.exists():

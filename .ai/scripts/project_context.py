@@ -4,12 +4,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import subprocess
+import process_runtime
 
 
 def kind(root: Path) -> str:
     marker = root / '.agentic.json'
     if marker.is_file():
-        value = json.loads(marker.read_text())
+        value = json.loads(marker.read_text(encoding='utf-8'))
         role = value.get('repository_kind') if isinstance(value, dict) else None
         if role not in ('framework', 'adopter'):
             raise ValueError('.agentic.json: repository_kind must be framework or adopter')
@@ -22,7 +23,7 @@ def kind(root: Path) -> str:
 
 
 def git(root: Path, *args: str):
-    return subprocess.run(['git', '-C', str(root), *args], capture_output=True, text=True, timeout=10)
+    return subprocess.run(['git', '-C', str(root), *args], capture_output=True, text=True, encoding='utf-8', timeout=10)
 
 
 def report(root: Path) -> dict:
@@ -48,7 +49,7 @@ def report(root: Path) -> dict:
                    'committer_configured': git(root, 'var', 'GIT_COMMITTER_IDENT').returncode == 0,
                    'dirty': bool(git(root, 'status', '--porcelain').stdout.strip())}
     data['discovery'] = {
-        'commands': 'python3 .ai/scripts/repo.py commands TOOL [SUBCOMMAND]',
-        'headings': 'python3 .ai/scripts/repo.py headings PATH',
+        'commands': f'{process_runtime.python_hint()} .ai/scripts/repo.py commands TOOL [SUBCOMMAND]',
+        'headings': f'{process_runtime.python_hint()} .ai/scripts/repo.py headings PATH',
         'tools': ['repo', 'lifecycle', 'okf', 'install', 'artifacts', 'autonomy_validation', 'validation_select']}
     return data

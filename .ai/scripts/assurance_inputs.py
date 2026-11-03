@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -316,8 +317,19 @@ def check_paths(root, patterns, required):
         if any(c in body for c in '*?[') and (root / body).exists():
             raise ValueError('ambiguous literal filename containing glob metacharacters: ' + body)
     selected = ledger.input_paths(root, patterns)
+    index = subprocess.run(['git', '-C', str(root), 'ls-files', '--stage', '-z'],
+                           capture_output=True, check=True, timeout=10).stdout
+    unmaterialized_links = set()
+    for row in index.split(b'\0'):
+        metadata, separator, name = row.partition(b'\t')
+        if separator and metadata.startswith(b'120000 '):
+            relative = os.fsdecode(name)
+            if not (root / relative).is_symlink():
+                unmaterialized_links.add(relative)
     for name in selected:
         path = root / name
+        if name in unmaterialized_links:
+            raise ValueError('symlink input is not materialized in this checkout: ' + name)
         contained(root, path)
         if not path.is_file():
             raise ValueError('selected input is missing or is not a file: ' + name)
@@ -331,6 +343,16 @@ def check_paths(root, patterns, required):
                 raise ValueError('required literal input is missing, ignored or excluded: ' + pattern)
 
 
+def exact_profile_command(declared, actual):
+    if declared == list(actual):
+        return True
+    # The Windows installation has a concrete native interpreter, rather than a
+    # required Unix alias. Only its exact resolved executable gets this variant.
+    return (os.name == 'nt' and declared[0] == 'python3' and len(declared) == len(actual)
+            and declared[1:] == list(actual[1:]) and Path(actual[0]).is_absolute()
+            and Path(actual[0]).resolve() == Path(sys.executable).resolve())
+
+
 def suggest(root, argv, extra=(), profiles=None, cwd=None):
     """Return a declared suggestion; supplied catalogs are a pure testing seam."""
     root = Path(root).resolve()
@@ -341,7 +363,7 @@ def suggest(root, argv, extra=(), profiles=None, cwd=None):
     if result.returncode or Path(result.stdout.strip()).resolve() != root:
         raise ValueError('exporter location must be the Git worktree root')
     catalog = catalog_checked(PROFILES if profiles is None else profiles)
-    profile = next((p for p in catalog if p['argv'] == list(argv)), None)
+    profile = next((p for p in catalog if exact_profile_command(p['argv'], argv)), None)
     if profile is None:
         raise ValueError('no reviewed profile for this exact command; full suites retain broad scope')
     additions = list(extra)
@@ -398,4 +420,6 @@ def main(argv=None):
 
 
 if __name__ == '__main__':
+    import process_runtime
+    process_runtime.configure_windows_environment()
     raise SystemExit(main())

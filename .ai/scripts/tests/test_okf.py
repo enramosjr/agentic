@@ -18,6 +18,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import okf  # noqa: E402
+import disk_tmp
 
 try:
     import yaml
@@ -88,7 +89,7 @@ class FrontmatterTests(unittest.TestCase):
 class BundleTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.repo = Path(tempfile.mkdtemp()).resolve()
-        self.addCleanup(shutil.rmtree, self.repo)
+        self.addCleanup(disk_tmp.remove_tree, self.repo)
         self.bundle = self.repo / "knowledge"
         self.run_ok("init")
 
@@ -410,10 +411,11 @@ class StampRunTests(BundleTestCase):
         self.assertEqual(code, 1)
         self.assertIn("--run", err)
         self.assertEqual((self.bundle / self.DOC).read_bytes(), before)
-        code, out, err = self.run_cli("stamp", "verified", self.DOC, "--by", "human:me", "--run", "true")
+        code, out, err = self.run_cli("stamp", "verified", self.DOC, "--by", "human:me", "--run", sys.executable, '-c', 'pass')
         self.assertEqual(code, 0, out + err)
         self.assertIn("ignored", err)
-        self.assertEqual(okf.parse_frontmatter(self.verified_line())['verified']['by'], 'process:true')
+        verifier = okf.parse_frontmatter(self.verified_line())['verified']['by']
+        self.assertEqual(shlex.split(verifier.removeprefix('process:')), [sys.executable, '-c', 'pass'])
         self.assertEqual(self.run_cli("stamp", "verified", self.DOC)[0], 1)  # Neither --by nor --run.
 
     def test_by_verified_warns_for_process_and_agent_not_human(self) -> None:
@@ -433,7 +435,7 @@ class StampRunTests(BundleTestCase):
             self.assertIn("--run", err)
             self.assertEqual((self.bundle / self.DOC).read_bytes(), before)
             self.assertEqual(self.run_cli("stamp", "verified", self.DOC, "--by", "human:me")[0], 0)
-            self.assertEqual(self.run_cli("stamp", "verified", self.DOC, "--run", "true")[0], 0)
+            self.assertEqual(self.run_cli("stamp", "verified", self.DOC, "--run", sys.executable, '-c', 'pass')[0], 0)
 
 
 if __name__ == "__main__":

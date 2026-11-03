@@ -345,12 +345,18 @@ class CleanupTests(Base):
                  "original = m.measure\n"
                  "def hook(scripts):\n"
                  f"    Path({str(marker)!r}).write_text(str(scripts))\n"
-                 "    time.sleep(60)\n"
+                 "    while True: time.sleep(.05)\n"
                  "def wrapped(**kw):\n    kw[\"hook\"] = hook\n    return original(**kw)\n"
                  "m.measure = wrapped\nsys.exit(m.main([]))\n")
         env = {**os.environ, "TMPDIR": str(self.base), "PYTHONDONTWRITEBYTECODE": "1"}
+        options = {}
+        if os.name == 'nt':
+            startup = subprocess.STARTUPINFO()
+            startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startup.wShowWindow = 0
+            options = {'creationflags': subprocess.CREATE_NEW_CONSOLE, 'startupinfo': startup}
         proc = subprocess.Popen([sys.executable, "-c", probe], cwd=ROOT, env=env,
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, **options)
         try:
             deadline = time.monotonic() + 30
             while not marker.exists() and proc.poll() is None and time.monotonic() < deadline:
@@ -358,7 +364,20 @@ class CleanupTests(Base):
             if not marker.exists():
                 out, err = proc.communicate(timeout=10)
                 self.fail("never reached prepared repository: " + out + err)
-            proc.send_signal(signal.SIGTERM)
+            if os.name == 'nt':
+                # SIGTERM is an uncatchable TerminateProcess on Windows. Send
+                # its catchable console-break counterpart in a private console.
+                sender = ('import ctypes,sys,time; k=ctypes.WinDLL("kernel32",use_last_error=True); '
+                          'k.FreeConsole(); '
+                          'assert k.AttachConsole(int(sys.argv[1])), ctypes.get_last_error(); '
+                          'handler=ctypes.WINFUNCTYPE(ctypes.c_int,ctypes.c_uint)(lambda event:1); '
+                          'assert k.SetConsoleCtrlHandler(handler,True); '
+                          'assert k.GenerateConsoleCtrlEvent(1,0), ctypes.get_last_error(); time.sleep(.1)')
+                sent = subprocess.run([sys.executable, '-c', sender, str(proc.pid)],
+                                      capture_output=True, text=True, timeout=5)
+                self.assertEqual(sent.returncode, 0, sent.stderr)
+            else:
+                proc.send_signal(signal.SIGTERM)
             out, err = proc.communicate(timeout=10)
             self.assertEqual(proc.returncode, 143, out + err)
             marker.unlink()

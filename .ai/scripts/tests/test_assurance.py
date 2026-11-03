@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -17,8 +18,10 @@ import scratch  # noqa: E402
 CAP = 'knowledge/capabilities/calc.md'
 RECORDS = 'knowledge/history/lifecycle'
 EXCLUDE = '!' + RECORDS + '/**'
+PYTHON = shlex.quote(sys.executable)
+CHECK_COMMAND = PYTHON + ' check.py'
 SCOPED = ('- CALC-R1: The calculator MUST add.\n'
-          '  - Verify: `python3 check.py`\n'
+          f'  - Verify: `{CHECK_COMMAND}`\n'
           '  - Inputs: `check.py` `src/**`\n'
           '  - Scenario add: 1 + 1 is 2.\n')
 CHECK = ('import pathlib, sys\n'
@@ -30,6 +33,7 @@ class Case(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
+        self.addCleanup(disk_tmp.remove_tree, Path(self.temp.name))
         self.root = Path(self.temp.name) / 'repo'
         self.scripts = self.root / '.ai/scripts'
         self.scripts.mkdir(parents=True)
@@ -56,6 +60,16 @@ class Case(unittest.TestCase):
         header = f'---\ntype: Capability\ntitle: Calc\nnamespace: {namespace}\nstatus: draft\n---\n\n'
         self.write(CAP, header + '# Calc\n\n## Requirements\n\n' + requirements + '\n## Notes\n\nProse.\n')
         self.cli('okf.py', 'reindex')
+
+    def link_reference(self, path, outside):
+        if os.name != 'nt':
+            path.symlink_to(outside)
+            return
+        path.write_text(str(outside))
+        blob = subprocess.run(['git', '-C', str(self.root), 'hash-object', '-w', '--stdin'],
+                              input=str(outside), text=True, capture_output=True, check=True).stdout.strip()
+        name = path.relative_to(self.root).as_posix()
+        self.git('update-index', '--add', '--cacheinfo', f'120000,{blob},{name}')
 
     def git(self, *args):
         return subprocess.run(['git', '-c', 'user.name=Test', '-c', 'user.email=t@t', *args],
@@ -150,7 +164,7 @@ class AssureRunTests(Case):  # R3
         self.assertIn('req:CALC-R1', result.stdout)
         [entry] = self.req_entries()
         self.assertEqual(entry['label'], 'req:CALC-R1')
-        self.assertEqual(entry['argv'], ['python3', 'check.py'])
+        self.assertEqual(entry['argv'], [sys.executable, 'check.py'])
         self.assertEqual(entry['inputs'], ['check.py', 'src/**', EXCLUDE])
         self.assertEqual(sorted(entry['input_files']), ['check.py', 'src/calc.py'])
         self.assertTrue(entry['runtime_sha256'])
@@ -158,7 +172,7 @@ class AssureRunTests(Case):  # R3
         self.assertEqual(ledger.audit([entry]), [])
 
     def test_run_refuses_without_active_task(self):
-        self.capability('- CALC-R1: Mark MUST be written.\n  - Verify: `python3 mark.py`\n')
+        self.capability(f'- CALC-R1: Mark MUST be written.\n  - Verify: `{PYTHON} mark.py`\n')
         self.write('mark.py', 'open("marker", "w").close()\n')
         result = self.lc('assure', '--run', code=1)
         self.assertIn('nothing was run', result.stderr)
@@ -204,7 +218,7 @@ class StatusTests(Case):  # R4
         self.assertIn('src/calc.py', item['reason'])
 
     def test_changed_command_is_unverified(self):
-        self.capability(SCOPED.replace('`python3 check.py`', '`python3 check.py --strict`'))
+        self.capability(SCOPED.replace(f'`{CHECK_COMMAND}`', f'`{CHECK_COMMAND} --strict`'))
         item = self.status('CALC-R1')
         self.assertEqual(item['status'], 'UNVERIFIED')
         self.assertIn('different command', item['reason'])
@@ -227,15 +241,16 @@ class RuntimeTests(Case):  # R4 environment reason
     def test_changed_executable_is_stale(self):
         bin_dir = Path(self.temp.name) / 'bin'
         bin_dir.mkdir()
-        tool = bin_dir / 'calc-check'
-        tool.write_text('#!/bin/sh\nexit 0\n')
-        tool.chmod(0o755)
+        tool = bin_dir / ('calc-check.exe' if os.name == 'nt' else 'calc-check')
+        shutil.copy2(sys.executable, tool)
         self.env['PATH'] = f"{bin_dir}{os.pathsep}{self.env.get('PATH', '')}"
-        self.capability('- CALC-R1: Tool MUST pass.\n  - Verify: `calc-check`\n  - Inputs: `src/**`\n')
+        self.env['PYTHONHOME'] = sys.prefix
+        self.capability(f'- CALC-R1: Tool MUST pass.\n  - Verify: `{tool.name} -c pass`\n  - Inputs: `src/**`\n')
         self.task()
         self.lc('assure', '--run')
         self.assertEqual(self.status('CALC-R1')['status'], 'VERIFIED')
-        tool.write_text('#!/bin/sh\n# upgraded\nexit 0\n')
+        with tool.open('ab') as stream:
+            stream.write(b'\nupgraded-runtime\n')
         item = self.status('CALC-R1')
         self.assertEqual(item['status'], 'STALE')
         self.assertIn('runtime', item['reason'])
@@ -244,7 +259,7 @@ class RuntimeTests(Case):  # R4 environment reason
 class IntegrityTests(Case):  # R5
     def forged(self, **extra):
         globs = ['check.py', 'src/**', EXCLUDE]
-        entry = {'label': 'req:CALC-R1', 'argv': ['python3', 'check.py'], 'exit': 0, 'tree': 'x',
+        entry = {'label': 'req:CALC-R1', 'argv': [sys.executable, 'check.py'], 'exit': 0, 'tree': 'x',
                  'head': self.git('rev-parse', 'HEAD').strip(), 'duration': 0.1, 'at': '2026-10-27T00:00:00Z',
                  'inputs': globs, 'inputs_sha256': ledger.inputs_digest(self.root, globs),
                  'input_files': ledger.inputs_snapshot(self.root, globs), **extra}
@@ -270,7 +285,7 @@ class IntegrityTests(Case):  # R5
 class UnscopedTests(Case):  # R6
     def setUp(self):
         super().setUp()
-        self.capability('- CALC-R1: The calculator MUST add.\n  - Verify: `python3 check.py`\n')
+        self.capability(f'- CALC-R1: The calculator MUST add.\n  - Verify: `{CHECK_COMMAND}`\n')
         self.commit('unscoped')
         self.task()
         self.lc('assure', '--run')
@@ -294,9 +309,9 @@ class ChangedTests(Case):  # R7
     def setUp(self):
         super().setUp()
         self.capability(SCOPED
-                        + '- CALC-R2: Docs MUST render.\n  - Verify: `python3 check.py`\n  - Inputs: `docs/**`\n'
-                        + '- CALC-R3: Whole MUST pass.\n  - Verify: `python3 check.py`\n'
-                        + '- CALC-R4: Core MUST pass.\n  - Verify: `python3 check.py`\n  - Inputs: `src/**` `!src/gen/**`\n'
+                        + f'- CALC-R2: Docs MUST render.\n  - Verify: `{CHECK_COMMAND}`\n  - Inputs: `docs/**`\n'
+                        + f'- CALC-R3: Whole MUST pass.\n  - Verify: `{CHECK_COMMAND}`\n'
+                        + f'- CALC-R4: Core MUST pass.\n  - Verify: `{CHECK_COMMAND}`\n  - Inputs: `src/**` `!src/gen/**`\n'
                         + '- CALC-R5: Manual MUST be reviewed.\n  - Verify: manual - human review\n')
         self.commit('changed fixture')
         self.task()
@@ -360,7 +375,7 @@ class ExitCodeTests(Case):  # R9
 
     def test_exit_codes_and_read_only_report(self):
         self.capability(SCOPED + '- CALC-R2: Looks MUST be right.\n  - Verify: manual - review\n'
-                        + '- CALC-R3: Mark MUST stay unwritten.\n  - Verify: `python3 mark.py`\n  - Inputs: `mark.py`\n')
+                        + f'- CALC-R3: Mark MUST stay unwritten.\n  - Verify: `{PYTHON} mark.py`\n  - Inputs: `mark.py`\n')
         self.write('mark.py', 'open("marker", "w").close()\n')
         self.task()
         self.assertEqual(self.report()[1], 1)  # UNVERIFIED

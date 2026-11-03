@@ -1,8 +1,6 @@
 """Exercise wait_check's real CLI: detached start, blocking wait and every exit state."""
 import json
-import os
 from pathlib import Path
-import signal
 import subprocess
 import sys
 import tempfile
@@ -10,6 +8,8 @@ import time
 import unittest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "wait_check.py"
+sys.path.insert(0, str(SCRIPT.parent))
+import process_runtime
 
 
 class WaitCheckTests(unittest.TestCase):
@@ -30,10 +30,7 @@ class WaitCheckTests(unittest.TestCase):
 
     @staticmethod
     def kill(pid):
-        try:
-            os.killpg(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+        process_runtime.terminate_tree(pid)
 
     def record(self, result):
         lines = [line.removeprefix("wait: ") for line in result.stderr.splitlines() if line.startswith("wait: ")]
@@ -63,7 +60,7 @@ class WaitCheckTests(unittest.TestCase):
         self.assertEqual(result.returncode, 4)
         record = self.record(result)
         self.assertEqual((record["state"], record["line"]), ("fail-match", "window 12 FAIL rms=3"))
-        os.kill(pid, 0)
+        self.assertTrue(process_runtime.alive(pid))
 
     def test_done_pattern_returns_zero_before_exit(self):
         self.start("import time; print('capture ready', flush=True); time.sleep(60)")
@@ -76,7 +73,7 @@ class WaitCheckTests(unittest.TestCase):
         result = self.cli("wait", "--log", str(self.log), "--max", "0.5")
         self.assertEqual(result.returncode, 124)
         self.assertEqual(self.record(result)["state"], "running")
-        os.kill(pid, 0)
+        self.assertTrue(process_runtime.alive(pid))
         self.assertFalse((self.log.parent / "check.log.exit").exists())
 
     def test_killed_supervisor_is_reported_lost_not_passed(self):

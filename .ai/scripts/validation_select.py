@@ -92,4 +92,6 @@ def main():
 
 
 if __name__ == "__main__":
+    import process_runtime
+    process_runtime.configure_windows_environment()
     raise SystemExit(main())

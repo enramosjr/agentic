@@ -80,6 +80,8 @@ The installer creates missing folders and initializes Git when needed. For a pro
 On native Windows, install Python 3.9+ and Git for Windows, and use `python` or
 `py -3` in place of `python3` in these commands. Codex hooks have native Windows
 launchers; see [Windows setup and verification](.ai/docs/install-and-upgrade.md#native-windows-and-codex).
+The [runtime guide](.ai/docs/windows-runtime.md) describes native process and
+review guarantees and the shared Windows/Linux verification gate.
 
 Everything is local to `TARGET`, including `.ai/`, `.claude/`, `.codex/`, `.cursor/`, and `.agents/skills/`. Global agent settings remain unchanged. The source checkout's knowledge, Git history, and agent session files are excluded. Autonomous execution remains opt-in; see below.
 

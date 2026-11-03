@@ -40,7 +40,7 @@ class Progress:
         if self.ack is None:
             return
         try:
-            value = json.loads(self.ack.read_text())
+            value = json.loads(self.ack.read_text(encoding='utf-8'))
             age = time.monotonic() - value["acknowledged_at"]
             valid = (value["run_id"] == self.run_id and 0 <= age <= self.timeout
                      and type(value["sequence"]) is int and 1 <= value["sequence"] <= self.sequence)
@@ -141,4 +141,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    import process_runtime
+    process_runtime.configure_windows_environment()
     sys.exit(main())

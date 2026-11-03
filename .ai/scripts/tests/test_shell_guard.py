@@ -18,6 +18,12 @@ ROOT = Path("/work/project")
 
 # Commands taken from real agent sessions, with the verdict the guard must reach.
 BLOCKED = {
+    'Get-Content -LiteralPath .ai/agents/implementer.md': 'okf-read',
+    'Get-ChildItem -LiteralPath .ai -Recurse': 'okf-list',
+    'Select-String -Pattern parser -Path source.py': 'search',
+    'Set-Content -LiteralPath source.py -Value changed': 'write',
+    'Get-Content source.py': 'read',
+    'Get-Content source.py # explanation follows': 'read',
     "cat .ai/agents/implementer.md .ai/personas/rust-principal-engineer.md | head -200": "okf-read",
     "cd /work/project && ls -R .ai | head -50": "okf-list",
     "cat knowledge/concepts/domain-model.md; grep -n ADR-024 -A12 knowledge/project/decisions.md": "okf-read",
@@ -67,6 +73,23 @@ ALLOWED = (
 
 
 class JudgeTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'nt', 'PowerShell lexical rules')
+    def test_native_backtick_literals_and_type_alias(self):
+        self.assertEqual(shell_guard.judge('Set-Content source.py "a`"b"', ROOT), 'write')
+        self.assertEqual(shell_guard.judge('type source.py', ROOT), 'read')
+        self.assertEqual(shell_guard._segments('Get-Content semi`;colon` name.txt'),
+                         [(['Get-Content', 'semi;colon name.txt'], False)])
+        self.assertEqual(shell_guard._segments("Get-Content 'literal`name.txt'"),
+                         [(['Get-Content', 'literal`name.txt'], False)])
+        self.assertIsNone(shell_guard.judge('Get-Content C:\\Windows\\Temp\\semi`;colon` log.txt', Path.cwd()))
+
+    def test_native_absolute_paths_and_quoted_operators_remain_literal(self):
+        if os.name == 'nt':
+            self.assertIsNone(shell_guard.judge(r'Get-Content -LiteralPath C:\Windows\Temp\agent.log', Path.cwd()))
+            self.assertEqual(shell_guard._segments("Get-Content 'semi;colon.txt'"),
+                             [(['Get-Content', 'semi;colon.txt'], False)])
+        self.assertEqual(shell_guard.judge('Get-Content source.py | Select-Object -First 2', ROOT), 'read')
+
     def test_blocks_shell_work_that_tools_and_okf_do(self) -> None:
         for command, expected in BLOCKED.items():
             with self.subTest(command=command):

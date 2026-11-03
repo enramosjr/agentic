@@ -25,6 +25,15 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def linked(path):
+    if path.is_symlink():
+        return True
+    try:
+        return os.name == 'nt' and bool(path.lstat().st_file_attributes & 0x400)
+    except FileNotFoundError:
+        return False
+
+
 def member(root, name):
     value = PurePosixPath(name)
     if (not name or value.is_absolute() or '..' in value.parts or '\\' in name
@@ -33,7 +42,7 @@ def member(root, name):
     path = root
     for part in value.parts:
         path = path / part
-        if path.is_symlink():
+        if linked(path):
             raise ValueError(f'artifact symlink refused: {name}')
     if not path.resolve().is_relative_to(root.resolve()):
         raise ValueError(f'unsafe artifact path: {name}')
@@ -43,12 +52,12 @@ def member(root, name):
 
 
 def verify(bundle, pin):
-    if not re.fullmatch(r'[0-9a-f]{64}', pin) or bundle.is_symlink():
+    if not re.fullmatch(r'[0-9a-f]{64}', pin) or linked(bundle):
         raise ValueError('invalid artifact pin or bundle')
     manifest = bundle / 'manifest.json'
-    if manifest.is_symlink() or digest(manifest) != pin:
+    if linked(manifest) or digest(manifest) != pin:
         raise ValueError('artifact manifest hash mismatch')
-    data = json.loads(manifest.read_text())
+    data = json.loads(manifest.read_text(encoding='utf-8'))
     if data.get('schema_version') != 1 or not isinstance(data.get('files'), dict) or not data['files']:
         raise ValueError('invalid artifact manifest')
     for name, expected in data['files'].items():
@@ -57,7 +66,7 @@ def verify(bundle, pin):
             raise ValueError(f'artifact hash mismatch: {name}')
     actual = set()
     for path in bundle.rglob('*'):
-        if path.is_symlink():
+        if linked(path):
             raise ValueError('artifact symlink refused')
         if path.is_file():
             actual.add(path.relative_to(bundle).as_posix())
@@ -82,7 +91,7 @@ def freeze(repo, root, names):
             target.chmod(0o555 if executable else 0o444)
             files[name] = {'sha256': digest(target), 'executable': executable}
         manifest = bundle / 'manifest.json'
-        manifest.write_text(json.dumps({'schema_version': 1, 'files': files}, sort_keys=True) + '\n')
+        manifest.write_text(json.dumps({'schema_version': 1, 'files': files}, sort_keys=True) + '\n', encoding='utf-8')
         pin = digest(manifest)
         manifest.chmod(0o444)
         for path in sorted(bundle.rglob('*'), key=lambda p: len(p.parts), reverse=True):
@@ -126,7 +135,7 @@ def main(argv=None):
 @review_guard.protected(lambda args: Path.cwd(), when=lambda args: args.action != 'verify')
 def perform(args):
     try:
-        repo = Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True).strip())
+        repo = Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], text=True, encoding='utf-8').strip())
         if args.action == 'freeze':
             print(json.dumps(freeze(repo, args.root.resolve(), args.file)))
             return 0
@@ -158,13 +167,10 @@ def perform(args):
         env = scratch.environment(repo)
         env.update(CARGO_TARGET_DIR=build, AGENTIC_BUILD_DIR=build)
         try:
-            if os.name == 'posix':
-                launched, launch_error = review_guard.launch_plan(repo, command)
-                result = timed_check.run(launched, label='artifact-acceptance', cwd=repo, env=env,
-                                         timeout_seconds=args.timeout)
-                review_guard.check_launch(launch_error)
-            else:
-                result = review_guard.run(repo, command, cwd=repo, env=env, timeout=args.timeout)
+            launched, launch_error = review_guard.launch_plan(repo, command)
+            result = timed_check.run(launched, label='artifact-acceptance', cwd=repo, env=env,
+                                     timeout_seconds=args.timeout)
+            review_guard.check_launch(launch_error)
         finally:
             verify(args.bundle, args.sha256)
         return result.returncode
@@ -174,4 +180,6 @@ def perform(args):
 
 
 if __name__ == '__main__':
+    import process_runtime
+    process_runtime.configure_windows_environment()
     raise SystemExit(main())

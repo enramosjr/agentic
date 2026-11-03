@@ -16,6 +16,7 @@ ROOT = SCRIPTS.parents[1]
 sys.path.insert(0, str(SCRIPTS))
 import disk_tmp  # noqa: F401,E402
 import assurance_demo  # noqa: E402
+from process_runtime import python_hint
 import lifecycle  # noqa: E402
 
 LIMIT = 'VERIFIED covers only the declared command on its declared inputs.'
@@ -80,7 +81,7 @@ class BuildTests(Base):  # R1
             self.assertTrue(argv[0] == 'git' or Path(argv[1]).name in {'okf.py', 'lifecycle.py'}, argv)
         self.assertTrue(calls)
         for call in calls:
-            self.assertTrue(call.startswith('python3 .ai/scripts/lifecycle.py '), call)
+            self.assertTrue(call.startswith(python_hint() + ' .ai/scripts/lifecycle.py '), call)
 
     def test_removed_after_step_failure_and_after_prepare_raises(self):
         code, out, err = self.demo(prepare=patcher(FORCE_ALL))
