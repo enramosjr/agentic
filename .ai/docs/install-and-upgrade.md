@@ -28,6 +28,34 @@ All scripts, roles, skills and hook settings are project-local. Codex requires
 trusting the project's .codex layer and reviewing hooks with `/hooks`; copying
 files does not activate trust. Global agent settings remain unchanged.
 
+## Native Windows and Codex
+
+Install Python 3.9+ and Git for Windows. The Codex hooks use `commandWindows`
+overrides with built-in Windows PowerShell; Bash and a `python3` alias are not
+required. The launcher checks PATH, then standard Git for Windows and python.org
+installation locations (including the Python install manager's pythoncore folders).
+For custom installation locations, add Python and Git to PATH before starting
+Codex. Restart Codex after installing tools or changing PATH.
+
+For interactive commands in these docs, use `python` or `py -3` in place of
+`python3`, for example `python .ai/scripts/lifecycle.py status`. If neither is
+on PATH, invoke the installed python.exe by its full path using PowerShell's `&`.
+The hook launcher's PATH changes apply only to the hook and its child processes.
+
+Run `python -m unittest discover -s .ai/scripts/tests -p test_windows_hooks.py`
+in the framework source checkout to verify native launch, JSON forwarding and
+real policy decisions from paths containing spaces and nested directories.
+These native tests require Windows; on other platforms they are skipped.
+
+Upgrades add Windows overrides to prior manifest-owned commands without changing
+adopter timeouts or unrelated hooks. An existing custom `commandWindows` value
+is retained. After updating, restart the Codex session and use `/hooks` to review
+and trust the changed hooks. Test SessionStart and a shell operation in the new
+session. A policy denial naming a lifecycle stage or replacement tool is expected
+enforcement; a launch error is not. If Git reports dubious ownership, resolve
+trust for that specific repository in the owning user's environment; do not
+disable ownership checks globally.
+
 The installed [README](../README.md) and references are part of .ai/ and are
 copied with the kit. They do not require the source project's root README or
 knowledge documents. A successful installation followed by --check reports

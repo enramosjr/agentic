@@ -140,6 +140,14 @@ def merge_hooks(adopter, kit, previous=(), flat=False):
                 if not matches:
                     dest.append(copy.deepcopy(group))
                 else:
+                    # Existing manifests own command identities, not adopter options.
+                    # Add the new Windows launcher only where the adopter has none.
+                    for existing in (h for g in matches for h in g.get("hooks", [])):
+                        if existing.get("command") in previous and "commandWindows" not in existing:
+                            desired = next((h for h in group.get("hooks", [])
+                                            if h.get("command") == existing.get("command")), {})
+                            if "commandWindows" in desired:
+                                existing["commandWindows"] = desired["commandWindows"]
                     known = {h.get("command") for g in matches for h in g.get("hooks", [])}
                     for hook in group.get("hooks", []):
                         if hook["command"] not in known:

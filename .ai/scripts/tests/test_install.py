@@ -90,6 +90,60 @@ def tree_state(root):
             for p in root.rglob("*")}
 
 
+class WindowsHookMergeTests(unittest.TestCase):
+    def test_owned_windows_override_is_added_without_losing_custom_options(self):  # R3
+        old = {'type': 'command', 'command': 'managed-hook', 'timeout': 17}
+        custom = {'type': 'command', 'command': 'adopter-hook', 'commandWindows': 'custom.exe'}
+        adopter = {'hooks': {'SessionStart': [{'hooks': [old, custom]}]}}
+        desired = {'type': 'command', 'command': 'managed-hook', 'commandWindows': 'windows-hook'}
+        kit = {'hooks': {'SessionStart': [{'hooks': [desired]}]}}
+        merged = install.merge_hooks(adopter, kit, ['managed-hook'])
+        hooks = merged['hooks']['SessionStart'][0]['hooks']
+        self.assertEqual(hooks, [{**old, 'commandWindows': 'windows-hook'}, custom])
+        self.assertEqual(install.merge_hooks(merged, kit, ['managed-hook']), merged)
+        self.assertEqual(adopter['hooks']['SessionStart'][0]['hooks'][0], old)
+
+    def test_unowned_or_custom_windows_override_is_preserved(self):  # R3
+        for owned, override in (([], None), (['managed-hook'], 'custom.exe')):
+            hook = {'type': 'command', 'command': 'managed-hook'}
+            if override:
+                hook['commandWindows'] = override
+            adopter = {'hooks': {'SessionStart': [{'hooks': [hook]}]}}
+            kit = {'hooks': {'SessionStart': [{'hooks': [
+                {'type': 'command', 'command': 'managed-hook', 'commandWindows': 'windows-hook'}]}]}}
+            self.assertEqual(install.merge_hooks(adopter, kit, owned), adopter)
+
+
+class WindowsHookUpgradeTests(InstallerCase):
+    def test_cli_upgrades_legacy_windows_hooks_and_preserves_adopter(self):  # R3
+        name = '.codex/hooks.json'
+        desired = json.loads((self.template / name).read_text())
+        legacy = copy.deepcopy(desired)
+        for groups in legacy['hooks'].values():
+            for group in groups:
+                for hook in group['hooks']:
+                    hook.pop('commandWindows', None)
+        self.write(name, json.dumps(legacy), template=True)
+        self.installed()
+        adopter = json.loads((self.target / name).read_text())
+        custom = {'type': 'command', 'command': 'adopter-only', 'commandWindows': 'custom.exe'}
+        adopter['hooks']['SessionStart'].append({'hooks': [custom]})
+        self.write(name, json.dumps(adopter))
+        self.commit()
+        self.write(name, json.dumps(desired), template=True)
+        self.run_install()
+        updated = json.loads((self.target / name).read_text())
+        self.assertIn({'hooks': [custom]}, updated['hooks']['SessionStart'])
+        for event, groups in desired['hooks'].items():
+            for group in groups:
+                for hook in group['hooks']:
+                    found = [h for g in updated['hooks'][event]
+                             if g.get('matcher') == group.get('matcher')
+                             for h in g['hooks'] if h.get('command') == hook['command']]
+                    self.assertEqual(len(found), 1)
+                    self.assertEqual(found[0]['commandWindows'], hook['commandWindows'])
+
+
 class BootstrapCase(InstallerCase):
     def setUp(self):
         super().setUp()
