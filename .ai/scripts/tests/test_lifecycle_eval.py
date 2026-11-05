@@ -16,6 +16,7 @@ from unittest import mock
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parents[1]
@@ -25,6 +26,18 @@ import disk_tmp  # noqa: E402,F401
 import lifecycle_eval  # noqa: E402
 import eval_process  # noqa: E402
 import eval_results  # noqa: E402
+
+# A scenario run through the CLI takes ~10-30 s on Windows, where interpreter startup dominates.
+CLI_TIMEOUT = 20 if os.name != "nt" else 120
+
+
+def external_temp_root() -> str:
+    """A temp location outside the repository even when TMP points into .git (as the ledger does)."""
+    if os.name != "nt":
+        return "/tmp"
+    local = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "Temp"
+    local.mkdir(parents=True, exist_ok=True)
+    return str(local)
 
 COMPLIANT = r'''
 import os, subprocess, sys
@@ -61,8 +74,16 @@ None.
 None. The spec is ready for planning.
 """
 
+PYTHON = "python3"
+if os.name == "nt":
+    PYTHON = "'" + sys.executable.replace("'", "''") + "'"
+    SPEC_BODY = SPEC_BODY.replace("python3 -c", PYTHON + " -c")
+
 def run(*args):
-    subprocess.run(list(args), check=True, capture_output=True)
+    result = subprocess.run(list(args), capture_output=True, text=True, encoding='utf-8')
+    if result.returncode:
+        raise RuntimeError(f"fixture command failed ({result.returncode}): {args!r}\n"
+                           + result.stdout[-4000:] + result.stderr[-4000:])
 
 def lc(*args):
     run(sys.executable, ".ai/scripts/lifecycle.py", *args)
@@ -142,7 +163,8 @@ elif SCENARIO == "queue-l3":
     okf("new", "specifications/todo.md", "--type", "Specification", "--title", "Todo CLI", "--description", "Todo CLI spec.", "--status", "draft", "--evidence", "project-documentation")
     spec = Path("knowledge/specifications/todo.md")
     body = SPEC_BODY.replace("- R1: The change MUST behave as requested.", "- R1: add MUST store an item.\n- R2: list MUST print items.\n- R3: done MUST mark an item done.")
-    body = body.replace("- R1: `python3 -c \"print(1)\"` exits 0.", "- R1: `python3 -c \"print(1)\"` exits 0.\n- R2: `python3 -c \"print(2)\"` exits 0.\n- R3: `python3 -c \"print(3)\"` exits 0.")
+    r1 = "- R1: `" + PYTHON + " -c \"print(1)\"` exits 0."
+    body = body.replace(r1, r1 + "\n- R2: `" + PYTHON + " -c \"print(2)\"` exits 0.\n- R3: `" + PYTHON + " -c \"print(3)\"` exits 0.")
     spec.write_text(spec.read_text() + body)
     entries = subprocess.run([sys.executable, ".ai/scripts/lifecycle.py", "queue-from-spec", str(spec), "--group", "Todo"], check=True, capture_output=True, text=True).stdout
     queue = Path("knowledge/project/work-queue.md")
@@ -188,7 +210,7 @@ if name in edits:
 class EvalRunnerTests(unittest.TestCase):
     def setUp(self) -> None:
         self.scratch = Path(tempfile.mkdtemp()).resolve()
-        self.addCleanup(shutil.rmtree, self.scratch)
+        self.addCleanup(disk_tmp.remove_tree, self.scratch)
 
     def agent(self, source: str) -> list[str]:
         path = self.scratch / "agent.py"
@@ -295,7 +317,10 @@ class ScenarioContractTests(unittest.TestCase):
                     self.assertTrue(lifecycle_eval.validate(candidate))
 
     def test_setup_paths_and_commands(self):
-        for name in ("/absolute", "../escape", "a/../../escape", ".git/config", "a/../.git/config"):
+        names = ["/absolute", "../escape", "a/../../escape", ".git/config", "a/../.git/config"]
+        if os.name == 'nt':
+            names.extend(['C:relative', 'C:.', 'C:\\absolute', '\\rooted'])
+        for name in names:
             candidate = self.scenario(); candidate["setup"] = {"files": {name: "x"}}
             self.assertTrue(lifecycle_eval.validate(candidate), name)
         for setup in ({"files": []}, {"files": {"a": 1}}, {"commands": "echo x"},
@@ -307,7 +332,11 @@ class ScenarioContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); work = root / "work"; work.mkdir()
             outside = root / "outside"; outside.mkdir()
-            (work / "escape").symlink_to(outside, target_is_directory=True)
+            if os.name == 'nt':
+                subprocess.run(['cmd.exe', '/d', '/c', 'mklink', '/J', str(work / 'escape'),
+                                str(outside)], check=True, capture_output=True)
+            else:
+                (work / "escape").symlink_to(outside, target_is_directory=True)
             candidate = self.scenario(); candidate["setup"] = {"files": {"escape/marker": "bad"}}
             with self.assertRaises(lifecycle_eval.EvalError):
                 lifecycle_eval.prepare(candidate, work)
@@ -321,6 +350,212 @@ class ScenarioContractTests(unittest.TestCase):
                 (directory / (name + ".json")).write_text(json.dumps(self.scenario()))
             with self.assertRaises(lifecycle_eval.EvalError):
                 lifecycle_eval.load_scenarios(directory)
+
+    def test_unicode_scenario_and_setup_roundtrip_under_legacy_encoding(self):
+        root = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(disk_tmp.remove_tree, root)
+        scenarios = root / 'scenarios'; scenarios.mkdir()
+        work = root / 'work'; work.mkdir()
+        scenario = self.scenario()
+        scenario['prompt'] = '\u4e2d\u6587 prompt'
+        scenario['setup'] = {'files': {'\u6d4b\u8bd5.txt': '\u4e2d\u6587 body'}}
+        (scenarios / 'unicode.json').write_text(json.dumps(scenario, ensure_ascii=False), encoding='utf-8')
+        source = (f"import sys;sys.path.insert(0,{str(SCRIPTS)!r});import lifecycle_eval as e;"
+                  "from pathlib import Path;"
+                  f"s=e.load_scenarios(Path({str(scenarios)!r}))[0];"
+                  "assert s['prompt']=='\\u4e2d\\u6587 prompt',ascii(s['prompt']);"
+                  f"w=Path({str(work)!r});e.prepare(s,w);"
+                  "assert (w/'\\u6d4b\\u8bd5.txt').read_text(encoding='utf-8')=='\\u4e2d\\u6587 body'")
+        result = subprocess.run([sys.executable, '-c', source], capture_output=True,
+                                env={**os.environ, 'PYTHONUTF8': '0', 'PYTHONIOENCODING': 'cp1252'}, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr.decode('utf-8', errors='replace'))
+
+
+class NativeRuntimeTests(unittest.TestCase):
+    setUp = EvalRunnerTests.setUp
+
+    def test_uncertain_liveness_cannot_authorize_termination_of_a_mismatched_child(self):
+        import process_runtime
+        child = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(30)'])
+        try:
+            with mock.patch.object(process_runtime, '_windows_state', side_effect=PermissionError('identity denied')):
+                try:
+                    process_runtime.terminate_tree(child.pid, 'not-the-child-birth')
+                except PermissionError:
+                    pass
+            self.assertIsNone(child.poll(), 'uncertain identity authorized termination')
+        finally:
+            child.kill()
+            child.wait()
+
+    def test_termination_refuses_denied_identity_on_the_termination_handle(self):
+        import process_runtime
+        kernel = mock.MagicMock()
+        kernel.OpenProcess.return_value = 123
+        kernel.TerminateProcess.return_value = True
+        kernel.WaitForSingleObject.return_value = 0
+        with mock.patch.object(process_runtime, 'os', SimpleNamespace(name='nt')), \
+                mock.patch.object(process_runtime, '_job_api', return_value=kernel), \
+                mock.patch.object(process_runtime, '_windows_state', side_effect=PermissionError('uncertain')), \
+                mock.patch.object(process_runtime, '_windows_handle_state', create=True,
+                                  side_effect=PermissionError('termination-handle identity denied')):
+            with self.assertRaises(PermissionError):
+                process_runtime.terminate_tree(1234, 'expected-birth')
+        kernel.TerminateProcess.assert_not_called()
+        kernel.CloseHandle.assert_called_once_with(123)
+
+    def test_termination_refuses_birth_mismatch_on_the_termination_handle(self):
+        import process_runtime
+        kernel = mock.MagicMock()
+        kernel.OpenProcess.return_value = 123
+        kernel.TerminateProcess.return_value = True
+        kernel.WaitForSingleObject.return_value = 0
+        with mock.patch.object(process_runtime, 'os', SimpleNamespace(name='nt')), \
+                mock.patch.object(process_runtime, '_job_api', return_value=kernel), \
+                mock.patch.object(process_runtime, '_windows_state', side_effect=PermissionError('uncertain')), \
+                mock.patch.object(process_runtime, '_windows_handle_state', create=True,
+                                  return_value=('different-birth', True)):
+            process_runtime.terminate_tree(1234, 'expected-birth')
+        kernel.TerminateProcess.assert_not_called()
+        kernel.CloseHandle.assert_called_once_with(123)
+
+    def test_termination_queries_and_terminates_the_same_matching_handle(self):
+        import process_runtime
+        kernel = mock.MagicMock()
+        kernel.OpenProcess.return_value = 123
+        kernel.TerminateProcess.return_value = True
+        kernel.WaitForSingleObject.side_effect = [258, 0]
+
+        def times(handle, created, exited, system, user):
+            created._obj.dwHighDateTime = 0
+            created._obj.dwLowDateTime = 42
+            return True
+
+        kernel.GetProcessTimes.side_effect = times
+        with mock.patch.object(process_runtime, 'os', SimpleNamespace(name='nt')), \
+                mock.patch.object(process_runtime, '_job_api', return_value=kernel), \
+                mock.patch.object(process_runtime, '_windows_state', side_effect=PermissionError('separate probe denied')):
+            process_runtime.terminate_tree(1234, '42')
+        kernel.OpenProcess.assert_called_once_with(0x00101001, False, 1234)
+        self.assertEqual(kernel.GetProcessTimes.call_args.args[0], 123)
+        kernel.TerminateProcess.assert_called_once_with(123, 1)
+        kernel.CloseHandle.assert_called_once_with(123)
+
+    def test_verified_birth_can_terminate_an_owned_child(self):
+        import process_runtime
+        child = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(30)'],
+                                 **process_runtime.detached_options())
+        try:
+            birth = process_runtime.identity(child.pid)['birth']
+            process_runtime.terminate_tree(child.pid, birth)
+            child.wait(timeout=5)
+            self.assertIsNotNone(child.poll())
+        finally:
+            child.kill()
+            child.wait()
+
+    def test_python_repair_hint_preserves_linux_and_quotes_windows_executable(self):
+        import process_runtime
+        with mock.patch.object(process_runtime.os, 'name', 'posix'):
+            self.assertEqual(process_runtime.python_hint(), 'python3')
+        with mock.patch.object(process_runtime.os, 'name', 'nt'):
+            with mock.patch.object(sys, 'executable', "C:\\Python's folder\\python.exe"):
+                self.assertEqual(process_runtime.python_hint(), "& 'C:\\Python''s folder\\python.exe'")
+
+    def test_python_repair_hint_native_copy_paste_roundtrip(self):
+        import process_runtime
+        arguments = ['argument with spaces', "quote'argument"]
+        code = 'import json,sys;print(json.dumps(sys.argv[1:]))'
+        if os.name == 'nt':
+            literal = lambda value: "'" + value.replace("'", "''") + "'"
+            command = (process_runtime.python_hint() + ' -c ' + literal(code) + ' ' +
+                       ' '.join(literal(value) for value in arguments))
+            shell = Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
+            result = subprocess.run([str(shell), '-NoProfile', '-NonInteractive', '-Command', command],
+                                    capture_output=True, text=True, timeout=10)
+        else:
+            result = subprocess.run([process_runtime.python_hint(), '-c', code, *arguments],
+                                    capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), arguments)
+
+    def test_real_exit_code_259_is_not_mistaken_for_a_live_process(self):
+        import process_runtime
+        child = subprocess.Popen([sys.executable, '-c', 'raise SystemExit(259)'])
+        child.wait(timeout=5)
+        self.assertFalse(process_runtime.alive(child.pid))
+
+    def test_capture_bounds_and_nonzero_exit_are_preserved(self):
+        with self.assertRaises(eval_process.ProcessError) as caught:
+            eval_process.run([sys.executable, '-c', 'import sys; sys.stdout.write("x"*10000)'],
+                             self.scratch, dict(os.environ), self.scratch, timeout=2, output_limit=1024)
+        self.assertEqual(caught.exception.code, 'output-limit')
+        self.assertEqual(len(caught.exception.output), 1024)
+        with self.assertRaises(eval_process.ProcessError) as caught:
+            eval_process.run([sys.executable, '-c', 'import sys; print("exit proof");sys.exit(7)'],
+                             self.scratch, dict(os.environ), self.scratch, timeout=2)
+        self.assertEqual(caught.exception.code, 'exit')
+        self.assertIn('exit proof', caught.exception.output)
+
+    def test_os_metadata_has_real_parent_and_exact_argv(self):
+        import process_runtime
+        child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)',
+                                  'argument with spaces', 'quote"argument'])
+        try:
+            value = process_runtime.process_info(child.pid)
+            self.assertEqual(value['parent'], os.getpid())
+            self.assertEqual(value['argv'][-2:], ['argument with spaces', 'quote"argument'])
+            self.assertEqual(value['birth'], process_runtime.identity(child.pid)['birth'])
+        finally:
+            child.kill()
+            child.wait()
+
+    def test_owned_tree_stops_descendants_and_proves_terminal_state(self):
+        import process_runtime
+        started, late = self.scratch / 'started', self.scratch / 'late'
+        descendant = (f'from pathlib import Path;import time;Path({str(started)!r}).touch();'
+                      f'time.sleep(.5);Path({str(late)!r}).touch()')
+        command = ('import subprocess,sys,time;'
+                   f'subprocess.Popen([sys.executable,"-c",{descendant!r}]);time.sleep(30)')
+        tree = process_runtime.ProcessTree()
+        child = tree.start([sys.executable, '-c', command])
+        try:
+            deadline = time.monotonic() + 5
+            while not started.exists() and child.poll() is None and time.monotonic() < deadline:
+                time.sleep(.01)
+            self.assertTrue(started.exists())
+            self.assertFalse(process_runtime.tree_stopped(tree.descriptor))
+        finally:
+            tree.close()
+            child.wait()
+        time.sleep(.6)
+        self.assertFalse(late.exists())
+        # POSIX zombie descendants remain members until init reaps them; Windows
+        # Job accounting exposes terminal membership without that procfs detail.
+        if os.name == 'nt':
+            self.assertTrue(process_runtime.tree_stopped(tree.descriptor))
+
+    def test_nonblocking_lock_refuses_a_live_owner_and_recovers_on_exit(self):
+        import process_runtime
+        locked, ready = self.scratch / 'lock', self.scratch / 'locked'
+        code = (f'import sys,time;from pathlib import Path;sys.path.insert(0,{str(SCRIPTS)!r});'
+                'import process_runtime\n'
+                f'with process_runtime.file_lock(Path({str(locked)!r})):\n'
+                f' Path({str(ready)!r}).touch()\n time.sleep(30)\n')
+        child = subprocess.Popen([sys.executable, '-c', code])
+        try:
+            deadline = time.monotonic() + 5
+            while not ready.exists() and child.poll() is None and time.monotonic() < deadline:
+                time.sleep(.01)
+            self.assertTrue(ready.exists())
+            with self.assertRaises(BlockingIOError):
+                with process_runtime.file_lock(locked, blocking=False):
+                    self.fail('concurrent lock owner admitted')
+        finally:
+            child.kill()
+            child.wait()
+        with process_runtime.file_lock(locked, blocking=False):
+            pass
 
 
 class ProcessTests(unittest.TestCase):
@@ -346,7 +581,8 @@ class ProcessTests(unittest.TestCase):
 
     def test_timeout_and_output_exhaustion_fail(self):
         scenario = lifecycle_eval.load_scenarios()[0]
-        with mock.patch.object(lifecycle_eval, "TIMEOUT", 0.2):
+        # Starting the deadline owner takes longer than 0.2 s on Windows.
+        with mock.patch.object(lifecycle_eval, "TIMEOUT", 0.2 if os.name != "nt" else 4):
             failures = lifecycle_eval.run_scenario(scenario, self.agent("import time\ntime.sleep(10)"))
         self.assertTrue(any("timed out" in f for f in failures), failures)
         failures = lifecycle_eval.run_scenario(scenario, self.agent("import sys\nsys.stdout.write('x' * (5 * 1024 * 1024))"))
@@ -419,22 +655,39 @@ class ProcessTests(unittest.TestCase):
                                  self.scratch, dict(os.environ), self.scratch, timeout=1)
         self.assertFalse(marker.exists())
 
+    def test_supervisor_failure_keeps_its_actual_diagnostic(self):
+        broken = self.scratch / 'broken-supervisor.py'
+        broken.write_text("import sys\nsys.stderr.write('specific supervisor failure\\n')\nraise SystemExit(17)\n")
+        with mock.patch.object(eval_process, '__file__', str(broken)):
+            with self.assertRaisesRegex(eval_process.ProcessError, 'specific supervisor failure'):
+                eval_process.run([sys.executable, '-c', 'raise SystemExit(0)'],
+                                 self.scratch, dict(os.environ), self.scratch, timeout=1)
+
+    def test_publication_sharing_retry_preserves_data_and_refuses_persistent_denial(self):
+        path = self.scratch / 'launch.json'
+        path.write_text('{"token":"exact-token"}', encoding='utf-8')
+        with mock.patch.object(Path, 'read_text', side_effect=[PermissionError('sharing'), '{"token":"exact-token"}']):
+            self.assertEqual(eval_process.read_publication(path, time.time() + 1), {'token': 'exact-token'})
+        with mock.patch.object(Path, 'read_text', side_effect=PermissionError('access denied')):
+            with self.assertRaises(PermissionError):
+                eval_process.read_publication(path, time.time() + 0.01)
+
     def test_public_cli_success_failure_and_unknown_selection(self):
         marker = self.scratch / "scripted-launches"
         source = COMPLIANT + f"\nPath({str(marker)!r}).write_text('observed')\n"
         agent = self.agent(source)
         command = [sys.executable, str(SCRIPTS / "lifecycle_eval.py"), "run", "--scenario", "typo-l0", "--", *agent]
-        result = subprocess.run(command, capture_output=True, text=True, timeout=20)
+        result = subprocess.run(command, capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("PASS typo-l0", result.stdout)
         self.assertEqual(marker.read_text(), "observed")
         self.agent(source + "\nsys.exit(7)\n")
-        result = subprocess.run(command, capture_output=True, text=True, timeout=20)
+        result = subprocess.run(command, capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("exit 7", result.stdout)
         marker.unlink()
         command[command.index("typo-l0")] = "unknown-scenario"
-        result = subprocess.run(command, capture_output=True, text=True, timeout=20)
+        result = subprocess.run(command, capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 1)
         self.assertFalse(marker.exists())
 
@@ -451,14 +704,16 @@ lifecycle.state_path(Path.cwd()).write_text('[]')
     def test_public_cli_errors_publish_non_pass_json_and_preserve_exit_diagnostics(self):
         malformed = COMPLIANT + "\nsys.path.insert(0, '.ai/scripts')\nimport lifecycle\nlifecycle.state_path(Path.cwd()).write_text('[]')\n"
         cases = [(COMPLIANT + "\nsys.exit(7)", (), "ERROR", "exit 7"),
-                 ("import time; time.sleep(10)", ("--timeout", "0.2"), "ERROR", "timed out"),
+                 # Starting the deadline owner takes longer than 0.2 s on Windows.
+                 ("import time; time.sleep(10)", ("--timeout", "0.2" if os.name != "nt" else "4"), "ERROR", "timed out"),
                  ("import sys; sys.stdout.write('x' * (5 * 1024 * 1024))", (), "ERROR", "output limit"),
                  (malformed, (), "FAIL", "invalid lifecycle state")]
         for source, options, status, diagnostic in cases:
             with self.subTest(diagnostic=diagnostic):
                 path = self.scratch / "results.json"
                 path.unlink(missing_ok=True)
-                result = subprocess.run(RepeatResultTests.command(self, source, *options), capture_output=True, text=True, timeout=20)
+                result = subprocess.run(RepeatResultTests.command(self, source, *options), capture_output=True, text=True,
+                                        timeout=20 if os.name != "nt" else 90)
                 self.assertEqual(result.returncode, 1, result.stderr)
                 report = json.loads(path.read_text()); cell = report["attempts"][0]
                 self.assertEqual(cell["status"], status)
@@ -470,7 +725,7 @@ lifecycle.state_path(Path.cwd()).write_text('[]')
     def test_public_cli_missing_agent_publishes_error(self):
         command = RepeatResultTests.command(self)
         command = command[:command.index("--") + 1] + ["/no/such/scripted-agent"]
-        result = subprocess.run(command, capture_output=True, text=True, timeout=20)
+        result = subprocess.run(command, capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 1, result.stderr)
         report = json.loads((self.scratch / "results.json").read_text())
         self.assertEqual(report["attempts"][0]["status"], "ERROR")
@@ -492,14 +747,15 @@ lifecycle.state_path(Path.cwd()).write_text('[]')
                 source = COMPLIANT + f"\nPath({str(marker)!r}).touch()\n"
                 command = RepeatResultTests.command(self, source, "--checks-dir", str(checks))
                 wrapper = self.scratch / "timed-fixture.py"
-                wrapper.write_text(f"import sys\nsys.path.insert(0, {str(SCRIPTS)!r})\nimport lifecycle_eval, eval_process\n"
+                wrapper.write_text(f"import sys\nfrom pathlib import Path\nsys.path.insert(0, {str(SCRIPTS)!r})\nimport lifecycle_eval, eval_process\n"
                     f"lifecycle_eval.load_scenarios = lambda: [{scenario!r}]\n"
                     "original = eval_process.run\n"
                     "def timed(*args, **kwargs):\n"
-                    "    if kwargs.get('timeout') == 60: kwargs['timeout'] = 0.2\n"
+                    "    argv = args[0]\n"
+                    "    if (len(argv) > 1 and Path(argv[1]).name == 'slow.py') or 'import time; time.sleep(10)' in argv: kwargs['timeout'] = 1\n"
                     "    return original(*args, **kwargs)\n"
                     f"eval_process.run = timed\nraise SystemExit(lifecycle_eval.main({command[2:]!r}))\n")
-                result = subprocess.run([sys.executable, str(wrapper)], capture_output=True, text=True, timeout=20)
+                result = subprocess.run([sys.executable, str(wrapper)], capture_output=True, text=True, timeout=CLI_TIMEOUT)
                 self.assertEqual(result.returncode, 1, result.stderr)
                 report = json.loads(path.read_text()); cell = report["attempts"][0]
                 self.assertEqual(cell["status"], "ERROR", cell)
@@ -631,7 +887,7 @@ class FrozenBehaviorChecks:
                 path = self.scratch / "results.json"; path.unlink(missing_ok=True)
                 command = RepeatResultTests.command(self, COMPLIANT, "--checks-dir", str(directory), "--observation-adapter", "review")
                 command[command.index("typo-l0")] = "feature-l2"
-                result = subprocess.run(command, capture_output=True, text=True, timeout=20)
+                result = subprocess.run(command, capture_output=True, text=True, timeout=CLI_TIMEOUT)
                 self.assertEqual(result.returncode, 1, result.stderr)
                 report = json.loads(path.read_text())
                 self.assertEqual(report["attempts"][0]["status"], expected, report)
@@ -650,7 +906,11 @@ class OutcomeTests(FrozenBehaviorChecks, unittest.TestCase):
         base = lifecycle_eval.lifecycle.git(work, "rev-parse", "HEAD")
         source = COMPLIANT.replace("lc(\"tier\", \"L2\", \"--reason\", \"new CLI", f"lc(\"tier\", \"{tier}\", \"--reason\", \"new CLI")
         env = lifecycle_eval.child_environment(work); env["LIFECYCLE_EVAL"] = "feature-l2"
-        subprocess.run(self.agent(source), cwd=work, env=env, capture_output=True, check=True, timeout=15)
+        # This fixture completes several real CLI stages; runtime deadlines have
+        # separate E2Es. Keep a finite setup watchdog that accommodates CI startup.
+        result = subprocess.run(self.agent(source), cwd=work, env=env, capture_output=True,
+                                encoding='utf-8', timeout=60)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         return work, base, lifecycle_eval.lifecycle.load(work)
 
     def check(self, work, base, state, observations=None):
@@ -689,7 +949,7 @@ class OutcomeTests(FrozenBehaviorChecks, unittest.TestCase):
                 self.assertEqual(self.check(work, base, state)[0], [])
                 (work / "cli.py").write_text("print('inconsistent')")
                 self.assertTrue(any("anchor" in f for f in self.check(work, base, state)[0]))
-                shutil.rmtree(work)
+                disk_tmp.remove_tree(work)
 
     def test_missing_failed_and_uncovered_convergence_and_audit_edits(self):
         for tier in ("L2", "L3"):
@@ -707,7 +967,7 @@ class OutcomeTests(FrozenBehaviorChecks, unittest.TestCase):
                     self.assertTrue(failures, change)
                     expected = {"missing": "missing convergence", "failed": "failed", "coverage": "cover", "tree": "anchor", "artifact": "audit"}
                     self.assertTrue(any(expected[change] in f for f in failures), failures)
-            shutil.rmtree(work)
+            disk_tmp.remove_tree(work)
 
     def test_review_identity_candidate_order_and_write_mismatches(self):
         for tier in ("L2", "L3"):
@@ -721,7 +981,7 @@ class OutcomeTests(FrozenBehaviorChecks, unittest.TestCase):
                     self.assertTrue(self.check(work, base, state, observations)[0], field)
             observations = self.observations(work, state); observations["reviewers"] = []
             self.assertTrue(self.check(work, base, state, observations)[0])
-            shutil.rmtree(work)
+            disk_tmp.remove_tree(work)
 
     def test_reviewer_report_body_binding(self):
         import eval_outcome
@@ -815,19 +1075,22 @@ class OutcomeTests(FrozenBehaviorChecks, unittest.TestCase):
         state = lifecycle_eval.lifecycle.load(root)
         self.assertEqual(self.check(root, base, state)[0], [])
         original = copy.deepcopy(state)
-        capability = case.cap.read_text()
-        case.cap.write_text(capability.replace("UTF-16", "corrupted"))
+        capability_bytes = case.cap.read_bytes()
+        capability = capability_bytes.decode('utf-8')
+        case.cap.write_bytes(capability.replace("UTF-16", "corrupted").encode('utf-8'))
         self.assertTrue(any("stale target" in f for f in self.check(root, base, state)[0]))
-        case.cap.write_text(capability)
+        case.cap.write_bytes(capability_bytes)
+        self.assertEqual(self.check(root, base, state)[0], [])
         state.pop("merge"); lifecycle_eval.lifecycle.save(root, state)
         self.assertTrue(any("added ID already exists" in f for f in self.check(root, base, state)[0]))
         lifecycle_eval.lifecycle.save(root, original)
         record_path = lifecycle_eval.lifecycle.record_path(root, original)
-        published = json.loads(record_path.read_text()); published.pop("merge")
-        record_path.write_text(json.dumps(published))
+        published = json.loads(record_path.read_text(encoding='utf-8')); published.pop("merge")
+        record_path.write_bytes(json.dumps(published).encode('utf-8'))
         self.commit(root)
         lifecycle_eval.lifecycle.save(root, original)
-        self.assertTrue(any("publishing" in f for f in self.check(root, base, original)[0]))
+        failures = self.check(root, base, original)[0]
+        self.assertTrue(any("publishing" in f for f in failures), failures)
 
 
 def scripted_observation(work, state):
@@ -848,7 +1111,7 @@ class RepeatResultTests(unittest.TestCase):
     def test_repeat_cells_are_fresh_and_totals_use_started_denominator(self):
         roots = self.scratch / "roots.jsonl"
         source = COMPLIANT + f"\nassert not Path('attempt-marker').exists()\nPath('attempt-marker').touch()\nwith Path({str(roots)!r}).open('a') as f: f.write(str(Path.cwd()) + '\\n')\n"
-        result = subprocess.run(self.command(source, "--repeat", "2"), capture_output=True, text=True, timeout=20)
+        result = subprocess.run(self.command(source, "--repeat", "2"), capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         report = json.loads((self.scratch / "results.json").read_text())
         self.assertEqual([a["repeat_index"] for a in report["attempts"]], [1, 2])
@@ -858,31 +1121,31 @@ class RepeatResultTests(unittest.TestCase):
         self.assertEqual(len(set(roots.read_text().splitlines())), 2)
 
     def test_nonzero_is_error_and_invalid_repeat_never_launches(self):
-        result = subprocess.run(self.command(COMPLIANT + "\nsys.exit(7)", "--repeat", "2"), capture_output=True, text=True, timeout=20)
+        result = subprocess.run(self.command(COMPLIANT + "\nsys.exit(7)", "--repeat", "2"), capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         report = json.loads((self.scratch / "results.json").read_text())
         self.assertEqual(report["totals"]["ERROR"], 2)
         self.assertEqual(report["totals"]["pass_rate"], 0)
         marker = self.scratch / "launched"
-        result = subprocess.run(self.command(f"from pathlib import Path; Path({str(marker)!r}).touch()", "--repeat", "0"), capture_output=True, timeout=20)
+        result = subprocess.run(self.command(f"from pathlib import Path; Path({str(marker)!r}).touch()", "--repeat", "0"), capture_output=True, timeout=CLI_TIMEOUT)
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(marker.exists())
 
     def test_budget_stop_retains_not_run_and_does_not_overwrite_existing_report(self):
         command = self.command(COMPLIANT, "--repeat", "2", "--max-agent-seconds", "0")
-        result = subprocess.run(command, capture_output=True, text=True, timeout=20)
+        result = subprocess.run(command, capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         report_path = self.scratch / "results.json"; before = report_path.read_bytes()
         report = json.loads(before)
         self.assertEqual(report["totals"]["NOT_RUN"], 2)
         self.assertIsNone(report["totals"]["pass_rate"])
         self.assertFalse(report["totals"]["complete"])
-        subprocess.run(command, capture_output=True, timeout=20)
+        subprocess.run(command, capture_output=True, timeout=CLI_TIMEOUT)
         self.assertEqual(report_path.read_bytes(), before)
 
     def test_agent_internal_separator_is_preserved(self):
         source = COMPLIANT + "\nassert sys.argv[1:] == ['--', 'literal']\n"
-        result = subprocess.run([*self.command(source), "--", "literal"], capture_output=True, text=True, timeout=20)
+        result = subprocess.run([*self.command(source), "--", "literal"], capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         report = json.loads((self.scratch / "results.json").read_text())
         self.assertEqual(report["provenance"]["agent"]["argv"][-2:], ["--", "literal"])
@@ -898,12 +1161,12 @@ class RepeatResultTests(unittest.TestCase):
             "    global calls\n    calls += 1\n    if calls == 2: raise KeyboardInterrupt\n"
             "    return original(*args, **kwargs)\n"
             f"lifecycle_eval.execute_attempt = execute\nraise SystemExit(lifecycle_eval.main({command[2:]!r}))\n")
-        result = subprocess.run([sys.executable, str(wrapper)], capture_output=True, text=True, timeout=20)
+        result = subprocess.run([sys.executable, str(wrapper)], capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 1, result.stderr)
         path = self.scratch / "results.json"; before = json.loads(path.read_text())
         self.assertEqual([c["status"] for c in before["attempts"]], ["PASS", "ERROR", "NOT_RUN"])
         command.insert(command.index("--"), "--continue-unstarted")
-        result = subprocess.run(command, capture_output=True, text=True, timeout=20)
+        result = subprocess.run(command, capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 1, result.stderr)  # Interrupted cell is never retried.
         after = json.loads(path.read_text())
         self.assertEqual([c["status"] for c in after["attempts"]], ["PASS", "ERROR", "PASS"])
@@ -918,11 +1181,11 @@ class RepeatResultTests(unittest.TestCase):
     def test_continuation_refuses_changed_configuration_without_mutation_or_launch(self):
         marker = self.scratch / "never-launch"
         command = self.command(f"from pathlib import Path; Path({str(marker)!r}).touch()", "--max-agent-seconds", "0")
-        self.assertEqual(subprocess.run(command, capture_output=True, timeout=20).returncode, 1)
+        self.assertEqual(subprocess.run(command, capture_output=True, timeout=CLI_TIMEOUT).returncode, 1)
         path = self.scratch / "results.json"; before = path.read_bytes()
         command[command.index("--max-agent-seconds") + 1] = "10"
         command.insert(command.index("--"), "--continue-unstarted")
-        result = subprocess.run(command, capture_output=True, text=True, timeout=20)
+        result = subprocess.run(command, capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("configuration", result.stderr)
         self.assertFalse(marker.exists())
@@ -931,7 +1194,7 @@ class RepeatResultTests(unittest.TestCase):
     def test_continuation_refuses_active_owner_running_cells_and_changed_agent(self):
         marker = self.scratch / "never-launch"
         command = self.command(f"from pathlib import Path; Path({str(marker)!r}).touch()", "--max-agent-seconds", "0")
-        subprocess.run(command, capture_output=True, timeout=20)
+        subprocess.run(command, capture_output=True, timeout=CLI_TIMEOUT)
         path = self.scratch / "results.json"; original = json.loads(path.read_text())
         command.insert(command.index("--"), "--continue-unstarted")
         for kind, diagnostic in (("active", "active"), ("running", "recover"), ("input", "configuration")):
@@ -942,7 +1205,7 @@ class RepeatResultTests(unittest.TestCase):
                 with (self.scratch / "agent.py").open("a") as output: output.write("\n# changed input\n")
             eval_results.refresh(report); path.write_text(json.dumps(report)); before = path.read_bytes()
             with self.subTest(kind=kind):
-                result = subprocess.run(command, capture_output=True, text=True, timeout=20)
+                result = subprocess.run(command, capture_output=True, text=True, timeout=CLI_TIMEOUT)
                 self.assertEqual(result.returncode, 1, result.stderr)
                 self.assertIn(diagnostic, result.stderr)
                 self.assertEqual(path.read_bytes(), before)
@@ -991,7 +1254,7 @@ class ProvenanceTests(unittest.TestCase):
             process.stderr.close()
 
     def test_results_checker_rejects_duplicate_cells_and_false_totals(self):
-        result = subprocess.run(self.command(), capture_output=True, text=True, timeout=20)
+        result = subprocess.run(self.command(), capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         path = self.scratch / "results.json"; original = json.loads(path.read_text())
         for corruption in ("duplicate", "totals", "provenance"):
@@ -1044,7 +1307,7 @@ class ProvenanceTests(unittest.TestCase):
     def test_running_denominator_active_owner_and_invalid_ledger_refuse_recovery(self):
         import eval_results
         self.assertEqual(eval_results.aggregate([{"status": s} for s in ("PASS", "ERROR", "RUNNING", "NOT_RUN")])["pass_rate"], 1 / 3)
-        result = subprocess.run(self.command(), capture_output=True, text=True, timeout=20)
+        result = subprocess.run(self.command(), capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         path = self.scratch / "results.json"; report = json.loads(path.read_text())
         report["owner"] = eval_process.process_identity(os.getpid())
@@ -1062,7 +1325,7 @@ class ProvenanceTests(unittest.TestCase):
 
     def test_cross_attempt_supervisor_context_refuses_before_mutation(self):
         import eval_results
-        result = subprocess.run(self.command(), capture_output=True, text=True, timeout=20)
+        result = subprocess.run(self.command(), capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         path = self.scratch / "results.json"; report = json.loads(path.read_text())
         cell = report["attempts"][0]
@@ -1107,7 +1370,7 @@ class ProvenanceTests(unittest.TestCase):
     def test_changed_agent_input_cannot_silently_change_later_repeat(self):
         marker = self.scratch / "launch-count"
         source = COMPLIANT + f"\nwith Path({str(marker)!r}).open('a') as stream: stream.write('launch\\n')\nPath(__file__).write_text('raise SystemExit(0)')\n"
-        result = subprocess.run(self.command(source, "--repeat", "2"), capture_output=True, text=True, timeout=20)
+        result = subprocess.run(self.command(source, "--repeat", "2"), capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         report = json.loads((self.scratch / "results.json").read_text())
         self.assertEqual(report["attempts"][0]["status"], "ERROR")
@@ -1127,7 +1390,7 @@ class TranscriptTests(unittest.TestCase):
         sentinel = "private-sentinel-12345"
         source = f"import sys\nprint({sentinel!r} + ' Bearer abcdef123456 sk-1234567890ABC api_key=abcdef ' + '🙂' * 3000)\nsys.exit(7)"
         with mock.patch.dict(os.environ, {"EVAL_TEST_SECRET": sentinel}):
-            result = subprocess.run(self.command(source, "--redact-env", "EVAL_TEST_SECRET"), capture_output=True, text=True, timeout=20)
+            result = subprocess.run(self.command(source, "--redact-env", "EVAL_TEST_SECRET"), capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 1)
         path = self.scratch / "results.json"; text = path.read_text(); report = json.loads(text)
         self.assertNotIn(sentinel, text)
@@ -1150,7 +1413,7 @@ class TranscriptTests(unittest.TestCase):
         command = self.command()
         command = command[:command.index("--")] + ["--redact-env", "EVAL_TEST_SECRET", "--", sys.executable, "-c", source]
         with mock.patch.dict(os.environ, {"EVAL_TEST_SECRET": sentinel}):
-            result = subprocess.run(command, capture_output=True, text=True, timeout=20)
+            result = subprocess.run(command, capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 1)
         path = self.scratch / "results.json"
         self.assertTrue(path.exists(), result.stderr)
@@ -1160,11 +1423,11 @@ class TranscriptTests(unittest.TestCase):
         self.assertNotIn(sentinel, path.read_text())
 
     def test_optional_raw_retention_names_external_location_and_utc_expiry(self):
-        with tempfile.TemporaryDirectory(dir="/tmp") as external:
+        with tempfile.TemporaryDirectory(dir=external_temp_root()) as external:
             expiry = eval_results.utc(time.time() + 3600)
             result = subprocess.run(self.command("print('raw-retention-sentinel'); raise SystemExit(7)",
                                     "--retain-transcripts", external, "--transcript-expiry", expiry),
-                                    capture_output=True, text=True, timeout=20)
+                                    capture_output=True, text=True, timeout=CLI_TIMEOUT)
             self.assertEqual(result.returncode, 1, result.stderr)
             report = json.loads((self.scratch / "results.json").read_text())
             retained = report["attempts"][0]["transcript"]
@@ -1172,13 +1435,14 @@ class TranscriptTests(unittest.TestCase):
             self.assertEqual(path.parent, Path(external))
             self.assertEqual(retained["expires_at"], expiry)
             self.assertEqual(path.read_text(), "raw-retention-sentinel\n")
-            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            if os.name != "nt":  # Windows reports 0o666 for writable files; POSIX mode bits do not apply.
+                self.assertEqual(path.stat().st_mode & 0o777, 0o600)
             self.assertEqual(eval_results.validate(report), [])
 
     def test_retention_requires_external_directory_and_future_utc_expiry_before_launch(self):
         marker = self.scratch / "retention-launched"
         source = f"from pathlib import Path; Path({str(marker)!r}).touch()"
-        with tempfile.TemporaryDirectory(dir="/tmp") as external:
+        with tempfile.TemporaryDirectory(dir=external_temp_root()) as external:
             cases = [(external, None), (None, eval_results.utc(time.time() + 3600)),
                      (external, "not-a-date"), (external, "2099-01-01T00:00:00"),
                      (external, eval_results.utc(0)), (str(lifecycle_eval.ROOT), eval_results.utc(time.time() + 3600))]
@@ -1260,6 +1524,7 @@ class EvidenceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             observer.native_claude(events, stream.replace("call-review", "unrelated"), "2.1.296")
 
+    @unittest.skipIf(os.name == "nt", "scripted CLI fixture is a shebang script, which Windows cannot execute directly")
     def test_live_launcher_and_adapter_with_scripted_native_events(self):
         helper = lifecycle_eval.ROOT / ".ai/evals/checks/live_observer.py"
         fake = self.scratch / "scripted-cli"
@@ -1285,7 +1550,7 @@ print(json.dumps({'type':'assistant','message':{'model':'claude-sonnet-5-5'}}))
                 result = subprocess.run([sys.executable, str(helper), "launch", "claude", str(fake)],
                                         cwd=work, env={**lifecycle_eval.child_environment(work),
                                                        "LIFECYCLE_EVAL_DEADLINE": str(time.time() + 15)},
-                                        input="scripted instrumentation only", capture_output=True, text=True, timeout=20)
+                                        input="scripted instrumentation only", capture_output=True, text=True, timeout=CLI_TIMEOUT)
                 self.assertEqual(result.returncode, 1 if broken else 0, result.stderr)
                 path = work.parent / "live-observations.json"
                 self.assertEqual(path.exists(), not broken)
@@ -1298,6 +1563,7 @@ print(json.dumps({'type':'assistant','message':{'model':'claude-sonnet-5-5'}}))
                                             capture_output=True, text=True, check=True, timeout=5)
                     self.assertEqual(json.loads(parsed.stdout), observed)
 
+    @unittest.skipIf(os.name == "nt", "hook deadline supervision uses POSIX timers (signal.setitimer)")
     def test_separate_hook_session_enforces_deadline_for_its_descendants(self):
         marker = self.scratch / "late-hook-child"
         child = f"import time; from pathlib import Path; time.sleep(0.7); Path({str(marker)!r}).touch()"
@@ -1374,8 +1640,9 @@ print(json.dumps({'type':'assistant','message':{'model':'claude-sonnet-5-5'}}))
         self.assertEqual(before, pin.read_bytes())
         # Normalize keys before sorting: a fixture-specific key may cross an
         # unchanged user setting lexically between otherwise identical cells.
-        left = observer.configuration_digest({"/a/fixture": 1, "/m": 2}, Path("/a"))
-        right = observer.configuration_digest({"/z/fixture": 1, "/m": 2}, Path("/z"))
+        # Build keys with Path so the spelling matches str(directory) on Windows too.
+        left = observer.configuration_digest({str(Path("/a") / "fixture"): 1, str(Path("/m")): 2}, Path("/a"))
+        right = observer.configuration_digest({str(Path("/z") / "fixture"): 1, str(Path("/m")): 2}, Path("/z"))
         self.assertEqual(left, right)
 
     def test_same_reviewer_repeated_start_selects_final_pass(self):
@@ -1411,7 +1678,7 @@ print(json.dumps({'type':'assistant','message':{'model':'claude-sonnet-5-5'}}))
                 path = self.scratch / "results.json"
                 if path.exists(): path.unlink()
                 result = subprocess.run(self.command(COMPLIANT, "--checks-dir", str(checks), "--observation-adapter", "identity",
-                                         "--model-id", requested, "--cli-version", "fixture-1"), capture_output=True, text=True, timeout=20)
+                                         "--model-id", requested, "--cli-version", "fixture-1"), capture_output=True, text=True, timeout=CLI_TIMEOUT)
                 self.assertEqual(result.returncode, 0 if expected_status == "PASS" else 1, result.stdout + result.stderr)
                 report = json.loads(path.read_text())
                 self.assertEqual(report["attempts"][0]["status"], expected_status)
@@ -1423,10 +1690,10 @@ print(json.dumps({'type':'assistant','message':{'model':'claude-sonnet-5-5'}}))
                 self.assertFalse(report["qualification"]["qualified"])
 
     def test_scripted_results_cannot_qualify_as_real_baseline(self):
-        result = subprocess.run(self.command(), capture_output=True, timeout=20)
+        result = subprocess.run(self.command(), capture_output=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 0)
         path = self.scratch / "results.json"; before = path.read_bytes()
-        result = subprocess.run([sys.executable, str(SCRIPTS / "lifecycle_eval.py"), "results-check", str(path), "--require-real", "--campaign-complete"], capture_output=True, timeout=20)
+        result = subprocess.run([sys.executable, str(SCRIPTS / "lifecycle_eval.py"), "results-check", str(path), "--require-real", "--campaign-complete"], capture_output=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 1)
         self.assertEqual(path.read_bytes(), before)
 
@@ -1635,7 +1902,8 @@ class PressureScenarioTests(unittest.TestCase):
                            "--scenario", "pressure-authority", "--scenario", "control-approval-withheld",
                            "--repeat", "2", "--evidence-class", "scripted-runner", "--json", str(path), "--", sys.executable,
                            str(SCRIPTS / "tests/pressure_agent.py"), *( ["--near-miss"] if negative else [])]
-                result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+                result = subprocess.run(command, capture_output=True, text=True,
+                                        timeout=30 if os.name != "nt" else 240)  # four cells at ~10 s each on Windows
                 self.assertEqual(result.returncode, 1 if negative else 0, result.stdout + result.stderr)
                 report = json.loads(path.read_text())
                 self.assertEqual(eval_results.validate(report), [])

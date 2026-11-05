@@ -26,7 +26,6 @@ import hashlib
 import json
 import os
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -38,6 +37,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import lifecycle  # noqa: E402
+import pr_hook  # noqa: E402
 import install  # noqa: E402
 import scratch  # noqa: E402
 import eval_process  # noqa: E402
@@ -60,7 +60,7 @@ class EvalError(Exception):
 def load_scenarios(directory: Path = SCENARIOS) -> list[dict]:
     scenarios = []
     for path in sorted(directory.glob("*.json")):
-        scenario = json.loads(path.read_text())
+        scenario = json.loads(path.read_text(encoding='utf-8'))
         problems = validate(scenario)
         if problems:
             raise EvalError(f"{path.name}: " + "; ".join(problems))
@@ -79,7 +79,7 @@ def strings(value: object, nonempty: bool = False) -> bool:
 def setup_path(name: str, work: Path | None = None) -> Path:
     """Check both lexical input and the actual destination, including existing symlinks."""
     path = Path(name)
-    if (not name.strip() or path.is_absolute() or ".." in path.parts
+    if (not name.strip() or path.anchor or ".." in path.parts
             or ".git" in path.parts or "\x00" in name or not path.parts):
         raise EvalError(f"unsafe setup path {name!r}")
     if work is None:
@@ -97,7 +97,7 @@ def setup_path(name: str, work: Path | None = None) -> Path:
 def command_argv(command: object) -> list[str]:
     if isinstance(command, str):
         try:
-            command = shlex.split(command)
+            command = pr_hook.split_words(command)
         except ValueError as error:
             raise EvalError(f"invalid setup command: {error}") from error
     if not strings(command, nonempty=True) or any("\x00" in item for item in command):
@@ -234,7 +234,7 @@ def prepare(scenario: dict, work: Path, *, deadline: float | None = None, superv
     for name, text in setup.get("files", {}).items():
         target = setup_path(name, work)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(text)
+        target.write_text(text, encoding='utf-8', newline='\n')  # fixtures are byte-exact; pinned hashes assume LF
     git = ["git", "-C", str(work), "-c", "user.email=eval@eval", "-c", "user.name=eval"]
     storage = supervision_storage or scratch.require_disk(work.parent)
     env = {k: v for k, v in os.environ.items() if k not in ("OKF_AUTONOMOUS", "LIFECYCLE_GUARD")}
@@ -288,7 +288,7 @@ def evaluate(scenario: dict, work: Path, transcript: str, base: str, *, observer
         actors = [actor] if actor else []
         for name in sorted(changed_files(work, base)):
             if fnmatch.fnmatch(name, "knowledge/history/lifecycle/*.json") and (work / name).is_file():
-                record = json.loads((work / name).read_text())
+                record = json.loads((work / name).read_text(encoding='utf-8'))
                 recorded_actor = record.get("stages", {}).get("intent", {}).get("approved_by")
                 if recorded_actor:
                     actors.append(recorded_actor)
@@ -318,7 +318,7 @@ def evaluate(scenario: dict, work: Path, transcript: str, base: str, *, observer
             failures.append(f"{len(ready)} lint-clean spec(s) under knowledge/specifications, expected {expect['specs']}")
     if "queue_entries" in expect:
         queue = work / "knowledge/project/work-queue.md"
-        count = len(re.findall(r"^### \S+ — ", queue.read_text(), re.M)) if queue.is_file() else 0
+        count = len(re.findall(r"^### \S+ — ", queue.read_text(encoding='utf-8'), re.M)) if queue.is_file() else 0
         if count < expect["queue_entries"]:
             failures.append(f"{count} queue entries, expected {expect['queue_entries']}")
     failures += [f"transcript lacks /{r}/" for r in expect.get("transcript", []) if not re.search(r, transcript)]
@@ -592,4 +592,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    import process_runtime
+    process_runtime.configure_windows_environment()
     sys.exit(main())

@@ -8,6 +8,7 @@ import subprocess
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import ledger
+import disk_tmp
 from test_ledger import LedgerCase
 
 
@@ -20,15 +21,16 @@ class DefaultScopeTests(LedgerCase):
             f' def test_helper(self):\n  self.assertEqual(subprocess.check_output({command!r}, text=True).strip(), {expected!r})\n')
         self.ok('tier', 'L1', '--reason', 'input metadata')
         self.ok('run', 'unit', '--', sys.executable, '-m', 'unittest', 'discover', '-s', 'tests')
-        self.assertEqual(self.run_cli('reuse', 'unit')[0], 0)
+        code, out, err = self.run_cli('reuse', 'unit')
+        self.assertEqual(code, 0, out + err)
 
-    @unittest.skipUnless(os.name == 'posix', 'POSIX executable permissions')
     def test_inferred_reuse_rejects_changed_executable_permissions(self):
         helper = self.repo / 'helper.py'
-        helper.write_text(f'#!{sys.executable}\nprint("ok")\n')
+        helper.write_text(f'#!{sys.executable}\nprint("ok")\n' if os.name != 'nt' else
+                          'from pathlib import Path\nprint("ok" if Path(__file__).stat().st_mode & 0o200 else "read-only")\n')
         helper.chmod(0o755)
-        self.prepare_helper_check(['./helper.py'], 'ok')
-        helper.chmod(0o644)
+        self.prepare_helper_check(['./helper.py'] if os.name != 'nt' else [sys.executable, 'helper.py'], 'ok')
+        helper.chmod(0o644 if os.name != 'nt' else 0o444)
         result = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests'],
                                 cwd=self.repo, capture_output=True)
         self.assertNotEqual(result.returncode, 0, 'helper execution should fail after chmod')
@@ -36,17 +38,24 @@ class DefaultScopeTests(LedgerCase):
         self.assertEqual(code, 1, out + err)
         self.assertIn('helper.py', out + err)
 
-    @unittest.skipUnless(os.name == 'posix', 'POSIX symlinks')
     def test_inferred_reuse_rejects_retargeted_symlinks_with_identical_bytes(self):
         for name in ('left', 'right'):
             directory = self.repo / name
             directory.mkdir()
             (directory / 'helper.py').write_text('from pathlib import Path\nprint(Path(__file__).resolve().parent.name)\n')
-        helper = self.repo / 'helper.py'
-        helper.symlink_to('left/helper.py')
-        self.prepare_helper_check([sys.executable, 'helper.py'], 'left')
-        helper.unlink()
-        helper.symlink_to('right/helper.py')
+        helper = self.repo / ('helper.py' if os.name != 'nt' else 'selected')
+        if os.name == 'nt':
+            disk_tmp.directory_link(helper, self.repo / 'left')
+        else:
+            helper.symlink_to('left/helper.py')
+        command_path = 'helper.py' if os.name != 'nt' else 'selected/helper.py'
+        self.prepare_helper_check([sys.executable, command_path], 'left')
+        if os.name == 'nt':
+            helper.rmdir()
+            disk_tmp.directory_link(helper, self.repo / 'right')
+        else:
+            helper.unlink()
+            helper.symlink_to('right/helper.py')
         result = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests'],
                                 cwd=self.repo, capture_output=True)
         self.assertNotEqual(result.returncode, 0, 'helper output should change after retargeting')
@@ -63,7 +72,15 @@ class DefaultScopeTests(LedgerCase):
         self.assertIsNotNone(ledger.inputs_digest(self.repo, ['app.py']))
 
     def test_input_fingerprints_use_literal_git_paths(self):
-        for name in ('café.txt', 'line\nbreak.txt', 'quote".txt'):
+        literal = ('café.txt', 'line\nbreak.txt', 'quote".txt')
+        # NUL-delimited Git transport must retain every literal spelling even
+        # when the host filesystem cannot create one of those names.
+        replies = [subprocess.CompletedProcess([], 0, '\0'.join(literal) + '\0', ''),
+                   subprocess.CompletedProcess([], 0, '', '')]
+        with mock.patch.object(ledger, '_git', side_effect=replies):
+            self.assertEqual(ledger.input_paths(self.repo, ['**']), sorted(literal))
+        native = literal if os.name != 'nt' else ('café.txt', 'line break.txt', "quote'.txt")
+        for name in native:
             with self.subTest(name=name):
                 path = self.repo / name
                 path.write_text('original')

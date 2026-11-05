@@ -1,0 +1,4 @@
+# Check text out with LF on every platform; tests compare exact bytes.
+* text=auto eol=lf
+# These are cryptographically pinned Git-byte snapshots, not editable prose.
+.ai/scripts/tests/fixtures/qualification-baselines/** -text

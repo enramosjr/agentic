@@ -8,6 +8,8 @@ import sys
 import tempfile
 import unittest
 
+import disk_tmp
+
 SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
 import okf
@@ -22,7 +24,7 @@ class OnboardE2ETests(unittest.TestCase):
         scripts.mkdir(parents=True)
         shutil.copy2(SCRIPTS / 'okf.py', scripts / 'okf.py')
         shutil.copy2(SCRIPTS / 'learning.py', scripts / 'learning.py')
-        for name in ('review_guard.py', 'scratch.py', 'ledger.py'):
+        for name in ('review_guard.py', 'scratch.py', 'ledger.py', 'process_runtime.py'):
             shutil.copy2(SCRIPTS / name, scripts / name)
         self.command = [sys.executable, str(scripts / 'okf.py')]
         self.git('init', '-q')
@@ -34,7 +36,13 @@ class OnboardE2ETests(unittest.TestCase):
         self.write('alpha/file with spaces.py', '# fact\n')
         self.write('.gitignore', 'ignored.py\n')
         self.write('binary.py', b'\0\xff')
-        (self.root / 'outside.py').symlink_to('/etc/hosts')
+        if os.name == 'nt':
+            outside = tempfile.TemporaryDirectory()
+            self.addCleanup(outside.cleanup)
+            (Path(outside.name) / 'secret.py').write_text('raise RuntimeError("outside inventory")\n')
+            disk_tmp.directory_link(self.root / 'outside.py', outside.name)
+        else:
+            (self.root / 'outside.py').symlink_to('/etc/hosts')
         self.git('add', '-A')
         self.git('commit', '-qm', 'fixture')
         self.write('ignored.py', 'raise RuntimeError()')
@@ -62,6 +70,19 @@ class OnboardE2ETests(unittest.TestCase):
             from review_test_support import closed_coordination_snapshot
             return closed_coordination_snapshot(self.root, files)
         return files
+
+    def test_closed_administration_snapshot_accepts_a_root_alias(self):
+        import review_guard
+        from review_test_support import closed_coordination_snapshot
+        with tempfile.TemporaryDirectory() as directory:
+            alias = Path(directory) / 'root alias'
+            disk_tmp.directory_link(alias, self.root)
+            before = closed_coordination_snapshot(alias, self.snapshot())
+            with review_guard.producer(self.root):
+                self.assertTrue(review_guard.read(self.root)['writers'])
+            self.assertEqual(closed_coordination_snapshot(alias, self.snapshot()), before)
+            self.write('untracked.py', 'changed product bytes\n')
+            self.assertNotEqual(closed_coordination_snapshot(alias, self.snapshot()), before)
 
     def test_cited_drafts_validate_and_second_run_is_noop(self):
         self.cli('onboard')
@@ -109,7 +130,9 @@ class OnboardE2ETests(unittest.TestCase):
     def test_empty_categories_are_not_inferred(self):
         for path in self.root.iterdir():
             if path.name not in ('.git', '.ai'):
-                if path.is_dir() and not path.is_symlink():
+                if os.name == 'nt' and path.name == 'outside.py':
+                    path.rmdir()  # Remove only the owned junction, never its target.
+                elif path.is_dir() and not path.is_symlink():
                     shutil.rmtree(path)
                 else:
                     path.unlink()

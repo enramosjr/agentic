@@ -6,15 +6,14 @@ import argparse
 from dataclasses import dataclass, field, replace
 import json
 from pathlib import Path
-import shutil
-import signal
+import shlex
 import sys
 import tempfile
 from typing import Callable, Optional, TextIO
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from assurance_demo import Session, DemoFailure, _base, build, HERE  # noqa: E402
+from assurance_demo import Session, DemoFailure, _base, build, HERE, remove_repository, install_exit_handlers  # noqa: E402
 import scratch  # noqa: E402
 
 LIMIT = "Measures mechanism behavior on fixtures, not agent outcomes."
@@ -79,14 +78,14 @@ def affected(reqs: tuple[Req, ...], step: Step) -> set[str]:
 def check_script(req: Req) -> str:
     return ("from pathlib import Path\nimport sys\n"
             f"reads = {req.reads!r}\n"
-            "texts = [Path(name).read_text() for name in reads]\n"
+    "texts = [Path(name).read_text(encoding='utf-8') for name in reads]\n"
             "sys.exit(3 if any(\"broken\" in text for text in texts) else 0)\n")
 
 
 def capability(reqs: tuple[Req, ...]) -> str:
     text = "---\ntype: Capability\ntitle: Measurement\nnamespace: MEAS\nstatus: draft\n---\n\n# Measurement\n\n## Requirements\n\n"
     for req in reqs:
-        command = " ".join(("python3", f"checks/{req.id}.py", *req.verify_flags))
+        command = shlex.join((sys.executable, f"checks/{req.id}.py", *req.verify_flags))
         text += f"- {req.id}: The fixture MUST pass its check.\n  - Verify: `{command}`\n"
         if req.inputs is not None:
             inputs = (f"checks/{req.id}.py", *req.inputs)
@@ -196,7 +195,7 @@ def measure(base: Optional[Path] = None, hook: Optional[Callable[[Path], None]] 
                     data["totals"][key] += row[key]
             data["scenarios"].append({"name": scenario.name, "steps": rows})
         finally:
-            shutil.rmtree(directory)
+            remove_repository(directory)
     return data
 
 
@@ -252,9 +251,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="emit deterministic JSON")
     args = parser.parse_args(argv)
-    signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(143))
+    install_exit_handlers()
     return run(json_output=args.json)
 
 
 if __name__ == "__main__":
+    import process_runtime
+    process_runtime.configure_windows_environment()
     sys.exit(main())

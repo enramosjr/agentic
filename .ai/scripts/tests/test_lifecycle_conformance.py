@@ -98,11 +98,13 @@ class RolesAndSkills(unittest.TestCase):
             self.assertTrue((ROOT / f".codex/agents/{role}.toml").is_file(), role)
 
     def test_codex_skills_are_a_symlink_to_the_claude_skills(self) -> None:
+        # Keep this registered entry point; native aliases may be materialized.
         link = ROOT / ".agents/skills"
-        self.assertTrue(link.is_symlink(), ".agents/skills must be a symlink so there is one copy")
-        self.assertEqual(link.resolve(), (ROOT / ".claude/skills").resolve())
-        names = sorted(str(p.relative_to(link)) for p in link.rglob("SKILL.md"))
+        self.assertTrue(link.is_dir(), '.agents/skills must be usable without symlink privileges')
+        names = sorted(p.relative_to(link).as_posix() for p in link.rglob("SKILL.md"))
         self.assertEqual(names, ["debug/SKILL.md", "implement/SKILL.md", "onboard/SKILL.md", "plan/SKILL.md", "review/SKILL.md", "ship/SKILL.md", "spec/SKILL.md"])
+        for name in names:
+            self.assertEqual((link / name).read_bytes(), (ROOT / '.claude/skills' / name).read_bytes())
 
     def test_skills_have_name_matching_directory_and_a_description(self) -> None:
         for path in (ROOT / ".claude/skills").rglob("SKILL.md"):
@@ -127,7 +129,7 @@ class RolesAndSkills(unittest.TestCase):
         commands = {c for path in sources for c in SHOW.findall(path.read_text()) if not PLACEHOLDER.search(c)}
         self.assertGreater(len(commands), 10)
         for command in sorted(commands):
-            result = subprocess.run(shlex.split(command), cwd=ROOT, capture_output=True, text=True)
+            result = subprocess.run([sys.executable, *shlex.split(command)[1:]], cwd=ROOT, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, f"{command}\n{result.stderr}")
 
 

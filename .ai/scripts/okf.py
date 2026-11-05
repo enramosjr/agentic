@@ -29,6 +29,7 @@ import stat
 sys.dont_write_bytecode = True  # Importing the shared helper must not dirty adopter worktrees.
 import learning
 import review_guard
+import process_runtime
 
 OKF_VERSION = "0.2"
 STANDARD_SECTIONS = (
@@ -922,7 +923,7 @@ def validate(bundle: Path) -> list[Issue]:
 def _run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     try:
         runner = review_guard.run_owned if args[:1] == ('config',) and '--get' not in args else subprocess.run
-        return runner(["git", "-C", str(repo), *args], capture_output=True, text=True, check=False)
+        return runner(["git", "-C", str(repo), *args], capture_output=True, text=True, encoding='utf-8', check=False)
     except FileNotFoundError as error:
         raise OkfError("git is not installed; pass changed paths explicitly: okf.py affected PATH...") from error
 
@@ -1483,9 +1484,9 @@ def handoff(bundle: Path, mode: str = "state", task_id: str | None = None, role:
                 "rerun affected validation only after relevant code, fixes or base changes invalidate that evidence.",
                 "Commit on your task branch. Finish with the implementer completion report: changed files, OKF docs",
                 "updated, and every validation command with its outcome.",
-                f"Lifecycle, unless the driver gates you (OKF_AUTONOMOUS=1): python3 .ai/scripts/lifecycle.py tier L3 --reason 'queue task {task.id}'",
-                f"&& python3 .ai/scripts/lifecycle.py stage intent --note queue:{task.id} --approved-by human:ID|decision:ADR",
-                f"&& python3 .ai/scripts/lifecycle.py stage plan --note queue:{task.id} (ID/ADR: who authorized this queue work).",
+        f"Lifecycle, unless the driver gates you (OKF_AUTONOMOUS=1): {process_runtime.python_hint()} .ai/scripts/lifecycle.py tier L3 --reason 'queue task {task.id}'",
+        f"{'Then run after success:' if os.name == 'nt' else '&&'} {process_runtime.python_hint()} .ai/scripts/lifecycle.py stage intent --note queue:{task.id} --approved-by human:ID|decision:ADR",
+        f"{'Then run after success:' if os.name == 'nt' else '&&'} {process_runtime.python_hint()} .ai/scripts/lifecycle.py stage plan --note queue:{task.id} (ID/ADR: who authorized this queue work).",
                 "",
                 "Batch context from the checkpoint (read-only):",
                 f"In flight: {sections.get('In flight', 'none recorded')}",
@@ -1904,9 +1905,10 @@ def git_setup(bundle: Path) -> list[str]:
     script_path = Path(__file__).resolve()
     top = Path(_git_text(repo, "rev-parse", "--show-toplevel") or repo).resolve()
     script = script_path.relative_to(top).as_posix() if _is_within(script_path, top) else str(script_path)
+    python = shlex.quote(Path(sys.executable).as_posix()) if os.name == 'nt' else 'python3'
     wanted = {
         f"merge.{MERGE_DRIVER}.name": "OKF bundle merge (okf.py merge-driver)",
-        f"merge.{MERGE_DRIVER}.driver": f"python3 {script} merge-driver %O %A %B %P",
+        f"merge.{MERGE_DRIVER}.driver": f"{python} {shlex.quote(script)} merge-driver %O %A %B %P",
     }
     changed: list[str] = []
     for key, value in wanted.items():
@@ -2036,7 +2038,7 @@ def cmd_onboard(bundle: Path, args: argparse.Namespace) -> int:
     try:
         repo = bundle.parent.resolve()
         process = subprocess.run(['git', '-C', str(repo), 'rev-parse', '--show-toplevel'],
-                                 capture_output=True, text=True, timeout=30)
+                                    capture_output=True, text=True, encoding='utf-8', timeout=30)
         if process.returncode or Path(process.stdout.strip()).resolve() != repo:
             raise OkfError('onboard requires knowledge/ at a Git repository root')
         destinations = ((bundle / 'project/architecture.md', 'Architecture inventory', 'Architecture'),
@@ -2473,7 +2475,7 @@ def cmd_stamp(bundle: Path, args: argparse.Namespace) -> int:
 def _run_for_stamp(repo: Path, command: list[str]) -> None:
     """Run COMMAND as argv with the disk-backed scratch TMPDIR (as scratch.py does); fail unless it exits 0."""
     try:
-        common = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "--path-format=absolute", "--git-common-dir"], text=True, stderr=subprocess.PIPE).strip()
+        common = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "--path-format=absolute", "--git-common-dir"], text=True, encoding='utf-8', stderr=subprocess.PIPE).strip()
     except (subprocess.CalledProcessError, OSError) as error:
         raise OkfError("--run needs a git work tree for its scratch directory") from error
     scratch = Path(common).resolve() / "okf-scratch"
@@ -2491,7 +2493,7 @@ def _run_for_stamp(repo: Path, command: list[str]) -> None:
     if not command:
         raise OkfError("--run needs a command after its NAME=VALUE assignments; nothing stamped")
     try:
-        result = review_guard.run_owned(command, cwd=repo, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace")
+        result = review_guard.run_owned(command, cwd=repo, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding='utf-8', errors="replace")
     except OSError as error:
         raise OkfError(f"cannot run {command[0]!r}: {error}; nothing stamped") from error
     if result.returncode != 0:
@@ -2716,7 +2718,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--run", nargs=argparse.REMAINDER, metavar="CMD",
                    help="verified only, last option: everything after it is CMD, run as argv (leading NAME=VALUE set its "
                         "environment; no shell); stamps 'process:CMD' only if it exits 0. To stamp from a recorded "
-                        "check without rerunning it: --run python3 .ai/scripts/lifecycle.py reuse LABEL")
+                        f"check without rerunning it: --run {process_runtime.python_hint(as_argument=True)} .ai/scripts/lifecycle.py reuse LABEL")
     p.set_defaults(handler=cmd_stamp)
 
     p = sub.add_parser("log", help="append an entry under today's date in log.md")
@@ -2817,4 +2819,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    import process_runtime
+    process_runtime.configure_windows_environment()
     sys.exit(main())

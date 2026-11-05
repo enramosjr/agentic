@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 
-from test_assurance import Case, CAP, SCOPED, EXCLUDE, SCRIPTS
+from test_assurance import Case, CAP, SCOPED, EXCLUDE, SCRIPTS, CHECK_COMMAND
 from test_assurance_gate import GateCase, DeltaCase
 import assurance
 import lifecycle
@@ -114,7 +114,7 @@ class ReferenceTests(GovernedCase):  # R2
 
     def test_duplicates_late_lines_and_escaping_symlink(self):
         outside = self.write('outside.md', '# outside\n')
-        (self.root / 'knowledge/project/decisions/escape.md').symlink_to(outside)
+        self.link_reference(self.root / 'knowledge/project/decisions/escape.md', outside)
         for line in (LINE + LINE,
                      '  - Governed-by: [escape](../project/decisions/escape.md)\n'):
             with self.subTest(line=line):
@@ -136,9 +136,9 @@ class ReportTests(GovernedCase):  # R3, R5
                 elif status == 'UNDECLARED':
                     block = '- CALC-R1: Layers MUST be respected.\n'
                 elif status == 'INVALID':
-                    block = SCOPED.replace('`python3 check.py`', 'not a command')
+                    block = SCOPED.replace(f'`{CHECK_COMMAND}`', 'not a command')
                 elif status == 'UNVERIFIED':
-                    block = SCOPED.replace('python3 check.py', 'python3 check.py fresh')
+                    block = SCOPED.replace(CHECK_COMMAND, CHECK_COMMAND + ' fresh')
                 self.governed(block)
                 if status in ('VERIFIED', 'STALE', 'FAILED'):
                     if status == 'FAILED':
@@ -181,7 +181,7 @@ class FreshnessTests(GovernedCase):  # R4, R5
                 entry = self.req_entries()[-1]
                 expected = ['check.py', 'src/**'] + ([ADR] if include else []) + [EXCLUDE]
                 self.assertEqual(entry['inputs'], expected)
-                self.assertEqual(entry['argv'], ['python3', 'check.py'])
+                self.assertEqual(entry['argv'], [sys.executable, 'check.py'])
                 self.write(ADR, (self.root / ADR).read_text() + '\nChanged decision.\n')
                 self.assertEqual(self.status('CALC-R1')['status'], 'STALE' if include else 'VERIFIED')
 
@@ -236,7 +236,7 @@ class IntegrationTests(DeltaCase):  # R2, R4, R6
         spec = self.delta(kind)
         path = self.root / spec
         text = path.read_text().replace('  - Verify:', line + '  - Verify:')
-        path.write_text(text)
+        path.write_text(text, newline='\n')
         return spec
 
     def test_add_and_modify_preserve_reference_and_execute_once(self):
@@ -248,7 +248,7 @@ class IntegrationTests(DeltaCase):  # R2, R4, R6
                 self.prepare(spec=spec)
                 rid = 'CALC-R2' if kind == 'added' else 'CALC-R1'
                 [entry] = [e for e in self.req_entries() if e['label'] == 'req:' + rid]
-                self.assertEqual(entry['argv'], ['python3', 'count.py'])
+                self.assertEqual(entry['argv'], [sys.executable, 'count.py'])
                 self.assertEqual(entry['inputs'], ['count.py', 'src/**', EXCLUDE])
                 self.assertEqual((self.root / 'runs.md').read_text(), before + 'x')
                 item = self.status(rid)

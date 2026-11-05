@@ -140,6 +140,14 @@ def merge_hooks(adopter, kit, previous=(), flat=False):
                 if not matches:
                     dest.append(copy.deepcopy(group))
                 else:
+                    # Existing manifests own command identities, not adopter options.
+                    # Add the new Windows launcher only where the adopter has none.
+                    for existing in (h for g in matches for h in g.get("hooks", [])):
+                        if existing.get("command") in previous and "commandWindows" not in existing:
+                            desired = next((h for h in group.get("hooks", [])
+                                            if h.get("command") == existing.get("command")), {})
+                            if "commandWindows" in desired:
+                                existing["commandWindows"] = desired["commandWindows"]
                     known = {h.get("command") for g in matches for h in g.get("hooks", [])}
                     for hook in group.get("hooks", []):
                         if hook["command"] not in known:
@@ -150,6 +158,9 @@ def merge_hooks(adopter, kit, previous=(), flat=False):
 
 def agents_body(source):
     """Extract only shared governance when an installed kit is used as a template."""
+    # Git may check out template text with CRLF. Keep the managed body canonical
+    # across hosts; adopter bytes outside that body remain untouched.
+    source = source.replace(b'\r\n', b'\n')
     lines = source.splitlines(keepends=True)
     begins = [i for i, line in enumerate(lines) if line.rstrip(b"\r\n") == BEGIN]
     ends = [i for i, line in enumerate(lines) if line.rstrip(b"\r\n") == END]
@@ -201,7 +212,7 @@ def needs_git_init(target):
     if not ancestor.is_dir():
         raise Refusal("TARGET: choose a directory, not a file or a path beneath one")
     result = subprocess.run(["git", "-C", str(ancestor), "rev-parse", "--show-toplevel"],
-                            capture_output=True, text=True, timeout=30,
+                            capture_output=True, text=True, encoding='utf-8', timeout=30,
                             env={**os.environ, "LC_ALL": "C"})
     if result.returncode == 0:
         if Path(result.stdout.strip()).resolve() != target:
@@ -221,11 +232,35 @@ def atomic_write(path, data, mode=0o644):
     try:
         with os.fdopen(fd, "wb") as stream:
             stream.write(data)
-            os.fchmod(stream.fileno(), mode)
-        os.replace(temp, path)
+            if hasattr(os, 'fchmod'):
+                os.fchmod(stream.fileno(), mode)
+            else:
+                os.chmod(temp, mode)
+        previous_mode = None
+        if os.name == 'nt' and path.exists():
+            current_mode = stat.S_IMODE(path.stat().st_mode)
+            if not current_mode & stat.S_IWRITE:
+                previous_mode = current_mode
+                path.chmod(current_mode | stat.S_IWRITE)
+        try:
+            os.replace(temp, path)
+        except BaseException:
+            if previous_mode is not None and path.exists():
+                path.chmod(previous_mode)
+            raise
     finally:
         if os.path.exists(temp):
+            if os.name == 'nt':
+                os.chmod(temp, stat.S_IREAD | stat.S_IWRITE)
             os.unlink(temp)
+
+
+def mode_matches(path, expected):
+    actual = stat.S_IMODE(path.stat().st_mode)
+    if os.name == 'nt':
+        # Windows chmod represents the read-only bit, not POSIX execute/group bits.
+        return bool(actual & stat.S_IWRITE) == bool(expected & stat.S_IWRITE)
+    return actual == expected
 
 
 def version(value):
@@ -262,7 +297,7 @@ def install(target, template, check=False, force=False, no_knowledge=False):
         print("not installed (Git initialization required)")
         return 1
     try:
-        raw_version = (template / ".ai/VERSION").read_text()
+        raw_version = (template / ".ai/VERSION").read_text(encoding='utf-8')
     except OSError as error:
         raise Refusal(".ai/VERSION: create one MAJOR.MINOR.PATCH line") from error
     template_version = raw_version.strip()
@@ -294,7 +329,7 @@ def install(target, template, check=False, force=False, no_knowledge=False):
     def put(name, data, mode=0o644):
         current = read(name)
         path = target / name
-        if current != data or (path.exists() and stat.S_IMODE(path.stat().st_mode) != mode):
+        if current != data or (path.exists() and not mode_matches(path, mode)):
             writes[name] = (data, mode)
 
     hashes = {}
@@ -313,7 +348,7 @@ def install(target, template, check=False, force=False, no_knowledge=False):
                     hashes[name] = prior_hash
             if current is None:
                 problems.append(f"missing: {name}")
-            elif installed_hash != desired_hash or stat.S_IMODE((target / name).stat().st_mode) != file_mode:
+            elif installed_hash != desired_hash or not mode_matches(target / name, file_mode):
                 problems.append(f"drift: {name}")
         elif current is not None:
             problems.append(f"drift: {name}")
@@ -330,6 +365,15 @@ def install(target, template, check=False, force=False, no_knowledge=False):
         data = path.read_bytes() if name in plain else None
         file_mode = stat.S_IMODE(path.stat().st_mode) if data is not None else None
         resolve_file(name, data, file_mode, old["files"].get(name))
+
+    # Pinned test oracles must survive a later Windows clone byte-for-byte,
+    # including installations that intentionally omit the knowledge bundle.
+    attribute_rule = b'.ai/scripts/tests/fixtures/qualification-baselines/** -text'
+    attributes = read('.gitattributes') or b''
+    if attribute_rule not in attributes.splitlines():
+        separator = b'' if not attributes or attributes.endswith(b'\n') else b'\n'
+        put('.gitattributes', attributes + separator + attribute_rule + b'\n')
+        problems.append('attributes: .gitattributes')
 
     hook_manifest = {}
     for name in HOOK_FILES:
@@ -442,7 +486,7 @@ def install(target, template, check=False, force=False, no_knowledge=False):
             if name == MANIFEST:
                 continue
             if name in HOOK_FILES:
-                before = (target / name).read_text() if (target / name).exists() else ""
+                before = (target / name).read_text(encoding='utf-8') if (target / name).exists() else ""
                 print("".join(difflib.unified_diff(before.splitlines(True), data.decode().splitlines(True), fromfile=name, tofile=name)), end="")
             atomic_write(target / name, data, file_mode)
         for name in removals:
@@ -450,7 +494,7 @@ def install(target, template, check=False, force=False, no_knowledge=False):
         if make_link:
             link.parent.mkdir(parents=True, exist_ok=True)
             try:
-                os.symlink("../.claude/skills", link)
+                os.symlink("../.claude/skills", link, target_is_directory=True)
             except OSError:
                 for name in skill_names:
                     dest = name.replace(".claude/skills/", ".agents/skills/", 1)
@@ -470,14 +514,76 @@ def install(target, template, check=False, force=False, no_knowledge=False):
     return 1 if conflicts else 0
 
 
+def sync_source_skills(root, check=False):
+    root = root.resolve()
+    marker = root / '.agentic.json'
+    if not marker.is_file() or read_json(marker).get('repository_kind') != 'framework':
+        raise Refusal('source skill synchronization requires a framework source checkout')
+    canonical, aliases = root / '.claude/skills', root / '.agents/skills'
+    if not canonical.resolve().is_relative_to(root) or not aliases.resolve().is_relative_to(root):
+        raise Refusal('source skill paths must stay inside the framework checkout')
+    desired = {}
+    for source in canonical.rglob('*'):
+        if source.is_file():
+            if source.is_symlink() or not source.resolve().is_relative_to(canonical.resolve()):
+                raise Refusal('canonical source skills must not escape through aliases')
+            desired[source.relative_to(canonical)] = source
+    if not desired:
+        raise Refusal('canonical framework skills are missing')
+    reparse = aliases.exists() and bool(getattr(aliases.lstat(), 'st_file_attributes', 0) & 0x400)
+    replace_alias = aliases.is_symlink() or reparse or aliases.is_file()
+    if aliases.is_file() and not aliases.is_symlink():
+        if aliases.read_bytes().strip() != b'../.claude/skills':
+            raise Refusal('source skills pointer is customized; refusing to overwrite it')
+    elif replace_alias and aliases.resolve() != canonical.resolve():
+        raise Refusal('source skills alias has an unexpected target')
+    existing = {}
+    if aliases.is_dir() and not replace_alias:
+        for path in aliases.rglob('*'):
+            if path.is_symlink() or bool(getattr(path.lstat(), 'st_file_attributes', 0) & 0x400):
+                raise Refusal('generated source skills contain an unexpected alias')
+            if path.is_file():
+                existing[path.relative_to(aliases)] = path
+    drift = replace_alias or set(existing) != set(desired) or any(
+        existing[name].read_bytes() != source.read_bytes()
+        for name, source in desired.items() if name in existing)
+    if check or not drift:
+        print('source skills drift' if drift else 'source skills up to date')
+        return int(drift)
+    with review_guard.target_producer(root):
+        if replace_alias:
+            if aliases.is_dir() and not aliases.is_symlink():
+                aliases.rmdir()
+            else:
+                aliases.unlink()
+        aliases.mkdir(parents=True, exist_ok=True)
+        for name, path in existing.items():
+            if name not in desired:
+                path.unlink()
+        for name, source in desired.items():
+            atomic_write(aliases / name, source.read_bytes(), stat.S_IMODE(source.stat().st_mode))
+        for path in sorted(aliases.rglob('*'), key=lambda p: len(p.parts), reverse=True):
+            if path.is_dir() and not any(path.iterdir()):
+                path.rmdir()
+    print('source skills synchronized')
+    return 0
+
+
 def main(argv=None, template=ROOT):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="report installation drift without writing files or initializing Git")
     parser.add_argument("--force", action="store_true", help="allow changing dirty paths; conflicting adopter files are still kept")
     parser.add_argument("--no-knowledge", action="store_true", help="skip creating the project's knowledge bundle")
-    parser.add_argument("target", type=Path, help="existing project root or new folder; initializes Git when needed")
+    parser.add_argument('--sync-source-skills', action='store_true', help='refresh generated Codex skills in a framework source checkout')
+    parser.add_argument("target", nargs='?', type=Path, help="existing project root or new folder; initializes Git when needed")
     args = parser.parse_args(argv)
     try:
+        if args.sync_source_skills:
+            if args.target is not None or args.force or args.no_knowledge:
+                raise Refusal('--sync-source-skills accepts only --check')
+            return sync_source_skills(template, args.check)
+        if args.target is None:
+            parser.error('target is required unless --sync-source-skills is selected')
         return install(args.target, template, args.check, args.force, args.no_knowledge)
     except (Refusal, review_guard.ReviewError) as error:
         print(f"install: {error}", file=sys.stderr)
@@ -488,4 +594,6 @@ def main(argv=None, template=ROOT):
 
 
 if __name__ == "__main__":
+    import process_runtime
+    process_runtime.configure_windows_environment()
     sys.exit(main())

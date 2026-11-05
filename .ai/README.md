@@ -16,9 +16,14 @@ and Git are required. The installer creates missing folders and Git metadata whe
 needed. It does not create a commit or configure a remote. An installed kit can
 also be used as the source: only its managed governance body is exported.
 
+For native Windows, use `python` or `py -3` instead of `python3` and install Git
+for Windows. Codex hooks include Windows launchers. See
+[Windows setup and verification](docs/install-and-upgrade.md#native-windows-and-codex).
+
 ## References
 
 - [Install and upgrade](docs/install-and-upgrade.md): drift, conflicts and hooks.
+- [Windows and Linux runtime](docs/windows-runtime.md): native process, review and verification contracts.
 - [Lifecycle](docs/lifecycle.md): stages, checks and committed audit evidence.
 - [Learning contract](docs/learning-loop.md) and [workflow](docs/learning-loop-playbook.md).
 - [Brownfield deltas](lifecycle.md#brownfield-deltas): approval-bound requirement changes.

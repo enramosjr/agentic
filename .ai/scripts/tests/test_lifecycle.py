@@ -25,6 +25,8 @@ import disk_tmp  # noqa: E402,F401
 import lifecycle  # noqa: E402
 import okf  # noqa: E402
 
+PY = shlex.quote(sys.executable)
+
 SPEC = """# Spec: Greeter
 
 ## Problem and outcome
@@ -56,7 +58,7 @@ None.
 ## Open questions
 
 None. The spec is ready for planning.
-"""
+""".replace('python3', PY)
 
 PLAN = "# Plan\n\n## Steps\n\n### Step 1: R1 hello\n### Step 2: R2 empty name\n"
 REVIEW_OK = "# Review Report\n\n## Verdict\nApproved\n"
@@ -66,7 +68,7 @@ REVIEW_BAD = "# Review Report\n\n## Verdict\nChanges requested - R2 missing.\n"
 class LifecycleCase(unittest.TestCase):
     def setUp(self) -> None:
         self.repo = Path(tempfile.mkdtemp()).resolve()
-        self.addCleanup(shutil.rmtree, self.repo)
+        self.addCleanup(disk_tmp.remove_tree, self.repo)
         self.git("init", "-q")
         (self.repo / "app.py").write_text("print('hi')\n")
         (self.repo / "spec.md").write_text(SPEC)
@@ -121,6 +123,24 @@ class LifecycleCase(unittest.TestCase):
         self.ok("converge", "spec.md")
 
 
+class NativeHintTests(LifecycleCase):
+    def test_stage_repair_example_is_copyable_in_the_native_shell(self):
+        shutil.copytree(SCRIPTS, self.repo / '.ai/scripts', ignore=shutil.ignore_patterns('tests', '__pycache__'))
+        self.ok('tier', 'L1', '--reason', 'native hint roundtrip')
+        command = lifecycle.stage_example('L1').removeprefix('example: ')
+        if os.name == 'nt':
+            shell = Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
+            result = subprocess.run([str(shell), '-NoProfile', '-NonInteractive', '-Command', command],
+                                    cwd=self.repo, capture_output=True, text=True, timeout=20)
+        else:
+            result = subprocess.run(command, shell=True, cwd=self.repo, capture_output=True,
+                                    text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        stages = lifecycle.load(self.repo)['stages']
+        self.assertEqual(stages['intent']['note'], 'goal; success check; assumptions')
+        self.assertEqual(stages['plan']['note'], 'steps')
+
+
 class SpecTests(LifecycleCase):
     def test_trace_passes_when_plan_and_tests_cite_every_requirement(self) -> None:
         (self.repo / "test_greet.py").write_text("# R1 R2\n")
@@ -135,7 +155,7 @@ class SpecTests(LifecycleCase):
         self.assertIn("R2 is not cited by any test", out)
 
     def test_lint_flags_requirement_without_acceptance_and_open_questions(self) -> None:
-        text = SPEC.replace("- R2: `python3 -m unittest test_greet.GreetTests.test_empty` passes.\n", "")
+        text = SPEC.replace(R2_ACC, "")
         text = text.replace("None. The spec is ready for planning.", "- Should names be trimmed?")
         (self.repo / "spec.md").write_text(text)
         problems = lifecycle.lint_spec(self.repo / "spec.md")
@@ -572,9 +592,9 @@ class AuditTrailTests(LifecycleCase):
 
 
 R1_REQ = 'The greeter MUST return "Hello, NAME".'
-R1_ACC = "- R1: `python3 -m unittest test_greet.GreetTests.test_hello` passes.\n"
+R1_ACC = f"- R1: `{PY} -m unittest test_greet.GreetTests.test_hello` passes.\n"
 R2_REQ = "- R2: The greeter MUST reject an empty name.\n"
-R2_ACC = "- R2: `python3 -m unittest test_greet.GreetTests.test_empty` passes.\n"
+R2_ACC = f"- R2: `{PY} -m unittest test_greet.GreetTests.test_empty` passes.\n"
 
 
 class SpecAnalysisTests(LifecycleCase):
@@ -705,9 +725,6 @@ class SpecAnalysisTests(LifecycleCase):
         spec.write_text(SPEC.replace(R2_ACC, ""))
         self.fails("stage", "intent", "--ref", "spec.md", "--approved-by", "human:me", message="R2 has no acceptance check under '## Acceptance'")
         self.assertIn("R2 has no acceptance check under '## Acceptance'", self.run_cli("analyze", "spec.md")[1])
-
-
-PY = shlex.quote(sys.executable)
 
 
 class ConvergeTests(LifecycleCase):
@@ -874,7 +891,7 @@ class ConvergeTests(LifecycleCase):
         self.ok("stage", "intent", "--note", "queue:T1", "--approved-by", "human:me")
         self.ok("stage", "plan", "--note", "queue:T1")
         self.ok("stage", "review", "--ref", "review.md")
-        self.ok("run", "unit", "--", PY, "-c", "pass")  # The queue intent has no converge run, so the ledger must supply the evidence.
+        self.ok("run", "unit", "--", sys.executable, "-c", "pass")  # The queue intent has no converge run, so the ledger must supply the evidence.
         self.ok("retrospect", "--no-new-lessons", "The queue fixture adds no new project lessons.")
         self.ok("stage", "verify", "--note", "ran")
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import io
 import json
 import os
@@ -16,6 +17,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 
@@ -55,21 +57,72 @@ def worker(start: Path, name: str, result_path: Path) -> int:
         "errors": [[test.id(), trace] for test, trace in result.errors],
         "unexpected": [test.id() for test in result.unexpectedSuccesses],
         "skipped": len(result.skipped),
-    }))
+    }), encoding='utf-8')
     return 0
 
 
-def run_group(start: Path, name: str, expected: int) -> dict:
+def tree_fingerprint(start: Path) -> str:
+    """Digest of every file the suite can depend on: the .ai tree, .github, and the test directory."""
+    ai = Path(__file__).resolve().parents[1]
+    digest = hashlib.sha256()
+    for top in (ai, ai.parent / ".github", start):
+        for path in sorted(top.rglob("*")) if top.is_dir() else ():
+            if path.is_file() and "__pycache__" not in path.parts:
+                digest.update(str(path.relative_to(top.parent)).encode() + b"\0" + path.read_bytes() + b"\0")
+    return digest.hexdigest()
+
+
+class Resume:
+    """Opt-in AGENTIC_TEST_RESUME=FILE: skip classes that already passed on exactly this tree, so an
+    interrupted run restarts at the class in flight. Without the variable nothing is read or written."""
+
+    def __init__(self, start: Path):
+        value = os.environ.get('AGENTIC_TEST_RESUME')
+        self.path = Path(value) if value else None
+        self.lock = threading.Lock()
+        self.passed: dict[str, dict] = {}
+        if self.path:
+            self.fingerprint = tree_fingerprint(start)
+            try:
+                saved = json.loads(self.path.read_text(encoding='utf-8'))
+                if saved.get("fingerprint") == self.fingerprint:
+                    self.passed = saved["passed"]
+            except (OSError, ValueError, KeyError):
+                pass
+
+    def record(self, name: str, result: dict) -> None:
+        if self.path and not (result["failures"] or result["errors"] or result["unexpected"]):
+            with self.lock:
+                self.passed[name] = result
+                self.path.write_text(json.dumps({"fingerprint": self.fingerprint, "passed": self.passed}),
+                                     encoding='utf-8')
+
+
+def run_group(start: Path, name: str, expected: int, resume: Resume | None = None) -> dict:
+    progress = os.environ.get('AGENTIC_TEST_PROGRESS') == '1'
+    if resume and name in resume.passed:
+        if progress:
+            print(f'RESUMED {name}', flush=True)
+        return resume.passed[name]
+    if progress:
+        print(f'START {name}', flush=True)
     with tempfile.TemporaryDirectory() as tmp:
         result_path = Path(tmp) / "result.json"
         process = subprocess.run(
             [sys.executable, str(Path(__file__).resolve()), "-s", str(start), "--worker", name, "--result", str(result_path)],
-            capture_output=True, text=True, errors="replace")
+            capture_output=True, text=True, encoding='utf-8', errors="replace")
         if result_path.is_file():
-            return json.loads(result_path.read_text())
-    output = (process.stdout + process.stderr)[-4000:]
-    return {"run": expected, "failures": [], "errors": [[name, f"worker exited {process.returncode}\n{output}"]],
-            "unexpected": [], "skipped": 0}
+            result = json.loads(result_path.read_text(encoding='utf-8'))
+        else:
+            output = (process.stdout + process.stderr)[-4000:]
+            result = {"run": expected, "failures": [], "errors": [[name, f"worker exited {process.returncode}\n{output}"]],
+                      "unexpected": [], "skipped": 0}
+    if resume:
+        resume.record(name, result)
+    if progress:
+        print(f'FINISH {name}: run={result["run"]} failures={len(result["failures"])} '
+              f'errors={len(result["errors"])} unexpected={len(result["unexpected"])}', flush=True)
+    return result
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -89,8 +142,9 @@ def main(argv: list[str] | None = None) -> int:
     began = time.monotonic()
     counts = groups(start)
     names = sorted(counts, key=lambda n: -counts[n])  # Larger classes first shortens the tail.
+    resume = Resume(start)
     with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
-        results = list(pool.map(lambda n: run_group(start, n, counts[n]), names))
+        results = list(pool.map(lambda n: run_group(start, n, counts[n], resume), names))
 
     run = sum(r["run"] for r in results)
     failures = [f for r in results for f in r["failures"]]
@@ -111,4 +165,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    import process_runtime
+    process_runtime.configure_windows_environment()
     sys.exit(main())

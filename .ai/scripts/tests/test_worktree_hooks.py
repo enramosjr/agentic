@@ -16,10 +16,27 @@ import disk_tmp  # noqa: F401
 SCRIPTS = Path(__file__).resolve().parents[1]
 
 
+def quote_directory(value: str) -> str:
+    return '"' + value + '"' if os.name == 'nt' else shlex.quote(value)
+
+
+class DriveRelativeSpellingTests(unittest.TestCase):
+    def test_windows_drive_relative_spelling_is_rejected_before_joining(self):
+        from unittest import mock
+        sys.path.insert(0, str(SCRIPTS))
+        import pr_hook
+        with mock.patch.object(pr_hook.os, 'name', 'nt'):
+            for value in ('C:', 'C:.', 'C:relative', 'd:relative\\child'):
+                with self.subTest(value=value), self.assertRaisesRegex(pr_hook.RoutingError, 'drive-relative'):
+                    pr_hook.check_directory_spelling(value, 'test directory')
+            for value in ('.', '..', 'relative', r'C:\fully\qualified', r'\\server\share\path'):
+                pr_hook.check_directory_spelling(value, 'test directory')
+
+
 class WorktreeHookTests(unittest.TestCase):
     def setUp(self) -> None:
         self.base = Path(tempfile.mkdtemp()).resolve()
-        self.addCleanup(shutil.rmtree, self.base)
+        self.addCleanup(disk_tmp.remove_tree, self.base)
         self.outer, self.target = self.base / 'outer', self.base / 'target'
         self.outer.mkdir()
         self.env = dict(os.environ)
@@ -175,13 +192,13 @@ class WorktreeHookTests(unittest.TestCase):
         self.ready(self.target)
         for tool in ('Bash', 'Shell'):
             for verb in ('create', 'ready'):
-                data = self.payload(f'cd {shlex.quote(str(self.target))} && gh pr {verb}')
+                data = self.payload(f'cd {quote_directory(str(self.target))} && gh pr {verb}')
                 data['tool_name'] = tool
                 self.decision(data, False, CLAUDE_PROJECT_DIR=str(self.outer))
         self.ready(self.outer)
         self.git(self.target, 'switch', '-qc', 'unready-pr-target')
         output = self.decision(self.payload(f'cd {self.target} && gh pr create'), True)
-        self.assertIn(str(self.target), output)
+        self.assertIn(str(self.target), json.loads(output)['hookSpecificOutput']['permissionDecisionReason'])
 
     def test_quoted_pr_examples_are_not_shipping_commands(self) -> None:
         sys.path.insert(0, str(SCRIPTS))
@@ -202,10 +219,15 @@ class WorktreeHookTests(unittest.TestCase):
         self.ready(self.target)
         spaced = self.base / 'target with spaces'
         self.git(self.outer, 'worktree', 'move', str(self.target), str(spaced))
-        executable = self.base / 'bin' / 'gh'
+        executable = self.base / 'bin' / ('gh.cmd' if os.name == 'nt' else 'gh')
         executable.parent.mkdir()
-        executable.write_text('#!' + sys.executable + '\nimport os\nfrom pathlib import Path\n'
-                              'Path(os.environ["PR_PROBE"]).write_text(os.getcwd())\n')
+        probe = 'import os\nfrom pathlib import Path\nPath(os.environ["PR_PROBE"]).write_text(os.getcwd())\n'
+        if os.name == 'nt':
+            script = executable.with_suffix('.py')
+            script.write_text(probe)
+            executable.write_text(f'@"{sys.executable}" "{script}" %*\n')
+        else:
+            executable.write_text('#!' + sys.executable + '\n' + probe)
         executable.chmod(0o755)
         result_path = self.base / 'execution-directory'
         env = {**self.env, 'PATH': str(executable.parent) + os.pathsep + self.env['PATH'],
@@ -213,7 +235,7 @@ class WorktreeHookTests(unittest.TestCase):
         for directory, workdir in [(str(spaced), None), ('../target with spaces', None),
                                    ('../target with spaces', str(self.outer)), ('.', str(spaced))]:
             with self.subTest(directory=directory, workdir=workdir):
-                command = f'cd {shlex.quote(directory)} && gh pr create --title "literal ; && text"'
+                command = f'cd {quote_directory(directory)} && gh pr create --title "literal ; && text"'
                 payload = self.payload(command, **({'workdir': workdir} if workdir else {}))
                 self.decision(payload, False)
                 subprocess.run(command, shell=True, cwd=workdir or self.outer, env=env,
@@ -228,7 +250,14 @@ class WorktreeHookTests(unittest.TestCase):
         commands = [f'cd {directory} && gh pr create' for directory in
                     ("''", str(self.base / 'missing'), str(self.outer / 'app.py'), str(plain),
                      '"$HOME"', '$(pwd)', '`pwd`')]
-        commands += [f'cd {self.outer} {operator} gh pr create' for operator in (';', '||', '|', '&', '\n')]
+        commands += [f'cd {self.outer} {operator} gh pr create' for operator in ('||', '|', '&')]
+        if os.name == 'nt':
+            # Literal native directory prefixes are supported. Extra commands
+            # between the directory change and PR remain unsupported routing.
+            commands += [f'cd {self.outer} {operator} git status {operator} gh pr create'
+                         for operator in (';', '\n')]
+        else:
+            commands += [f'cd {self.outer} {operator} gh pr create' for operator in (';', '\n')]
         commands += [f'cd {self.outer} && gh pr create && true',
                      f'true && cd {self.outer} && gh pr ready',
                      f'cd {self.outer} && cd . && gh pr create',
@@ -238,6 +267,104 @@ class WorktreeHookTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertIn('routing', self.decision(self.payload(command), True))
         self.assertEqual(self.git(self.outer, 'status', '--porcelain'), before)
+
+    def test_literal_paths_keep_trailing_separator_and_apostrophe(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import pr_hook
+        self.ready(self.target)
+        selected = self.base / "target's directory"
+        self.git(self.outer, 'worktree', 'move', str(self.target), str(selected))
+        for directory in (str(selected), str(selected) + os.sep):
+            literals = [quote_directory(directory)]
+            if os.name == 'nt':
+                literals.append("'" + directory.replace("'", "''") + "'")
+            for literal in literals:
+                with self.subTest(literal=literal):
+                    command = f'cd {literal} && gh pr create'
+                    invocation = pr_hook.recognize(command)
+                    self.assertIsNotNone(invocation)
+                    self.assertEqual(invocation.directory, directory)
+                    self.decision(self.payload(command), False)
+
+    def test_git_target_dynamic_spelling_cannot_select_a_literal_dollar_path(self) -> None:
+        self.ready(self.target)
+        selected = self.base / '$selected'
+        self.git(self.outer, 'worktree', 'move', str(self.target), str(selected))
+        self.decision(self.payload(f'git -C "{selected}" commit -m fixture'), True)
+        self.decision(self.payload(f"git -C '{selected}' commit -m fixture"), False)
+
+    @unittest.skipUnless(os.name == 'nt', 'native short-name namespace contract')
+    def test_native_short_name_alias_keeps_actual_worktree_shipping_gates(self) -> None:
+        import ctypes
+        from ctypes import wintypes
+        renamed = self.base / 'my-dir long worktree'
+        self.git(self.outer, 'worktree', 'move', str(self.target), str(renamed))
+        self.target = renamed
+        self.ready(self.target)
+        alias = self.base / 'LK-DIR~1'
+        disk_tmp.directory_link(alias, self.target)
+        self.assertEqual(alias.resolve(), self.target.resolve())
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.GetShortPathNameW.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+        kernel.GetShortPathNameW.restype = wintypes.DWORD
+        size = kernel.GetShortPathNameW(str(self.target), None, 0)
+        self.assertGreater(size, 0, ctypes.get_last_error())
+        buffer = ctypes.create_unicode_buffer(size)
+        self.assertGreater(kernel.GetShortPathNameW(str(self.target), buffer, size), 0)
+        spellings = {alias, Path(buffer.value)}
+        # Volumes may disable creation of new DOS aliases. The junction still
+        # exercises an unquoted short-name component; retain the API's real path.
+        def literal(path):
+            value = str(path)
+            return "'" + value.replace("'", "''") + "'" if any(c.isspace() for c in value) else value
+        for selected in spellings:
+            with self.subTest(selected=str(selected)):
+                actual = self.git(selected, 'rev-parse', '--show-toplevel')
+                self.assertEqual(Path(actual).resolve(), self.target.resolve())
+                self.decision(self.payload(f'git -C {literal(selected)} commit -m fixture'), False)
+                self.decision(self.payload(f'cd {literal(selected)} && gh pr create'), False)
+        self.git(self.target, 'switch', '-qc', 'short-alias-unready')
+        for selected in spellings:
+            self.decision(self.payload(f'git -C {literal(selected)} commit -m fixture'), True)
+            self.decision(self.payload(f'cd {literal(selected)} && gh pr create'), True)
+
+    def test_native_git_executable_spelling_keeps_commit_gates(self) -> None:
+        self.ready(self.target)
+        executable = shutil.which('git')
+        commands = ([f"& '{executable}' commit -m fixture", 'git.exe commit -m fixture']
+                    if os.name == 'nt' else [f'{shlex.quote(executable)} commit -m fixture'])
+        for command in commands:
+            with self.subTest(command=command):
+                self.decision(self.payload(command, workdir=str(self.target)), False)
+                self.decision(self.payload(command, workdir=str(self.outer)), True)
+
+    def test_native_pr_executable_spelling_keeps_shipping_gates(self) -> None:
+        self.ready(self.target)
+        commands = ([r'& "C:\Program Files\GitHub CLI\gh.exe" pr create', 'gh.exe pr ready']
+                    if os.name == 'nt' else ['gh pr create', 'gh pr ready'])
+        for command in commands:
+            with self.subTest(command=command):
+                self.decision(self.payload(command, workdir=str(self.target)), False)
+                self.decision(self.payload(command, workdir=str(self.outer)), True)
+
+    def test_drive_relative_selectors_cannot_authorize_pr_commit_or_edit(self) -> None:
+        if os.name != 'nt':
+            # A colon is a literal filename on POSIX, never a drive selector.
+            self.ready(self.target)
+            disk_tmp.directory_link(self.outer / 'C:relative', self.target)
+            self.decision(self.payload('cd C:relative && gh pr create'), False)
+            return
+        self.ready(self.outer)
+        relative = self.outer.drive + '.'
+        for command, inputs in ((f'cd {relative} && gh pr create', {}),
+                                ('gh pr ready', {'workdir': relative}),
+                                (f'git -C {relative} commit -m fixture', {}),
+                                ('git commit -m fixture', {'workdir': relative})):
+            with self.subTest(command=command, inputs=inputs):
+                self.assertIn('drive-relative', self.decision(self.payload(command, **inputs), True))
+        edit = {'hook_event_name': 'PreToolUse', 'tool_name': 'Edit', 'cwd': str(self.outer),
+                'tool_input': {'file_path': 'app.py', 'workdir': relative}}
+        self.assertIn('drive-relative', self.decision(edit, True))
 
     def test_pr_review_checks_use_selected_target(self) -> None:
         sys.path.insert(0, str(SCRIPTS))
@@ -284,9 +411,10 @@ class WorktreeHookTests(unittest.TestCase):
         nested = self.target / 'nested'
         nested.mkdir()
         link = self.outer / 'link'
-        link.symlink_to(nested, target_is_directory=True)
+        disk_tmp.directory_link(link, nested)
         directory = str(link / '..')
-        result = subprocess.run(f'cd {shlex.quote(directory)} && pwd -P', shell=True,
+        pwd = 'cd' if os.name == 'nt' else 'pwd -P'
+        result = subprocess.run(f'cd {quote_directory(directory)} && {pwd}', shell=True,
                                 cwd=self.outer, env=self.env, capture_output=True,
                                 text=True, check=True, timeout=10)
         self.assertEqual(result.stdout.strip(), str(self.outer))
@@ -294,16 +422,18 @@ class WorktreeHookTests(unittest.TestCase):
             self.assertIn('routing', self.decision(self.payload(f'cd {directory} && gh pr create'), True))
 
         selected = self.outer / 'selected'
-        selected.symlink_to(self.target, target_is_directory=True)
+        disk_tmp.directory_link(selected, self.target)
         search = self.base / 'cdpath'
         alternate = search / 'selected'
         alternate.mkdir(parents=True)
         self.git(alternate, 'init', '-q')
         environment = {**self.env, 'CDPATH': str(search)}
-        result = subprocess.run('cd selected && pwd -P', shell=True, cwd=self.outer,
+        result = subprocess.run(f'cd selected && {pwd}', shell=True, cwd=self.outer,
                                 env=environment, capture_output=True, text=True,
                                 check=True, timeout=10)
-        self.assertEqual(result.stdout.splitlines()[-1], str(alternate))
+        # cmd does not implement CDPATH; its native relative cd uses the local
+        # directory alias. The hook still refuses inherited ambiguous selectors.
+        self.assertEqual(result.stdout.splitlines()[-1], str(selected if os.name == 'nt' else alternate))
         with self.subTest(ambiguity='CDPATH'):
             self.assertIn('routing', self.decision(self.payload('cd selected && gh pr ready'),
                                                   True, CDPATH=str(search)))
@@ -313,7 +443,7 @@ class WorktreeHookTests(unittest.TestCase):
                                                   env={'CDPATH': str(search)}), True))
         # A valid inherited logical PWD can also change the meaning of '..'.
         alias = nested / 'logical-outer'
-        alias.symlink_to(self.outer, target_is_directory=True)
+        disk_tmp.directory_link(alias, self.outer)
         with self.subTest(ambiguity='logical-PWD'):
             self.assertIn('routing', self.decision(self.payload('cd .. && gh pr create'),
                                                   True, PWD=str(alias)))

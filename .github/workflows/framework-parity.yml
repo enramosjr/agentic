@@ -1,0 +1,88 @@
+name: Framework parity
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: framework-parity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows_preflight:
+    name: Windows preflight / Python ${{ matrix.python }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.9', '3.15']
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUTF8: '1'
+      PYTHONPATH: .ai/scripts/tests
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Brownfield compatibility
+        id: brownfield
+        continue-on-error: true
+        run: python -m unittest -v test_brownfield_deltas.CompatibilityTests
+      - name: Read-only review contracts
+        id: review
+        continue-on-error: true
+        run: python -m unittest -v test_review_enforcement.ReadOnlyTests
+      - name: Evaluation outcome contracts
+        id: evaluation
+        continue-on-error: true
+        run: python -m unittest -v test_lifecycle_eval.OutcomeTests
+      - name: Onboarding contracts
+        id: onboarding
+        continue-on-error: true
+        run: python -m unittest -v test_onboard.OnboardE2ETests
+      - name: Native Codex hooks
+        id: hooks
+        continue-on-error: true
+        run: python -m unittest -v test_windows_hooks.NativeWindowsHookTests
+      - name: Detached process supervision
+        id: background
+        continue-on-error: true
+        run: python -m unittest -v test_wait_check.WaitCheckTests
+      - name: Package selection contracts
+        id: selection
+        continue-on-error: true
+        run: python -m unittest -v test_qualification_speed.SelectionTests
+      - name: Require every preflight to pass
+        if: always() && (steps.brownfield.outcome != 'success' || steps.review.outcome != 'success' || steps.evaluation.outcome != 'success' || steps.onboarding.outcome != 'success' || steps.hooks.outcome != 'success' || steps.background.outcome != 'success' || steps.selection.outcome != 'success')
+        run: exit 1
+  regressions:
+    needs: windows_preflight
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.9', '3.15']
+    env:
+      AGENTIC_TEST_PROGRESS: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Complete framework regressions
+        run: python .ai/scripts/run_tests.py -j 4

@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from functools import wraps
 import hashlib
 import json
+import ntpath
 import os
 from pathlib import Path
 import re
@@ -24,6 +25,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ledger
 import scratch
+import process_runtime
 
 LEASE_ENV = '_AGENTIC_REVIEW_PRODUCER'
 VERSION = 1
@@ -36,7 +38,7 @@ class ReviewError(ValueError):
 def directory(root: Path) -> Path:
     identity = hashlib.sha256(os.fsencode(str(root.resolve()))).hexdigest()
     common = subprocess.check_output(['git', '-C', str(root), 'rev-parse', '--path-format=absolute',
-                                      '--git-common-dir'], env=git_environment(), text=True,
+                                      '--git-common-dir'], env=git_environment(), text=True, encoding='utf-8',
                                      stderr=subprocess.PIPE).strip()
     try:
         return scratch.require_disk(Path(common) / 'okf-scratch' / 'review' / identity)
@@ -46,7 +48,22 @@ def directory(root: Path) -> Path:
 
 def git_environment() -> dict:
     # Namespace discovery follows the physical target, not a caller's Git override.
-    return {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
+    values = {key: value for key, value in os.environ.items() if not key.startswith('GIT_')}
+    # Codex's Windows sandbox supplies explicit repository trust through Git's
+    # config environment. Preserve only that trust, never namespace redirects.
+    try:
+        count = int(os.environ.get('GIT_CONFIG_COUNT', '0'))
+    except ValueError:
+        count = 0
+    trusted = [os.environ[f'GIT_CONFIG_VALUE_{n}'] for n in range(count)
+               if os.environ.get(f'GIT_CONFIG_KEY_{n}', '').lower() == 'safe.directory'
+               and f'GIT_CONFIG_VALUE_{n}' in os.environ]
+    if trusted:
+        values['GIT_CONFIG_COUNT'] = str(len(trusted))
+        for n, directory in enumerate(trusted):
+            values[f'GIT_CONFIG_KEY_{n}'] = 'safe.directory'
+            values[f'GIT_CONFIG_VALUE_{n}'] = directory
+    return values
 
 
 def atomic(path: Path, value: dict) -> None:
@@ -106,27 +123,8 @@ def read(root: Path) -> dict:
 
 @contextmanager
 def lock(root: Path):
-    base = directory(root)
-    base.mkdir(parents=True, exist_ok=True)
-    with (base / 'guard.lock').open('a+b') as stream:
-        if os.name == 'nt':
-            import msvcrt
-            if not stream.tell():
-                stream.write(b'\0')
-                stream.flush()
-            stream.seek(0)
-            msvcrt.locking(stream.fileno(), msvcrt.LK_LOCK, 1)
-        else:
-            import fcntl
-            fcntl.flock(stream, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            if os.name == 'nt':
-                stream.seek(0)
-                msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                fcntl.flock(stream, fcntl.LOCK_UN)
+    with process_runtime.file_lock(directory(root) / 'guard.lock'):
+        yield
 
 
 @contextmanager
@@ -139,10 +137,15 @@ def transaction(root: Path):
 
 def identity(pid: int | None = None) -> dict:
     pid = os.getpid() if pid is None else pid
+    if os.name == 'nt':
+        try:
+            return process_runtime.identity(pid)
+        except (OSError, ValueError):
+            return {'pid': pid, 'birth': None}
     birth = None
     try:
         # comm may contain spaces and parentheses; fields after its final ')' are stable.
-        birth = Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[19]
+        birth = Path(f'/proc/{pid}/stat').read_text(encoding='utf-8').rsplit(')', 1)[1].split()[19]
     except (OSError, IndexError):
         pass
     return {'pid': pid, 'birth': birth}
@@ -153,9 +156,7 @@ def stopped(process: dict) -> bool:
             or process['pid'] <= 0):
         raise ReviewError('invalid producer process identity')
     if os.name == 'nt':
-        # Unlike POSIX, os.kill(pid, 0) terminates on Windows. This adapter has
-        # no supported Windows lifetime proof: preserve unresolved ownership.
-        return False
+        return not process_runtime.alive(process['pid'], process.get('birth'))
     pid = process['pid']
     try:
         os.kill(pid, 0)
@@ -183,6 +184,12 @@ def borrowers_quiet(path: Path) -> bool:
             if not stopped(value.get('process')):
                 return False
             if value.get('group') is not None and not group_stopped(value['group']):
+                return False
+        if value.get('tree') is not None:
+            try:
+                if not process_runtime.tree_stopped(value['tree']):
+                    return False
+            except (OSError, ValueError):
                 return False
     return True
 
@@ -237,7 +244,7 @@ def borrow(root: Path, descriptor: dict, *, group=False):
         # Registration precedes the second owner read. Owner closes grants before
         # enumerating borrowers, so neither race can grant effects after release.
         validate_owner(root, descriptor)
-        yield
+        yield (registration, record)
     finally:
         atomic(registration, {**record, 'phase': 'done'})
 
@@ -371,7 +378,7 @@ def enable(root: Path, task: str, adapter: str, session: str, report: str) -> No
         value['request'] = {'task': task, 'adapter': adapter, 'session': session,
                             'report': report, 'phase': 'awaiting-native-review'}
         if (root / report).is_file():
-            value['request']['pending_sha256'] = report_hash((root / report).read_text())
+            value['request']['pending_sha256'] = report_hash((root / report).read_text(encoding='utf-8'))
         value['interval'] = None
         base = directory(root)
         atomic(base.parent.parent / 'review-expectations' / (base.name + '.json'),
@@ -620,7 +627,7 @@ def git_root(target: Path) -> Path | None:
     while not probe.exists() and probe.parent != probe:
         probe = probe.parent
     result = subprocess.run(['git', '-C', str(probe if probe.is_dir() else probe.parent),
-                             'rev-parse', '--show-toplevel'], env=git_environment(), capture_output=True, text=True)
+                             'rev-parse', '--show-toplevel'], env=git_environment(), capture_output=True, text=True, encoding='utf-8')
     if result.returncode:
         return None
     return Path(result.stdout.strip()).resolve()
@@ -652,40 +659,130 @@ GIT_WRITERS = frozenset({'commit', 'merge', 'reset', 'checkout', 'switch', 'fetc
     'add', 'rm', 'mv', 'restore', 'clean', 'apply', 'checkout-index', 'update-index', 'read-tree'})
 
 
+class _ShellWord(str):
+    def __new__(cls, value, *, raw, dynamic, operator=False):
+        result = str.__new__(cls, value)
+        result.raw, result.dynamic, result.operator = raw, dynamic, operator
+        return result
+
+
+def _dynamic_word(word):
+    return getattr(word, 'dynamic', any(character in word for character in ('$', '`')))
+
+
+def _check_path_spelling(value, label):
+    import pr_hook
+    try:
+        pr_hook.check_directory_spelling(value, label)
+    except pr_hook.RoutingError as error:
+        raise ReviewError(str(error)) from error
+
+
 def git_invocations(command: str, cwd: Path, environment: dict) -> list[dict]:
     """Recognize literal Git segments; leave arbitrary programs outside this boundary."""
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=';&|')
-    lexer.whitespace_split, lexer.commenters = True, ''
     try:
-        tokens = list(lexer)
+        import pr_hook
+        tokens, offset = [], 0
+        pattern = pr_hook.WINDOWS_TOKEN if os.name == 'nt' else pr_hook.TOKEN
+        for match in pattern.finditer(command):
+            if command[offset:match.start()].strip():
+                raise ValueError('invalid literal syntax')
+            raw, offset = match.group(), match.end()
+            operator = raw in pr_hook.OPERATORS
+            decoded = [raw] if operator else pr_hook.split_words(raw)
+            if len(decoded) != 1:
+                raise ValueError('invalid literal token')
+            tokens.append(_ShellWord(decoded[0], raw=raw, dynamic=pr_hook._dynamic(raw), operator=operator))
+        if command[offset:].strip():
+            raise ValueError('invalid literal syntax')
     except ValueError as failure:
         raise ReviewError('unsupported shell syntax for Git routing; use a literal git command') from failure
     segments, current = [], []
     for word in tokens:
-        if word in (';', '&&', '||'):
+        if word.operator and word in (';', '&&', '||', '\n'):
             segments.append(current)
             current = []
         else:
             current.append(word)
     segments.append(current)
     result = []
+    _check_path_spelling(str(cwd), 'Git command cwd')
+    shell_environment = {key.upper(): value for key, value in environment.items()} if os.name == 'nt' else dict(environment)
+    unknown_environment = set()
+    directory_stack = []
     for words in segments:
         if not words:
             continue
-        env, words = dict(environment), list(words)
-        if words[0] == 'cd' and len(words) == 2:
-            if any(char in words[1] for char in ('$','`')):
+        env, words = dict(shell_environment), list(words)
+        if os.name == 'nt' and words[0].lower().startswith('$env:'):
+            assignment = words[0][5:]
+            if '=' in assignment and len(words) == 1:
+                key, _, value = assignment.partition('=')
+                dynamic = pr_hook._dynamic(words[0].raw.partition('=')[2])
+            elif len(words) == 3 and words[1] == '=':
+                key, value = assignment, words[2]
+                dynamic = _dynamic_word(value)
+            else:
+                key, value, dynamic = assignment.partition('=')[0], None, True
+            if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', key):
+                raise ReviewError('unsupported native environment assignment; use a literal Git selector')
+            key = key.upper()
+            if dynamic:
+                if key.startswith('GIT_'):
+                    raise ReviewError('dynamic Git environment routing is unsupported; use literal selectors')
+                unknown_environment.add(key)
+                shell_environment.pop(key, None)
+                continue
+            unknown_environment.discard(key)
+            if value:
+                shell_environment[key] = _ShellWord(value, raw=str(value), dynamic=False)
+            else:
+                shell_environment.pop(key, None)
+            continue
+        if os.name == 'nt' and words[0].lower() in ('remove-item', 'rm', 'del', 'erase'):
+            operands = [word for word in words[1:] if word.lower() not in ('-literalpath', '-path')]
+            if len(operands) == 1 and re.fullmatch(r'(?i)env:[A-Za-z_][A-Za-z0-9_]*', operands[0]):
+                key = operands[0][4:].upper()
+                shell_environment.pop(key, None)
+                unknown_environment.discard(key)
+                continue
+        if os.name == 'nt' and any(re.search(r'(?i)(?:\$env:|env:|\b)GIT_[A-Za-z_]+(?:=|\b)', word)
+                                   for word in words) and not any(ntpath.basename(word).lower() in ('git', 'git.exe') for word in words):
+            raise ReviewError('unsupported native Git environment routing; use literal $env assignments or tool env')
+        location = words[0].lower() if os.name == 'nt' else words[0]
+        changes = ('cd', 'chdir', 'sl', 'set-location') if os.name == 'nt' else ('cd',)
+        pushes = ('pushd', 'push-location') if os.name == 'nt' else ('pushd',)
+        pops = ('popd', 'pop-location') if os.name == 'nt' else ('popd',)
+        if location in (*changes, *pushes, *pops):
+            arguments = list(words[1:])
+            if location in pops:
+                if arguments or not directory_stack:
+                    raise ReviewError('unproved shell directory stack; use tool workdir or literal git -C')
+                cwd = directory_stack.pop()
+                continue
+            if os.name == 'nt' and arguments and arguments[0].lower() in ('-literalpath', '-path'):
+                arguments.pop(0)
+            if len(arguments) != 1 or arguments[0].startswith('-'):
+                raise ReviewError('unsupported shell directory change; use one literal path, tool workdir or git -C')
+            if _dynamic_word(arguments[0]):
                 raise ReviewError('dynamic shell directory is unsupported; use tool workdir or literal git -C')
-            cwd = (cwd / Path(words[1]).expanduser()).resolve()
+            _check_path_spelling(arguments[0], 'shell directory')
+            if location in pushes:
+                directory_stack.append(cwd)
+            cwd = (cwd / Path(arguments[0]).expanduser()).resolve()
             continue
         while words and words[0] in ('command', 'env'):
             words.pop(0)
-        if words and words[0].startswith('-') and any(Path(word).name in ('git', 'git.exe') for word in words):
+        if os.name == 'nt' and words[:1] == ['&']:
+            words.pop(0)
+        basename = (lambda word: ntpath.basename(word).lower()) if os.name == 'nt' else lambda word: Path(word).name
+        if words and words[0].startswith('-') and any(basename(word) in ('git', 'git.exe') for word in words):
             raise ReviewError('unsupported Git command wrapper options; use literal env assignments or git -C')
         while words and re.match(r'^[A-Za-z_][A-Za-z0-9_]*=', words[0]):
-            key, _, value = words.pop(0).partition('=')
-            env[key] = value
-        if not words or Path(words[0]).name not in ('git', 'git.exe'):
+            assignment = words.pop(0)
+            key, _, value = assignment.partition('=')
+            env[key] = _ShellWord(value, raw=assignment.raw, dynamic=assignment.dynamic)
+        if not words or basename(words[0]) not in ('git', 'git.exe'):
             continue
         executable, prefix = words.pop(0), []
         while words and words[0].startswith('-'):
@@ -705,10 +802,29 @@ def git_invocations(command: str, cwd: Path, environment: dict) -> list[dict]:
                 raise ReviewError('unsupported Git global option; use a literal checkout or git -C')
         if not words:
             continue
+        for n, word in enumerate(prefix):
+            if word in ('-C', '--git-dir', '--work-tree'):
+                _check_path_spelling(prefix[n + 1], 'Git directory selector')
+            elif word.startswith('-C') and len(word) > 2:
+                _check_path_spelling(word[2:], 'Git directory selector')
+            elif word.startswith(('--git-dir=', '--work-tree=')):
+                _check_path_spelling(word.partition('=')[2], 'Git directory selector')
+            elif word == '--config-env' or word.startswith('--config-env='):
+                config = prefix[n + 1] if word == '--config-env' else word.partition('=')[2]
+                name, separator, variable = config.partition('=')
+                key = variable.upper() if os.name == 'nt' else variable
+                if (not separator or not variable or key in unknown_environment
+                        or isinstance(env.get(key), _ShellWord) and env[key].dynamic):
+                    raise ReviewError('unproved --config-env value; use a literal environment assignment or git -C')
+                if name.lower() == 'core.worktree' and key in env:
+                    _check_path_spelling(env[key], 'Git config-env worktree')
+        for key in GIT_TARGET_ENV:
+            if key in env:
+                _check_path_spelling(env[key], key)
         verb, arguments = words[0], words[1:]
         if verb in GIT_WRITERS and (any(w in ('|','&') for w in arguments) or
-                any(char in word for word in [executable, *prefix, *[env[k] for k in GIT_TARGET_ENV if k in env]]
-                    for char in ('$','`'))):
+                any(_dynamic_word(word) for word in [executable, *prefix,
+                    *[env[k] for k in GIT_TARGET_ENV if k in env]])):
             raise ReviewError('dynamic Git target routing is unsupported; use literal workdir/selector values')
         result.append({'executable': executable, 'prefix': prefix, 'env': env,
                        'cwd': cwd, 'verb': verb, 'arguments': arguments})
@@ -719,7 +835,7 @@ def git_probe(invocation: dict, arguments: list[str]) -> list[str]:
     env = {**invocation['env'], 'GIT_TERMINAL_PROMPT': '0', 'GIT_PAGER': 'cat'}
     try:
         result = subprocess.run([invocation['executable'], *invocation['prefix'], '--no-pager', *arguments],
-            cwd=invocation['cwd'], env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=5)
+            cwd=invocation['cwd'], env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding='utf-8', timeout=5)
     except (OSError, subprocess.TimeoutExpired) as failure:
         raise ReviewError('Git target metadata probe unavailable; mutation refused') from failure
     if result.returncode:
@@ -811,13 +927,17 @@ def lifecycle_root_help(command: str) -> bool:
     if any(character in command for character in ('$','`','\n','\r')):
         return False
     try:
-        words = shlex.split(command)
+        import pr_hook
+        words = pr_hook.split_words(command)
     except ValueError:
         return False
     if len(words) != 3 or words[2] not in ('--help', '-h'):
         return False
     script = Path(words[1])
-    return (re.fullmatch(r'python(?:\d+(?:\.\d+)*)?(?:\.exe)?', Path(words[0]).name) is not None
+    executable = Path(words[0]).name
+    if os.name == 'nt':
+        executable = executable.lower()
+    return (re.fullmatch(r'python(?:\d+(?:\.\d+)*)?(?:\.exe)?', executable) is not None
             and script in (Path('.ai/scripts/lifecycle.py'), Path(__file__).with_name('lifecycle.py')))
 
 
@@ -837,11 +957,13 @@ def command_mutates(command: str) -> bool:
         if re.search(r'\bgit\b', command) and any(re.search(r'\b' + re.escape(verb) + r'\b', command) for verb in GIT_WRITERS):
             return True
     try:
-        tokens = shlex.split(command)
+        tokens = pr_hook.split_words(command)
     except ValueError:
         tokens = command.split()
     for index, token in enumerate(tokens):
         name = Path(token).name
+        if os.name == 'nt':
+            name = name.lower()
         remaining = tokens[index + 1:]
         if name in ('lifecycle.py', 'okf.py'):
             if name == 'okf.py' and remaining[:1] == ['--bundle']:
@@ -890,11 +1012,14 @@ def operation_roots(data: dict) -> list[Path]:
                 return [pr_hook.operation(data, invocation)[1]]
         except pr_hook.RoutingError as error:
             raise ReviewError(str(error)) from error
-    base = Path(data.get('cwd') or os.getcwd()).expanduser()
+    cwd = data.get('cwd') or os.getcwd()
+    _check_path_spelling(cwd, 'session cwd')
+    base = Path(cwd).expanduser()
     if 'workdir' in values:
         workdir = values['workdir']
         if not isinstance(workdir, str) or not workdir.strip():
             raise ReviewError('invalid tool_input.workdir: provide a non-empty directory path inside a Git worktree')
+        _check_path_spelling(workdir, 'tool_input.workdir')
         base = (base / Path(workdir).expanduser()).resolve()
         if not base.is_dir() or git_root(base) is None:
             raise ReviewError('invalid tool_input.workdir: select an existing Git worktree directory')
@@ -914,13 +1039,15 @@ def operation_roots(data: dict) -> list[Path]:
                 paths.extend(base / Path(name).expanduser() for name in pair if name)
     else:
         try:
-            tokens = shlex.split(values.get('command') or data.get('command') or '')
+            tokens = pr_hook.split_words(values.get('command') or data.get('command') or '')
         except ValueError:
             tokens = []
         selected_roots = git_operation_roots(values.get('command') or data.get('command') or '',
             base, {**os.environ, **(values.get('env') or {})})
         for index, token in enumerate(tokens):
             name, remaining = Path(token).name, tokens[index + 1:]
+            if os.name == 'nt':
+                name = name.lower()
             if name == 'install.py':
                 positional = [word for word in remaining if not word.startswith('-')]
                 if positional:
@@ -951,7 +1078,7 @@ def group_stopped(group: int) -> bool:
 def launch_plan(root: Path, command: list[str]) -> tuple[list[str], Path | None]:
     """Register the real command/group before exec, including non-cooperating checks."""
     descriptor = inherited(root)
-    if os.name != 'posix' or descriptor is None:
+    if descriptor is None:
         return command, None
     validate_owner(root, descriptor)
     error = lease_path(root, descriptor['id']) / 'launch-errors' / (uuid.uuid4().hex + '.json')
@@ -970,6 +1097,9 @@ def run(root: Path, command: list[str], **kwargs):
     """subprocess.run with original argv/OS-error semantics and registered lifetime."""
     argv, error = launch_plan(root, command)
     check = kwargs.pop('check', False)
+    if os.name == 'nt' and error is not None:
+        flags = process_runtime.detached_options()['creationflags']
+        kwargs['creationflags'] = kwargs.get('creationflags', 0) | flags
     try:
         result = subprocess.run(argv, **kwargs)
     except subprocess.TimeoutExpired as failure:
@@ -1002,6 +1132,23 @@ def producer_exec(argv: list[str]) -> int:
     expected = lease_path(root, descriptor.get('id')) / 'launch-errors'
     if error.parent.resolve() != expected.resolve():
         raise ReviewError('invalid internal producer launch error destination')
+    if os.name == 'nt':
+        with borrow(root, descriptor) as (registration, record):
+            tree = process_runtime.ProcessTree()
+            def register_tree(tree_descriptor):
+                validate_owner(root, descriptor)
+                record['tree'] = tree_descriptor
+                atomic(registration, record)
+            try:
+                child = tree.start(command, before_resume=register_tree,
+                                   stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr)
+                return child.wait()
+            except OSError as failure:
+                atomic(error, {'errno': failure.errno, 'strerror': failure.strerror,
+                               'filename': os.fsdecode(failure.filename or command[0])})
+            finally:
+                tree.close()
+        return 127
     if os.getpgrp() != os.getpid():
         os.setsid()
     with borrow(root, descriptor, group=True):
@@ -1014,6 +1161,8 @@ def producer_exec(argv: list[str]) -> int:
 
 
 if __name__ == '__main__':
+    import process_runtime
+    process_runtime.configure_windows_environment()
     try:
         raise SystemExit(producer_exec(sys.argv[1:]))
     except (ReviewError, OSError, KeyError) as failure:

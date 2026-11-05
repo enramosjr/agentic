@@ -40,8 +40,8 @@ class LedgerRunTests(LedgerCase):
     def prepare_convergence(self):
         spec = self.repo / 'spec.md'
         spec.write_text(spec.read_text().replace(
-            'python3 -m unittest test_greet.GreetTests.test_hello', 'python3 acceptance.py'
-        ).replace('python3 -m unittest test_greet.GreetTests.test_empty', 'python3 acceptance.py'))
+            f'{shlex.quote(PY)} -m unittest test_greet.GreetTests.test_hello', f'{shlex.quote(PY)} acceptance.py'
+        ).replace(f'{shlex.quote(PY)} -m unittest test_greet.GreetTests.test_empty', f'{shlex.quote(PY)} acceptance.py'))
         (self.repo / 'counter').write_text('0')
         (self.repo / 'acceptance.py').write_text(
             'from pathlib import Path\np=Path("counter")\np.write_text(str(int(p.read_text())+1))\n'
@@ -285,9 +285,9 @@ class ConcurrentLedgerTests(LedgerCase):
         release = self.repo / '.git' / 'converge-release'
         spec = self.repo / 'spec.md'
         original = spec.read_text()
-        for command in ('python3 -m unittest test_greet.GreetTests.test_hello',
-                        'python3 -m unittest test_greet.GreetTests.test_empty'):
-            original = original.replace(command, 'python3 acceptance.py')
+        for command in (f'{shlex.quote(PY)} -m unittest test_greet.GreetTests.test_hello',
+                        f'{shlex.quote(PY)} -m unittest test_greet.GreetTests.test_empty'):
+            original = original.replace(command, f'{shlex.quote(PY)} acceptance.py')
         spec.write_text(original)
         (self.repo / 'acceptance.py').write_text(
             'from pathlib import Path\nimport time\n'
@@ -496,7 +496,7 @@ class LedgerVerifyTests(LedgerCase):
         self.assertEqual([e["label"] for e in entries], ["converge:R1", "converge:R2"])
         for entry, test in zip(entries, ("test_hello", "test_empty")):
             self.assertEqual(set(entry), SCHEMA)
-            self.assertEqual(entry["argv"], ["python3", "-m", "unittest", f"test_greet.GreetTests.{test}"])
+            self.assertEqual(entry["argv"], [PY, "-m", "unittest", f"test_greet.GreetTests.{test}"])
             self.assertEqual((entry["exit"], entry["inputs"], entry["inputs_sha256"]), (0, [], None))
             self.assertEqual(entry["tree"], lifecycle.tree_hash(self.repo))
         self.assertEqual(set(lifecycle.load(self.repo)["converge"]), {"spec", "spec_sha256", "tree", "at", "results"})

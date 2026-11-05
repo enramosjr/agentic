@@ -28,6 +28,61 @@ All scripts, roles, skills and hook settings are project-local. Codex requires
 trusting the project's .codex layer and reviewing hooks with `/hooks`; copying
 files does not activate trust. Global agent settings remain unchanged.
 
+## Native Windows and Codex
+
+Install Python 3.9+ and Git for Windows. The Codex hooks use `commandWindows`
+overrides with built-in Windows PowerShell; Bash and a `python3` alias are not
+required. The launcher checks PATH, then standard Git for Windows and python.org
+installation locations (including the Python install manager's pythoncore folders).
+The launcher also honors `PYTHONHOME` for a custom Python installation.
+For custom installation locations, add Python and Git to PATH before starting
+Codex. Restart Codex after installing tools or changing PATH.
+
+For interactive commands in these docs, use `python` or `py -3` in place of
+`python3`, for example `python .ai/scripts/lifecycle.py status`. If neither is
+on PATH, invoke the installed python.exe by its full path using PowerShell's `&`.
+CLI entry points also discover standard Git for Windows installations when the
+desktop PATH omits Git. Windows CLI streams use UTF-8, including redirected
+output on older Python versions. Environment changes remain process-local.
+Human repair hints use the running Python executable with PowerShell quoting.
+
+Run `python -m unittest discover -s .ai/scripts/tests -p test_windows_hooks.py`
+in the framework source checkout to verify native launch, JSON forwarding and
+real policy decisions from paths containing spaces and nested directories.
+These native tests require Windows; on other platforms they are skipped.
+
+Upgrades add Windows overrides to prior manifest-owned commands without changing
+adopter timeouts or unrelated hooks. An existing custom `commandWindows` value
+is retained. After updating, restart the Codex session and use `/hooks` to review
+and trust the changed hooks. Test SessionStart and a shell operation in the new
+session. A policy denial naming a lifecycle stage or replacement tool is expected
+enforcement; a launch error is not. If Git reports dubious ownership, resolve
+trust for that specific repository in the owning user's environment; do not
+disable ownership checks globally.
+
+The installer compares Windows read-only state rather than unsupported POSIX
+permission bits. Repeated install/check is stable, and an authorized update can
+replace an owned read-only file while retaining its original state if replacement
+fails. Managed governance text uses canonical LF; adopter bytes outside the
+managed block remain unchanged.
+
+Pinned compatibility snapshots are protected by a narrow `.gitattributes` rule
+in both source and installed projects, including `--no-knowledge` installs.
+For a legacy framework checkout whose Git newline conversion changed those
+snapshots, run `python .ai/scripts/tests/restore_baselines.py`. It verifies the
+committed independent hashes and Git identities before repairing only newline
+conversion. Other edits are refused; pins are never regenerated or weakened.
+
+Framework maintainers edit canonical stage skills under `.claude/skills/`, then
+run `python .ai/scripts/install.py --sync-source-skills`. This refreshes the
+generated `.agents/skills/` directory without requiring native symlink privileges.
+Use `--sync-source-skills --check` for a read-only drift check. Source synchronization
+requires the framework marker and refuses unexpected aliases escaping the checkout.
+Adopter installation still chooses a supported directory link or exact copies.
+
+See [cross-platform runtime and verification](windows-runtime.md) for process,
+review and full-gate contracts.
+
 The installed [README](../README.md) and references are part of .ai/ and are
 copied with the kit. They do not require the source project's root README or
 knowledge documents. A successful installation followed by --check reports

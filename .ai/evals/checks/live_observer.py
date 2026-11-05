@@ -5,7 +5,6 @@ reads their captured evidence. This is instrumentation, not a hostile-agent sand
 """
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
@@ -21,6 +20,17 @@ import time
 
 
 LIMIT = 4 * 1024 * 1024
+
+
+def lock_exclusive(stream):
+    """Hold an exclusive lock on the first byte until the stream is closed."""
+    if os.name == "nt":
+        import msvcrt
+        stream.seek(0)
+        msvcrt.locking(stream.fileno(), msvcrt.LK_LOCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(stream, fcntl.LOCK_EX)
 VERSIONS = {"codex": "0.162.1", "claude": "2.1.296"}
 MODELS = {"codex": "gpt-6.1-sol", "claude": "claude-sonnet-5-5"}
 EVENTS = ("SessionStart", "PreToolUse", "PostToolUse", "SubagentStart", "SubagentStop", "Stop")
@@ -152,8 +162,8 @@ def hook():
     data = (json.dumps(event, separators=(",", ":")) + "\n").encode()
     path = directory / "events.jsonl"
     with path.open("ab") as output:
-        fcntl.flock(output, fcntl.LOCK_EX)
-        if output.tell() + len(data) > LIMIT:
+        lock_exclusive(output)
+        if output.seek(0, 2) + len(data) > LIMIT:
             raise ValueError("observation event output cap exhausted")
         output.write(data); output.flush(); os.fsync(output.fileno())
 

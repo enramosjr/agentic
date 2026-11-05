@@ -6,14 +6,14 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 import json
-import os
 from pathlib import Path
 import subprocess
-import signal
 import sys
 import threading
 import time
 from typing import Callable
+
+import process_runtime
 
 sys.dont_write_bytecode = True
 
@@ -33,9 +33,10 @@ def run(command: list[str], *, label: str, cwd: Path | None = None,
     child = None
     reader = None
     reader_errors = []
+    tree = process_runtime.ProcessTree() if timeout_seconds is not None else None
     try:
-        child = subprocess.Popen(command, cwd=cwd, env=env,
-                                 start_new_session=timeout_seconds is not None,
+        launch = tree.start if tree is not None else subprocess.Popen
+        child = launch(command, cwd=cwd, env=env,
                                  stdout=subprocess.PIPE if on_output else None,
                                  stderr=subprocess.STDOUT if merge_stderr else None,
                                  text=True if on_output else None,
@@ -83,10 +84,7 @@ def run(command: list[str], *, label: str, cwd: Path | None = None,
     finally:
         if child is not None and (timeout_seconds is not None or exit_code in (1, 124, 130)):
             if timeout_seconds is not None:
-                try:
-                    os.killpg(child.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+                tree.close()
             elif child.poll() is None:
                 child.kill()
             child.wait()
@@ -134,4 +132,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    import process_runtime
+    process_runtime.configure_windows_environment()
     sys.exit(main())

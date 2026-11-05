@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -17,6 +18,7 @@ SCRIPTS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SCRIPTS))
 
 import okf  # noqa: E402
+import disk_tmp
 
 TASKS = """
 ### T1 — First
@@ -33,14 +35,14 @@ TASKS = """
 class MergeDriverTests(unittest.TestCase):
     def setUp(self) -> None:
         self.repo = Path(tempfile.mkdtemp()).resolve()
-        self.addCleanup(shutil.rmtree, self.repo)
+        self.addCleanup(disk_tmp.remove_tree, self.repo)
         self.bundle = self.repo / "knowledge"
         # The toolkit lives inside the repository, as in real use, so git-setup registers a repo-relative driver.
         scripts = self.repo / ".ai" / "scripts"
         scripts.mkdir(parents=True)
         shutil.copy(SCRIPTS / "okf.py", scripts / "okf.py")
         shutil.copy(SCRIPTS / "learning.py", scripts / "learning.py")
-        for name in ('review_guard.py', 'scratch.py', 'ledger.py'):
+        for name in ('review_guard.py', 'scratch.py', 'ledger.py', 'process_runtime.py'):
             shutil.copy(SCRIPTS / name, scripts / name)
         self.env = {k: v for k, v in os.environ.items() if not k.startswith(("OKF_", "GIT_"))}
         self.env.update(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t", PYTHONDONTWRITEBYTECODE="1")
@@ -93,7 +95,8 @@ class MergeDriverTests(unittest.TestCase):
         attributes = (self.repo / ".gitattributes").read_text()
         self.assertIn("knowledge/**/log.md merge=okf", attributes)
         self.assertIn("knowledge/project/status.md merge=okf", attributes)
-        self.assertEqual(self.git("config", "merge.okf.driver").stdout.strip(), "python3 .ai/scripts/okf.py merge-driver %O %A %B %P")
+        python = shlex.quote(Path(sys.executable).as_posix()) if os.name == 'nt' else 'python3'
+        self.assertEqual(self.git("config", "merge.okf.driver").stdout.strip(), f"{python} .ai/scripts/okf.py merge-driver %O %A %B %P")
         self.assertEqual(self.okf("git-setup").strip(), "merge driver already configured")
         self.assertEqual((self.repo / ".gitattributes").read_text(), attributes)
 

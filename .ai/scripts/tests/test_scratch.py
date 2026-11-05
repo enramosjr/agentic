@@ -10,6 +10,7 @@ from unittest import mock
 from test_autonomy import AutonomyTestCase
 import autonomy_validation
 import scratch
+import disk_tmp
 
 
 class ScratchTests(AutonomyTestCase):
@@ -37,7 +38,7 @@ class ScratchTests(AutonomyTestCase):
         # A Git-only repository has no prior protected OKF setup or scratch receipts.
         repo = self.repo / 'git-only-symlink'
         subprocess.run(['git', 'init', '-q', str(repo)], check=True)
-        (repo / ".git" / "okf-scratch").symlink_to("/tmp", target_is_directory=True)
+        disk_tmp.directory_link(repo / '.git/okf-scratch', Path('/tmp'))
         with self.assertRaisesRegex(ValueError, "outside system temporary"):
             scratch.directory(repo)
 

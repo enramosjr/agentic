@@ -12,9 +12,11 @@ import json
 import os
 import shutil
 import signal
+import shlex
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable, Optional, TextIO
 
@@ -22,14 +24,15 @@ sys.dont_write_bytecode = True
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import scratch  # noqa: E402
+from process_runtime import python_hint
 
 LIMIT = "VERIFIED covers only the declared command on its declared inputs."
 REQUIREMENT = "DEMO-R1"
-CHECK = "import pathlib, sys\nsys.exit(0 if pathlib.Path('src/calc.py').read_text().startswith('ok') else 3)\n"
+CHECK = "import pathlib, sys\nsys.exit(0 if pathlib.Path('src/calc.py').read_text(encoding='utf-8').startswith('ok') else 3)\n"
 CAPABILITY = (
     "---\ntype: Capability\ntitle: Demo\nnamespace: DEMO\nstatus: draft\n---\n\n# Demo\n\n## Requirements\n\n"
     "- DEMO-R1: The calculator MUST add.\n"
-    "  - Verify: `python3 check.py`\n"
+    f"  - Verify: `{shlex.quote(sys.executable)} check.py`\n"
     "  - Inputs: `check.py` `src/**`\n"
     "  - Scenario add: 1 + 1 is 2.\n\n## Notes\n\nProse.\n"
 )
@@ -38,6 +41,35 @@ DROPPED_ENV = {"_AGENTIC_LIFECYCLE_RUN_ROOTS", "OKF_AUTONOMOUS", "LIFECYCLE_GUAR
 
 class DemoFailure(Exception):
     pass
+
+
+def remove_repository(path: Path) -> None:
+    root = path.resolve()
+    def retry(function, name, error):
+        if not isinstance(error[1], PermissionError):
+            raise error[1]
+        candidate = Path(name).resolve()
+        if candidate != root and root not in candidate.parents:
+            raise ValueError(f'cleanup escaped the owned repository: {candidate}')
+        candidate.chmod(0o700)
+        function(name)
+    shutil.rmtree(path, onerror=retry)
+
+
+@contextmanager
+def temporary_repository(*, prefix: str, dir: Path):
+    path = Path(tempfile.mkdtemp(prefix=prefix, dir=dir))
+    try:
+        yield str(path)
+    finally:
+        remove_repository(path)
+
+
+def install_exit_handlers() -> None:
+    graceful_exit = lambda signum, frame: sys.exit(143)
+    signal.signal(signal.SIGTERM, graceful_exit)
+    if os.name == 'nt':
+        signal.signal(signal.SIGBREAK, graceful_exit)
 
 
 def _base() -> Path:
@@ -63,7 +95,7 @@ class Session:
 
     def exec(self, argv: list[str], ok: tuple[int, ...] = (0,)) -> subprocess.CompletedProcess:
         try:
-            result = subprocess.run(argv, cwd=self.repo, env=self.env, capture_output=True, text=True, timeout=120)
+            result = subprocess.run(argv, cwd=self.repo, env=self.env, capture_output=True, text=True, encoding='utf-8', timeout=120)
         except subprocess.TimeoutExpired:
             raise DemoFailure(f"timed out: {' '.join(argv[:3])}")
         if result.returncode not in ok:
@@ -77,13 +109,13 @@ class Session:
         return self.exec([sys.executable, str(self.repo / ".ai/scripts" / script), *args], ok)
 
     def lifecycle(self, *args: str, ok: tuple[int, ...] = (0,)) -> subprocess.CompletedProcess:
-        self.calls.append("python3 .ai/scripts/lifecycle.py " + " ".join(args))
+        self.calls.append(python_hint() + ' .ai/scripts/lifecycle.py ' + shlex.join(args))
         return self.tool("lifecycle.py", *args, ok=ok)
 
     def write(self, name: str, text: str) -> None:
         path = self.repo / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text)
+        path.write_text(text, encoding='utf-8')
 
 
 def build(session: Session, prepare: Optional[Callable[[Path], None]] = None) -> None:
@@ -172,17 +204,17 @@ def run(base: Optional[Path] = None, prepare: Optional[Callable[[Path], None]] =
         err.write(f"assurance_demo: {failure}\n")
         return 1
     finally:
-        shutil.rmtree(repo_dir, ignore_errors=True)
-        if repo_dir.exists():
-            err.write(f"assurance_demo: could not remove {repo_dir}\n")
+        remove_repository(repo_dir)
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.parse_args(argv)
-    signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(143))
+    install_exit_handlers()
     return run()
 
 
 if __name__ == "__main__":
+    import process_runtime
+    process_runtime.configure_windows_environment()
     sys.exit(main())

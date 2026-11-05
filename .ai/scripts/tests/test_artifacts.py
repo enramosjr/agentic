@@ -68,13 +68,20 @@ class ArtifactTests(LifecycleCase):
         result = self.cli('freeze', '--root', str(self.repo), '--file', '../outside')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('unsafe artifact path', result.stderr)
-        if hasattr(os, 'symlink'):
+        if os.name == 'nt':
+            link = self.repo / 'linked-directory'
+            created = subprocess.run(f'cmd.exe /d /c mklink /J "{link}" "{self.repo}"',
+                                     capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            self.assertEqual(created.returncode, 0, created.stderr)
+            result = self.cli('freeze', '--root', str(self.repo), '--file', 'linked-directory/app.py')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('symlink refused', result.stderr)
+        else:
             (self.repo / 'link.py').symlink_to(self.repo / 'app.py')
             result = self.cli('freeze', '--root', str(self.repo), '--file', 'link.py')
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('symlink refused', result.stderr)
 
-    @unittest.skipUnless(os.name == 'posix', 'POSIX process-group supervision')
     def test_timeout_stops_descendants_before_post_run_verification(self):
         receipt = self.freeze()
         ready, escaped = self.repo / '.git/child-ready', self.repo / '.git/escaped'

@@ -23,6 +23,8 @@ import subprocess
 import sys
 import time
 
+import process_runtime
+
 sys.dont_write_bytecode = True
 
 FAIL_MATCH = 4
@@ -44,7 +46,7 @@ class LogInUse(RuntimeError):
 
 def start(log: Path, command: list[str]) -> int:
     if _pid_path(log).exists() and _recorded_exit(log) is None:
-        owner = int(_pid_path(log).read_text().strip())
+        owner = int(_pid_path(log).read_text(encoding='utf-8').strip())
         if _alive(owner):
             raise LogInUse(f"check {owner} still owns {log}; wait for it or use another --log")
     for stale in (_exit_path(log), _pid_path(log)):
@@ -53,42 +55,36 @@ def start(log: Path, command: list[str]) -> int:
     log.write_bytes(b"")
     supervisor = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "_supervise", str(log), "--", *command],
                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                                  start_new_session=True)
-    _pid_path(log).write_text(f"{supervisor.pid}\n")
+                                  **process_runtime.detached_options())
+    _pid_path(log).write_text(f"{supervisor.pid}\n", encoding='utf-8')
     return supervisor.pid
 
 
 def supervise(log: Path, command: list[str]) -> int:
     with log.open("ab") as output:
+        tree = process_runtime.ProcessTree()
         try:
-            code = subprocess.call(command, stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT)
+            child = tree.start(command, stdin=subprocess.DEVNULL, stdout=output, stderr=subprocess.STDOUT)
+            code = child.wait()
         except OSError as error:
             output.write(f"wait_check: cannot start command: {error.strerror}\n".encode())
             code = 127
+        finally:
+            tree.close()
     code = code if code >= 0 else 128 - code
     pending = log.with_name(log.name + ".exit.tmp")
-    pending.write_text(f"{code}\n")
+    pending.write_text(f"{code}\n", encoding='utf-8')
     os.replace(pending, _exit_path(log))
     return code
 
 
 def _alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    try:
-        state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
-    except (OSError, IndexError):
-        return True
-    return state != "Z"
+    return process_runtime.alive(pid)
 
 
 def _recorded_exit(log: Path) -> int | None:
     try:
-        return int(_exit_path(log).read_text().strip())
+        return int(_exit_path(log).read_text(encoding='utf-8').strip())
     except (FileNotFoundError, ValueError):
         return None
 
@@ -106,7 +102,7 @@ def _tail(log: Path, lines: int) -> str:
 def wait(log: Path, *, pid: int | None, fail: list[re.Pattern[str]], done: list[re.Pattern[str]],
          max_seconds: float, interval: float = 1.0) -> tuple[int, dict]:
     if pid is None and _pid_path(log).exists():
-        pid = int(_pid_path(log).read_text().strip())
+        pid = int(_pid_path(log).read_text(encoding='utf-8').strip())
     started = time.monotonic()
     offset, partial = 0, ""
 
@@ -121,6 +117,7 @@ def wait(log: Path, *, pid: int | None, fail: list[re.Pattern[str]], done: list[
         lines = (partial + chunk.decode("utf-8", "backslashreplace")).split("\n")
         partial = lines.pop()
         for line in lines:
+            line = line.removesuffix('\r')
             for pattern in fail:
                 if pattern.search(line):
                     return "fail-match", line
@@ -197,4 +194,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    import process_runtime
+    process_runtime.configure_windows_environment()
     sys.exit(main())

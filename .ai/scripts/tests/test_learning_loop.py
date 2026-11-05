@@ -24,7 +24,7 @@ class LearningLoopTests(LifecycleCase):
         shutil.copytree(SCRIPTS, self.repo / '.ai/scripts', ignore=shutil.ignore_patterns('tests', '__pycache__'))
         result = self.command('okf.py', 'init')
         self.assertEqual(result.returncode, 0, result.stderr)
-        (self.repo / 'knowledge/project/sync-ignore').write_text('*.py\n*.md\n')
+        (self.repo / 'knowledge/project/sync-ignore').write_text('*.py\n*.md\n.ai/scripts/codex_hook.ps1\n')
 
     def command(self, script, *args, input=None, env=None):
         return subprocess.run([sys.executable, str(self.repo / '.ai/scripts' / script), *args],
@@ -205,7 +205,19 @@ class LearningLoopTests(LifecycleCase):
         outside = self.repo / 'outside.json'
         outside.write_text(json.dumps(record))
         link = record_path.parent / 'escape.json'
-        link.symlink_to(outside)
+        if os.name == 'nt':
+            # File symlinks need a privilege ordinary Windows users lack; a directory junction
+            # is the native alias that escapes the same way.
+            target = self.repo / 'outside-dir'
+            target.mkdir()
+            (target / 'escape.json').write_text(json.dumps(record))
+            alias = record_path.parent / 'escape-dir'
+            created = subprocess.run(f'cmd.exe /d /c mklink /J "{alias}" "{target}"', capture_output=True,
+                                     text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            self.assertEqual(created.returncode, 0, created.stderr)
+            link = alias / 'escape.json'
+        else:
+            link.symlink_to(outside)
         self.assertNotEqual(self.command('lifecycle.py', 'promote', str(link)+'#1', '--approved-by', 'human:fixture').returncode, 0)
 
     def test_rules_budget(self):

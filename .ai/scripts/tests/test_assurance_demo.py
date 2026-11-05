@@ -16,6 +16,7 @@ ROOT = SCRIPTS.parents[1]
 sys.path.insert(0, str(SCRIPTS))
 import disk_tmp  # noqa: F401,E402
 import assurance_demo  # noqa: E402
+from process_runtime import python_hint
 import lifecycle  # noqa: E402
 
 LIMIT = 'VERIFIED covers only the declared command on its declared inputs.'
@@ -80,7 +81,7 @@ class BuildTests(Base):  # R1
             self.assertTrue(argv[0] == 'git' or Path(argv[1]).name in {'okf.py', 'lifecycle.py'}, argv)
         self.assertTrue(calls)
         for call in calls:
-            self.assertTrue(call.startswith('python3 .ai/scripts/lifecycle.py '), call)
+            self.assertTrue(call.startswith(python_hint() + ' .ai/scripts/lifecycle.py '), call)
 
     def test_removed_after_step_failure_and_after_prepare_raises(self):
         code, out, err = self.demo(prepare=patcher(FORCE_ALL))
@@ -164,14 +165,16 @@ class IsolationTests(Base):  # R4
                  'import assurance_demo\n'
                  'code = assurance_demo.main([])\n'
                  f'names = {sorted(NETWORK)!r}\n'
-                 "print('NETMODS', json.dumps(sorted({m.split('.')[0] for m in sys.modules} & set(names))))\n"
+                 "print('NETMODS', json.dumps(sorted(m for m in sys.modules if m.split('.')[0] in names)))\n"
                  'sys.exit(code)\n')
         env = {**os.environ, 'TMPDIR': str(self.base), 'PYTHONDONTWRITEBYTECODE': '1'}
         result = subprocess.run([sys.executable, '-c', probe], cwd=ROOT, env=env, capture_output=True, text=True, timeout=300)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(snapshot(), before)
         loaded = json.loads(re.search(r'^NETMODS (.*)$', result.stdout, re.M).group(1))
-        self.assertEqual(set(loaded) - {'socket'}, set(), loaded)  # scratch may pull socket transitively
+        # Python 3.9 pathlib imports urllib.parse for quoting paths; it performs
+        # no I/O. Keep full names so urllib.request cannot hide behind that root.
+        self.assertEqual(set(loaded) - {'socket', 'urllib', 'urllib.parse'}, set(), loaded)
         tree = ast.parse((SCRIPTS / 'assurance_demo.py').read_text())
         imported = set()
         for node in ast.walk(tree):

@@ -33,13 +33,13 @@ def candidate_files(root: Path) -> list[str]:
     """Tracked plus untracked-but-not-ignored files; a filtered walk outside git."""
     try:
         result = subprocess.run(
-            ["git", "-C", str(root), "ls-files", "-co", "--exclude-standard"],
-            capture_output=True, text=True, check=False,
+            ["git", "-C", str(root), "ls-files", "-z", "-co", "--exclude-standard"],
+            capture_output=True, text=True, encoding='utf-8', check=False,
         )
     except FileNotFoundError:
         result = None
     if result is not None and result.returncode == 0:
-        return sorted({p for p in result.stdout.splitlines() if p and (root / p).is_file()})
+        return sorted({p for p in result.stdout.split('\0') if p and (root / p).is_file()})
     found: list[str] = []
     for directory, dirnames, filenames in os.walk(root):
         dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS and not d.startswith("."))
@@ -250,7 +250,7 @@ def cmd_headings(root, args):
     path = Path(args.path)
     if not path.is_absolute():
         path = root / path
-    for number, line in enumerate(path.read_text().splitlines(), 1):
+    for number, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
         if re.match(r'^#{1,6} ', line):
             print(f'{number}: {line}')
     return 0
@@ -262,7 +262,7 @@ def cmd_commands(root, args):
         if args.subcommand.startswith('-') or not re.fullmatch(r'[a-z][a-z0-9-]*', args.subcommand):
             raise ValueError('subcommand must be a command name, not an option')
         argv.append(args.subcommand)
-    result = subprocess.run([*argv, '--help'], capture_output=True, text=True, timeout=15)
+    result = subprocess.run([*argv, '--help'], capture_output=True, text=True, encoding='utf-8', timeout=15)
     print(result.stdout, end='')
     if result.returncode:
         print(result.stderr, end='', file=sys.stderr)
@@ -284,4 +284,6 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    import process_runtime
+    process_runtime.configure_windows_environment()
     sys.exit(main())

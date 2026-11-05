@@ -89,6 +89,32 @@ class TimedCheckTests(unittest.TestCase):
         self.assertIn('"outcome": "FAIL"', timing.getvalue())
         self.assertNotIn('"outcome": "PASS"', timing.getvalue())
 
+    def test_owned_tree_preserves_inherited_standard_streams(self):
+        code = ("import sys; sys.path.insert(0,sys.argv[1]); import timed_check; "
+                "timed_check.run([sys.executable,'-c',"
+                "\"import sys; print('native output'); print('native error',file=sys.stderr)\"],"
+                "label='inherited',timeout_seconds=2)")
+        result = subprocess.run([sys.executable, '-c', code, str(SCRIPT.parent)],
+                                capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, 'native output\n')
+        self.assertIn('native error', result.stderr)
+
+    def test_timeout_stops_owned_descendants_before_they_write(self):
+        with tempfile.TemporaryDirectory() as directory:
+            started, late = Path(directory) / 'started', Path(directory) / 'late'
+            descendant = (f'from pathlib import Path;import time;Path({str(started)!r}).touch();'
+                          f'time.sleep(.8);Path({str(late)!r}).touch()')
+            source = ('import subprocess,sys,time;'
+                      f'subprocess.Popen([sys.executable,"-c",{descendant!r}]);time.sleep(30)')
+            with contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(subprocess.TimeoutExpired):
+                    timed_check.run([sys.executable, '-c', source], label='deadline', timeout_seconds=.4)
+            self.assertTrue(started.exists())
+            import time
+            time.sleep(.9)
+            self.assertFalse(late.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

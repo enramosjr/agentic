@@ -77,6 +77,12 @@ python3 /path/to/agentic/.ai/scripts/install.py "/path/to/my project"
 
 The installer creates missing folders and initializes Git when needed. For a project already in Git, choose its worktree root. It installs governance, roles, personas, stage skills, hooks for all supported agents, management scripts, and an ordinary project knowledge bundle. Existing instructions and hook settings are merged, existing knowledge is retained, and conflicting adopter files are kept and reported with a nonzero exit. No commit or Git remote is created.
 
+On native Windows, install Python 3.9+ and Git for Windows, and use `python` or
+`py -3` in place of `python3` in these commands. Codex hooks have native Windows
+launchers; see [Windows setup and verification](.ai/docs/install-and-upgrade.md#native-windows-and-codex).
+The [runtime guide](.ai/docs/windows-runtime.md) describes native process and
+review guarantees and the shared Windows/Linux verification gate.
+
 Everything is local to `TARGET`, including `.ai/`, `.claude/`, `.codex/`, `.cursor/`, and `.agents/skills/`. Global agent settings remain unchanged. The source checkout's knowledge, Git history, and agent session files are excluded. Autonomous execution remains opt-in; see below.
 
 The [distributed tooling guide](.ai/README.md) and its references travel with the

@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -21,7 +22,8 @@ import assurance  # noqa: E402
 from compatibility_baselines import HEAD_BASELINE, read_baseline  # noqa: E402
 
 # Handwritten read oracle, deliberately independent of the exporter's catalog.
-COMMAND = ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests', '-p', 'test_run_tests.py']
+COMMAND = [sys.executable if os.name == 'nt' else 'python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests', '-p', 'test_run_tests.py']
+OTHER_PYTHON = str(Path(sys.executable).with_name('other-python.exe')) if os.name == 'nt' else sys.executable
 READS = ['.ai/scripts/tests/test_run_tests.py', '.ai/scripts/tests/disk_tmp.py',
          '.ai/scripts/scratch.py', '.ai/scripts/run_tests.py']
 EXCLUDE = '!knowledge/history/lifecycle/**'
@@ -32,10 +34,46 @@ def snapshot(root):
             for p in root.rglob('*') if p.is_file() or p.is_symlink()}
 
 
+def assert_prior_guide_paragraphs(case, root, baseline, guide):
+    """Permit only the reviewed explicit UTF-8 read in the current demo snippet."""
+    import ast
+    old_read = "Path('src/calc.py').read_text()"
+    utf8_read = "Path('src/calc.py').read_text(encoding='utf-8')"
+    source = (root / '.ai/scripts/assurance_architecture_demo.py').read_text(encoding='utf-8')
+    assignment = next(node for node in ast.parse(source).body if isinstance(node, ast.Assign)
+                      and any(isinstance(target, ast.Name) and target.id == 'CHECK' for target in node.targets))
+    check = ast.literal_eval(assignment.value)
+    case.assertEqual((check.count(old_read), check.count(utf8_read)), (0, 1),
+                     'review current demo encoding substitution')
+    case.assertEqual((baseline.count(old_read), baseline.count(utf8_read)), (1, 0),
+                     'review historical guide encoding substitution')
+    case.assertEqual((guide.count(old_read), guide.count(utf8_read)), (0, 1),
+                     'review current guide encoding substitution')
+    case.assertIn(check.rstrip(), guide, 'current demo CHECK differs from the guide')
+    for paragraph in baseline.split('\n\n'):
+        case.assertIn(paragraph.replace(old_read, utf8_read), guide, 'previous guide paragraph changed')
+
+
+class CurrentGuideCompatibilityTests(unittest.TestCase):
+    def test_encoding_allowance_rejects_unrelated_edits_and_duplicate_substitutions(self):
+        root = SCRIPTS.parents[1]
+        baseline = read_baseline(AGENTS_BUDGET_HEAD, '.ai/lifecycle.md')
+        guide = (root / '.ai/lifecycle.md').read_text(encoding='utf-8')
+        self.assertEqual(guide.count('## Router\n'), 1)
+        variants = [
+            (guide.replace('## Router\n', '## Unrelated router change\n', 1), 'previous guide paragraph changed'),
+            (guide + "\nPath('src/calc.py').read_text(encoding='utf-8')\n", 'review current guide encoding substitution'),
+        ]
+        for changed, diagnostic in variants:
+            with self.subTest(diagnostic=diagnostic), self.assertRaisesRegex(AssertionError, diagnostic):
+                assert_prior_guide_paragraphs(self, root, baseline, changed)
+
+
 class Fixture(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
+        self.addCleanup(disk_tmp.remove_tree, Path(self.temp.name))
         self.root = Path(self.temp.name) / 'repo with spaces'
         scripts = self.root / '.ai/scripts'
         scripts.mkdir(parents=True)
@@ -49,18 +87,25 @@ class Fixture(unittest.TestCase):
         for key in ('_AGENTIC_LIFECYCLE_RUN_ROOTS', 'REPO_ROOT', 'GIT_DIR', 'GIT_WORK_TREE'):
             self.env.pop(key, None)
         self.git('init', '-q')
+        # Exact read-only snapshots must not race detached Git maintenance.
+        self.git('config', 'maintenance.auto', 'false')
+        self.git('config', 'gc.auto', '0')
         self.write('.agentic.json', '{"repository_kind":"framework"}')
         self.commit()
 
     def write(self, name, value):
         path = self.root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(value)
+        path.write_text(value, encoding='utf-8', newline='\n')
         return path
 
     def process(self, argv, cwd=None):
+        # Literal profile declarations stay unchanged; only launched interpreters
+        # use the interpreter running this test rather than a platform alias.
+        if argv and argv[0] == 'python3':
+            argv = [sys.executable, *argv[1:]]
         return subprocess.run(argv, cwd=cwd or self.root, env=self.env,
-                              capture_output=True, text=True, timeout=120)
+                              capture_output=True, text=True, encoding='utf-8', timeout=120)
 
     def git(self, *args):
         result = self.process(['git', '-c', 'user.name=Test', '-c', 'user.email=test@test', *args])
@@ -86,7 +131,14 @@ class Fixture(unittest.TestCase):
         return value
 
     def refused(self, **kwargs):
-        result = self.export(**kwargs)
+        try:
+            result = self.export(**kwargs)
+        finally:
+            linked = getattr(self, '_linked_index', None)
+            if linked:
+                name, mode, blob = linked
+                self.git('update-index', '--cacheinfo', f'{mode},{blob},{name}')
+                self._linked_index = None
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
         value = json.loads(result.stdout)
         self.assertFalse(value['ok'])
@@ -95,6 +147,18 @@ class Fixture(unittest.TestCase):
         for key in ('inputs', 'inputs_line', 'lifecycle_inputs_argv'):
             self.assertNotIn(key, value)
         return value
+
+    def link_input(self, path, outside):
+        if os.name != 'nt':
+            path.symlink_to(outside)
+            return
+        name = path.relative_to(self.root).as_posix()
+        row = self.git('ls-files', '--stage', '--', name).split()
+        self._linked_index = (name, row[0], row[1])
+        path.write_text(str(outside))
+        result = subprocess.run(['git', '-C', str(self.root), 'hash-object', '-w', '--stdin'],
+                                input=str(outside), text=True, capture_output=True, check=True)
+        self.git('update-index', '--add', '--cacheinfo', f'120000,{result.stdout.strip()},{name}')
 
     def module(self):
         source = SCRIPTS / 'assurance_inputs.py'
@@ -137,9 +201,32 @@ class ReadOnlyTests(Fixture):  # R1
 
 
 class ProfileTests(Fixture):  # R2
+    def test_native_interpreter_profile_preserves_exact_argv_and_executes(self):
+        native = [sys.executable, *COMMAND[1:]]
+        module = self.module()
+        for profile in module.PROFILES:
+            candidate = [sys.executable, *profile['argv'][1:]]
+            self.assertEqual(module.exact_profile_command(profile['argv'], candidate), os.name == 'nt')
+            self.assertFalse(module.exact_profile_command(profile['argv'], candidate + ['-v']))
+        if os.name != 'nt':
+            self.refused(argv=native)
+            return
+        value = self.suggestion(argv=native)
+        self.assertEqual(value['profile_id'], 'python-runner-test')
+        self.assertEqual(value['argv'], native)
+        self.assertEqual(value['inputs'], READS)
+        executed = self.process(native)
+        self.assertEqual(executed.returncode, 0, executed.stdout + executed.stderr)
+        counts = re.findall(r'Ran (\d+) tests? in ', executed.stdout + executed.stderr)
+        self.assertTrue(counts)
+        self.assertGreater(int(counts[-1]), 0)
+        for altered in ([OTHER_PYTHON, *native[1:]], ['python', *native[1:]],
+                        [sys.executable, '-u', *native[1:]], native + ['-v']):
+            self.refused(argv=altered)
+
     def test_exact_command_and_root_only(self):
         self.suggestion()
-        variants = [COMMAND + ['-v'], [sys.executable, *COMMAND[1:]],
+        variants = [COMMAND + ['-v'], [OTHER_PYTHON, *COMMAND[1:]],
                     COMMAND[:-1] + ['test_ledger.py'], ['python3', '.ai/scripts/tests/test_run_tests.py']]
         for argv in variants:
             with self.subTest(argv=argv):
@@ -215,7 +302,7 @@ class RefusalTests(Fixture):  # R4
         outside = Path(self.temp.name) / 'outside.py'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         self.refused()
         path.unlink()
         path.write_bytes(original)
@@ -227,7 +314,7 @@ class RefusalTests(Fixture):  # R4
         directory = Path(self.temp.name) / 'external'
         directory.mkdir()
         (directory / 'data.txt').write_text('external')
-        (self.root / 'linked').symlink_to(directory, target_is_directory=True)
+        disk_tmp.directory_link(self.root / 'linked', directory)
         self.refused(extra=('linked/**',))
 
 
@@ -243,7 +330,7 @@ class OutputTests(Fixture):  # R5
         self.assertTrue(value['review_required'])
         self.assertTrue(value['limitations'])
         self.assertIn('runtime', ' '.join(value['limitations']).lower())
-        raw = '- PILOT-R1: The runner MUST work.\n  - Verify: `' + ' '.join(COMMAND) + '`\n' + value['inputs_line'] + '\n'
+        raw = '- PILOT-R1: The runner MUST work.\n  - Verify: `' + shlex.join(COMMAND) + '`\n' + value['inputs_line'] + '\n'
         obligation = assurance.parse('PILOT-R1', 'capabilities/pilot.md', raw, root=self.root)
         self.assertIsNone(obligation.invalid)
         self.assertEqual(list(obligation.globs), value['inputs'])
@@ -311,7 +398,7 @@ class EndToEndTests(Fixture):  # R7
         self.write('knowledge/project/sync-ignore', '*\n')
         value = self.suggestion()
         self.write('notes.txt', 'unrelated')
-        prefix = '---\ntype: Capability\ntitle: Pilot\nnamespace: PILOT\nstatus: draft\n---\n# Pilot\n\n## Requirements\n\n- PILOT-R1: The runner MUST work.\n  - Verify: `' + ' '.join(COMMAND) + '`\n'
+        prefix = '---\ntype: Capability\ntitle: Pilot\nnamespace: PILOT\nstatus: draft\n---\n# Pilot\n\n## Requirements\n\n- PILOT-R1: The runner MUST work.\n  - Verify: `' + shlex.join(COMMAND) + '`\n'
         capability = self.write('knowledge/capabilities/pilot.md', prefix + value['inputs_line'] + '\n')
         self.commit()
         before = self.preflight()
@@ -341,7 +428,7 @@ class EndToEndTests(Fixture):  # R7
 
 # Architecture profile: specification-5b.md R1-R6. These declarations are
 # handwritten independently of the exporter; directory copies are not imports.
-ARCH_COMMAND = ['python3', '.ai/scripts/tests/test_assurance_architecture.py', 'CompatibilityTests']
+ARCH_COMMAND = [sys.executable if os.name == 'nt' else 'python3', '.ai/scripts/tests/test_assurance_architecture.py', 'CompatibilityTests']
 ARCH_TESTS = ['.ai/scripts/tests/' + name for name in
               ('test_assurance_architecture.py', 'test_assurance.py', 'test_assurance_gate.py', 'disk_tmp.py')]
 ARCH_GUIDE = '.ai/lifecycle.md'
@@ -361,7 +448,7 @@ class ArchitectureFixture(Fixture):
 
     def oracle(self):
         # Match the inspected all-top-level-script copies, not profile inputs.
-        names = [str(p.relative_to(self.root)) for p in (self.root / '.ai/scripts').glob('*.py')]
+        names = [p.relative_to(self.root).as_posix() for p in (self.root / '.ai/scripts').glob('*.py')]
         return {name: (self.root / name).read_bytes() for name in [*names, *ARCH_TESTS, ARCH_GUIDE]}
 
     def preflight(self):
@@ -400,7 +487,7 @@ class ArchitectureProfileTests(ArchitectureFixture):  # R1
         self.assertEqual((old['profile_id'], old['inputs']), ('python-runner-test', READS))
         variants = [ARCH_COMMAND[:2], ARCH_COMMAND + ['-v'], ARCH_COMMAND[:2] + ['DeclarationTests'],
                     ARCH_COMMAND[:2] + ['CompatibilityTests.test_ungoverned_public_shape_stays_unchanged'],
-                    [sys.executable, *ARCH_COMMAND[1:]],
+                     [OTHER_PYTHON, *ARCH_COMMAND[1:]],
                     ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                      '-p', 'test_assurance_architecture.py']]
         for argv in variants:
@@ -456,7 +543,7 @@ class ArchitectureExportTests(ArchitectureFixture):  # R3
             self.assertIn(item, text.stdout)
         self.assertTrue(value['review_required'])
         self.assertIn('runtime', ' '.join(value['limitations']).lower())
-        raw = '- ARCH-R1: The check MUST work.\n  - Verify: `' + ' '.join(ARCH_COMMAND) + '`\n' + value['inputs_line'] + '\n'
+        raw = '- ARCH-R1: The check MUST work.\n  - Verify: `' + shlex.join(ARCH_COMMAND) + '`\n' + value['inputs_line'] + '\n'
         parsed = assurance.parse('ARCH-R1', 'capabilities/arch.md', raw, root=self.root)
         self.assertIsNone(parsed.invalid)
         self.assertEqual(list(parsed.globs), value['inputs'])
@@ -481,7 +568,7 @@ class ArchitectureExportTests(ArchitectureFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         self.refused()
         path.unlink()
         path.write_bytes(original)
@@ -499,7 +586,7 @@ class ArchitectureCompatibilityTests(ArchitectureFixture):  # R4
             self.refused(argv=argv)
         self.assertNotIn(EXCLUDE, self.suggestion()['inputs'])
         guide = (self.root / ARCH_GUIDE).read_text()
-        for phrase in ('python-architecture-compatibility', ' '.join(ARCH_COMMAND),
+        for phrase in ('python-architecture-compatibility', ' '.join(['python3', *ARCH_COMMAND[1:]]),
                        'copied', 'conservative', 'explicit', 'runtime', 'python-runner-test'):
             self.assertIn(phrase, guide)
 
@@ -541,7 +628,7 @@ class ArchitectureAdopterEndToEndTests(ArchitectureFixture):  # R6
         value = self.suggestion()
         prefix = ('---\ntype: Capability\ntitle: Architecture\nnamespace: ARCH\nstatus: draft\n---\n'
                   '# Architecture\n\n## Requirements\n\n- ARCH-R1: The check MUST work.\n'
-                  '  - Verify: `' + ' '.join(ARCH_COMMAND) + '`\n')
+                  '  - Verify: `' + shlex.join(ARCH_COMMAND) + '`\n')
         capability = self.write('knowledge/capabilities/arch.md', prefix + value['inputs_line'] + '\n')
         self.commit()
         before = self.preflight()
@@ -600,9 +687,9 @@ class ArchitectureControlTests(ArchitectureFixture):  # R6
                         path.write_text(replacement)
                         case.assertNotIn(omitted, case.suggestion()['inputs'])
                     elif variant == 'loose':
-                        old = "p['argv'] == list(argv)"
+                        old = "exact_profile_command(p['argv'], argv)"
                         case.assertEqual(original.count(old), 1)
-                        replacement = original.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                        replacement = original.replace(old, "exact_profile_command(p['argv'], list(argv)[:len(p['argv'])])")
                         path.write_text(replacement)
                     else:
                         path = case.root / ARCH_TESTS[0]
@@ -622,13 +709,13 @@ class ArchitectureControlTests(ArchitectureFixture):  # R6
 
 
 # Harness wiring: specification-5c.md R1-R6. Independent of the profile catalog.
-WIRING_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py', 'HarnessWiring']
+WIRING_COMMAND = [sys.executable if os.name == 'nt' else 'python3', '.ai/scripts/tests/test_lifecycle_conformance.py', 'HarnessWiring']
 WIRING_TESTS = [WIRING_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
 WIRING_JSON = ['.claude/settings.json', '.codex/hooks.json', '.cursor/hooks.json']
 WIRING_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**', *WIRING_TESTS, *WIRING_JSON]
 WIRING_IMPORTS = ['.ai/scripts/' + name + '.py' for name in
                   ('scratch', 'lifecycle', 'review_guard', 'ledger', 'brownfield', 'okf',
-                   'learning', 'scan', 'project_context', 'assurance', 'pr_hook')]
+                   'learning', 'scan', 'project_context', 'assurance', 'process_runtime', 'pr_hook')]
 
 
 class HarnessWiringFixture(Fixture):
@@ -690,7 +777,7 @@ class HarnessWiringProfileTests(HarnessWiringFixture):  # R1
         for argv in (WIRING_COMMAND[:2], WIRING_COMMAND + ['-v'],
                      WIRING_COMMAND[:2] + ['Distribution'],
                      WIRING_COMMAND[:2] + ['HarnessWiring.test_codex_gates_edits_commits_and_session_start'],
-                     [sys.executable, *WIRING_COMMAND[1:]],
+                     [OTHER_PYTHON, *WIRING_COMMAND[1:]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
             result = self.export(argv=argv)
@@ -766,7 +853,7 @@ class HarnessWiringExportTests(HarnessWiringFixture):  # R3
                      json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
             self.assertIn(item, text.stdout)
         self.assertTrue(value['review_required'])
-        raw = '- WIRE-R1: The check MUST work.\n  - Verify: `' + ' '.join(WIRING_COMMAND) + '`\n' + value['inputs_line'] + '\n'
+        raw = '- WIRE-R1: The check MUST work.\n  - Verify: `' + shlex.join(WIRING_COMMAND) + '`\n' + value['inputs_line'] + '\n'
         parsed = assurance.parse('WIRE-R1', 'capabilities/wiring.md', raw, root=self.root)
         self.assertIsNone(parsed.invalid)
         self.assertEqual(list(parsed.globs), value['inputs'])
@@ -790,7 +877,7 @@ class HarnessWiringExportTests(HarnessWiringFixture):  # R3
         outside = Path(self.temp.name) / 'outside.json'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         self.refused()
         path.unlink()
         path.write_bytes(original)
@@ -811,7 +898,7 @@ class HarnessWiringCompatibilityTests(HarnessWiringFixture):  # R4
         self.assertTrue(value['review_required'])
         self.assertIn('runtime', ' '.join(value['limitations']).lower())
         guide = (self.root / ARCH_GUIDE).read_text()
-        for phrase in ('python-harness-wiring', ' '.join(WIRING_COMMAND), 'static',
+        for phrase in ('python-harness-wiring', ' '.join(['python3', *WIRING_COMMAND[1:]]), 'static',
                        'conservative', 'explicit', 'native', *WIRING_JSON):
             self.assertIn(phrase, guide)
 
@@ -884,7 +971,7 @@ class HarnessWiringAdopterEndToEndTests(HarnessWiringFixture):  # R6
         value = self.suggestion()
         prefix = ('---\ntype: Capability\ntitle: Wiring\nnamespace: WIRE\nstatus: draft\n---\n'
                   '# Wiring\n\n## Requirements\n\n- WIRE-R1: The static check MUST pass.\n'
-                  '  - Verify: `' + ' '.join(WIRING_COMMAND) + '`\n')
+                  '  - Verify: `' + shlex.join(WIRING_COMMAND) + '`\n')
         original = prefix + value['inputs_line'] + '\n'
         capability = self.write('knowledge/capabilities/wiring.md', original)
         self.commit()
@@ -947,9 +1034,9 @@ class HarnessWiringControlTests(HarnessWiringFixture):  # R6
                         replacement = (original.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
                                        + '\nLIMITATIONS =' + original.split('\nLIMITATIONS =', 1)[1])
                     elif variant == 'loose':
-                        old = "p['argv'] == list(argv)"
+                        old = "exact_profile_command(p['argv'], argv)"
                         case.assertEqual(original.count(old), 1)
-                        replacement = original.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                        replacement = original.replace(old, "exact_profile_command(p['argv'], list(argv)[:len(p['argv'])])")
                     else:
                         path = case.root / WIRING_TESTS[0]
                         original = path.read_text()
@@ -970,7 +1057,7 @@ class HarnessWiringControlTests(HarnessWiringFixture):  # R6
 
 
 # Reviewer report: specification-5d.md R1-R6. Independent reviewed declarations.
-REPORT_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+REPORT_COMMAND = [sys.executable if os.name == 'nt' else 'python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
                   'RolesAndSkills.test_reviewer_completion_report_contract']
 REPORT_TESTS = [REPORT_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
 REPORT_DOCS = ['.claude/agents/reviewer.md', '.codex/agents/reviewer.toml',
@@ -978,15 +1065,16 @@ REPORT_DOCS = ['.claude/agents/reviewer.md', '.codex/agents/reviewer.toml',
 REPORT_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**', *REPORT_TESTS, *REPORT_DOCS]
 REPORT_IMPORTS = ['.ai/scripts/' + name + '.py' for name in
                   ('scratch', 'lifecycle', 'review_guard', 'ledger', 'brownfield', 'okf',
-                   'learning', 'scan', 'project_context', 'assurance', 'pr_hook')]
+                   'learning', 'scan', 'project_context', 'assurance', 'process_runtime', 'pr_hook')]
 REPORT_SETUP_PINS = {
-    '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
-    '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
-    '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
-    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
-    '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
+    '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
+    '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
+    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+    '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
+    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
+    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
 }
 
 
@@ -997,11 +1085,12 @@ def report_setup_digest(path):
     Other functions retain signatures/decorators but not uncalled bodies.
     """
     import ast
-    source = path.read_text()
+    source = path.read_text(encoding='utf-8')
     lines = source.splitlines()
     called = {'test_lifecycle_conformance.py': {'text'},
               'scratch.py': {'require_disk'}, 'lifecycle.py': {'lazy'},
-              'review_guard.py': {'protected'}}.get(path.name, set())
+              'review_guard.py': {'protected'},
+              'process_runtime.py': {'python_hint'}}.get(path.name, set())
     segments = []
     for node in ast.parse(source).body:
         decorators = getattr(node, 'decorator_list', [])
@@ -1093,7 +1182,7 @@ class ReviewerReportProfileTests(ReviewerReportFixture):  # R1
         self.assert_prior_profiles()
         for argv in (REPORT_COMMAND[:2], REPORT_COMMAND[:2] + ['RolesAndSkills'],
                      REPORT_COMMAND[:2] + ['RolesAndSkills.test_every_documented_okf_show_command_resolves'],
-                     REPORT_COMMAND + ['-v'], [sys.executable, *REPORT_COMMAND[1:]],
+                     REPORT_COMMAND + ['-v'], [OTHER_PYTHON, *REPORT_COMMAND[1:]],
                      ['python3', './' + REPORT_COMMAND[1], REPORT_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -1106,8 +1195,9 @@ class ReviewerReportDependencyTests(ReviewerReportFixture):  # R2
     def test_added_import_or_read_requires_review(self):
         for name, addition in [(REPORT_TESTS[0], '\nimport unreviewed_report_helper\n'),
                                (REPORT_TESTS[0], 'text-body'),
+                               ('.ai/scripts/process_runtime.py', 'python-hint-body'),
                                *[(p, '\nfrom pathlib import Path as AddedPath\nAddedPath("unrelated.md").read_text()\n')
-                                 for p in [*REPORT_TESTS, *REPORT_IMPORTS[:4], '.ai/scripts/pr_hook.py']]]:
+                                 for p in REPORT_SETUP_PINS]]:
             with self.subTest(name=name, addition=addition):
                 case = ReviewerReportDependencyTests('test_order_scope_and_independent_oracle')
                 setup = case.setUp
@@ -1125,6 +1215,10 @@ class ReviewerReportDependencyTests(ReviewerReportFixture):  # R2
                         old = '    return (ROOT / path).read_text()'
                         case.assertEqual(source.count(old), 1)
                         changed = source.replace(old, '    (ROOT / "unrelated.md").read_text()\n' + old)
+                    elif addition == 'python-hint-body':
+                        old = 'def python_hint(*, as_argument: bool = False) -> str:\n'
+                        case.assertEqual(source.count(old), 1)
+                        changed = source.replace(old, old + '    Path("unrelated.md").read_text()\n')
                     else:
                         after = max(n.end_lineno for n in ast.parse(source).body
                                     if isinstance(n, (ast.Import, ast.ImportFrom)))
@@ -1146,7 +1240,7 @@ class ReviewerReportDependencyTests(ReviewerReportFixture):  # R2
     def test_order_scope_and_independent_oracle(self):
         value = self.suggestion()
         actual_setup = {p: report_setup_digest(self.root / p)
-                        for p in [*REPORT_TESTS, *REPORT_IMPORTS[:4], '.ai/scripts/pr_hook.py']}
+                        for p in REPORT_SETUP_PINS}
         self.assertEqual(actual_setup, REPORT_SETUP_PINS,
                          'review report import-time boundary: ' + repr(actual_setup))
         self.assertEqual(value['inputs'], REPORT_INPUTS)
@@ -1214,7 +1308,7 @@ class ReviewerReportExportTests(ReviewerReportFixture):  # R3
         for item in (value['profile_id'], value['inputs_line'], json.dumps(REPORT_COMMAND),
                      json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
             self.assertIn(item, text.stdout)
-        raw = '- REPORT-R1: The check MUST pass.\n  - Verify: `' + ' '.join(REPORT_COMMAND) + '`\n' + value['inputs_line'] + '\n'
+        raw = '- REPORT-R1: The check MUST pass.\n  - Verify: `' + shlex.join(REPORT_COMMAND) + '`\n' + value['inputs_line'] + '\n'
         parsed = assurance.parse('REPORT-R1', 'capabilities/report.md', raw, root=self.root)
         self.assertIsNone(parsed.invalid)
         self.assertEqual(list(parsed.globs), value['inputs'])
@@ -1241,7 +1335,7 @@ class ReviewerReportExportTests(ReviewerReportFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -1264,7 +1358,7 @@ class ReviewerReportCompatibilityTests(ReviewerReportFixture):  # R4
         self.assertTrue(value['review_required'])
         self.assertIn('runtime', ' '.join(value['limitations']).lower())
         guide = (self.root / ARCH_GUIDE).read_text()
-        for phrase in ('python-reviewer-report-contract', ' '.join(REPORT_COMMAND),
+        for phrase in ('python-reviewer-report-contract', ' '.join(['python3', *REPORT_COMMAND[1:]]),
                        'static', 'conservative', 'explicit', 'manual', 'TOML',
                        'report production', *REPORT_DOCS):
             self.assertIn(phrase, guide)
@@ -1328,7 +1422,7 @@ class ReviewerReportAdopterEndToEndTests(ReviewerReportFixture):  # R6
         value = self.suggestion()
         prefix = ('---\ntype: Capability\ntitle: Report\nnamespace: REPORT\nstatus: draft\n---\n'
                   '# Report\n\n## Requirements\n\n- REPORT-R1: The static check MUST pass.\n'
-                  '  - Verify: `' + ' '.join(REPORT_COMMAND) + '`\n')
+                  '  - Verify: `' + shlex.join(REPORT_COMMAND) + '`\n')
         original = prefix + value['inputs_line'] + '\n'
         capability = self.write('knowledge/capabilities/report.md', original)
         self.commit()
@@ -1390,9 +1484,9 @@ class ReviewerReportControlTests(ReviewerReportFixture):  # R6
                         replacement = (original.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
                                        + '\nLIMITATIONS =' + original.split('\nLIMITATIONS =', 1)[1])
                     elif variant == 'loose':
-                        old = "p['argv'] == list(argv)"
+                        old = "exact_profile_command(p['argv'], argv)"
                         case.assertEqual(original.count(old), 1)
-                        replacement = original.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                        replacement = original.replace(old, "exact_profile_command(p['argv'], list(argv)[:len(p['argv'])])")
                     else:
                         path = case.root / REPORT_TESTS[0]
                         original = path.read_text()
@@ -1416,7 +1510,7 @@ class ReviewerReportControlTests(ReviewerReportFixture):  # R6
 
 
 # Installer documentation: specification-5e.md R1-R6. Reviewed independently of PROFILES.
-INSTALLER_DOC_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+INSTALLER_DOC_COMMAND = [sys.executable if os.name == 'nt' else 'python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
                          'Distribution.test_readme_and_playbook_document_the_installer']
 INSTALLER_DOC_TESTS = [INSTALLER_DOC_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
 INSTALLER_DOC_TEXT = ['.ai/README.md', '.ai/docs/install-and-upgrade.md', '.ai/VERSION']
@@ -1424,7 +1518,7 @@ INSTALLER_DOC_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**',
                         *INSTALLER_DOC_TESTS, *INSTALLER_DOC_TEXT]
 INSTALLER_DOC_IMPORTS = ['.ai/scripts/' + name + '.py' for name in
                          ('scratch', 'lifecycle', 'review_guard', 'ledger', 'brownfield',
-                          'okf', 'learning', 'scan', 'project_context', 'assurance')]
+                          'okf', 'learning', 'scan', 'project_context', 'assurance', 'process_runtime')]
 
 
 class InstallerDocFixture(Fixture):
@@ -1513,7 +1607,7 @@ class InstallerDocProfileTests(InstallerDocFixture):  # R1
         self.assert_prior_profiles()
         for argv in (INSTALLER_DOC_COMMAND[:2], INSTALLER_DOC_COMMAND[:2] + ['Distribution'],
                      INSTALLER_DOC_COMMAND[:2] + ['Distribution.test_eval_and_installer_share_one_kit_list'],
-                     INSTALLER_DOC_COMMAND + ['-v'], [sys.executable, *INSTALLER_DOC_COMMAND[1:]],
+                     INSTALLER_DOC_COMMAND + ['-v'], [OTHER_PYTHON, *INSTALLER_DOC_COMMAND[1:]],
                      ['python3', './' + INSTALLER_DOC_COMMAND[1], INSTALLER_DOC_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -1541,7 +1635,7 @@ class InstallerDocExportTests(InstallerDocFixture):  # R3
                      json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
             self.assertIn(item, text.stdout)
         raw = ('- INSTALLER-R1: The check MUST pass.\n  - Verify: `'
-               + ' '.join(INSTALLER_DOC_COMMAND) + '`\n' + value['inputs_line'] + '\n')
+               + shlex.join(INSTALLER_DOC_COMMAND) + '`\n' + value['inputs_line'] + '\n')
         parsed = assurance.parse('INSTALLER-R1', 'capabilities/installer.md', raw, root=self.root)
         self.assertIsNone(parsed.invalid)
         self.assertEqual(list(parsed.globs), value['inputs'])
@@ -1568,7 +1662,7 @@ class InstallerDocExportTests(InstallerDocFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -1581,13 +1675,14 @@ class InstallerDocExportTests(InstallerDocFixture):  # R3
 # These inspected setup files are unchanged from the shared eager/called path;
 # keep independent pins rather than deriving expectations from current bytes.
 INSTALLER_DOC_SETUP_PINS = {
-    '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
-    '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
-    '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
-    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
-    '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
+    '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
+    '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
+    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+    '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
+    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
+    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
 }
 
 
@@ -1639,7 +1734,7 @@ class InstallerDocDependencyTests(InstallerDocFixture):  # R2
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (INSTALLER_DOC_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 14)
+        self.assertEqual(len(variants), 15)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = InstallerDocDependencyTests('test_order_scope_and_independent_oracle')
@@ -1709,7 +1804,7 @@ class InstallerDocCompatibilityTests(InstallerDocFixture):  # R4
         self.assertTrue(value['review_required'])
         self.assertIn('runtime', ' '.join(value['limitations']).lower())
         guide = (self.root / ARCH_GUIDE).read_text()
-        for phrase in ('python-installer-doc-contract', ' '.join(INSTALLER_DOC_COMMAND),
+        for phrase in ('python-installer-doc-contract', ' '.join(['python3', *INSTALLER_DOC_COMMAND[1:]]),
                        'static', 'conservative', 'explicit', 'manual', 'numeric',
                        'semantic-version compatibility', *INSTALLER_DOC_TEXT):
             self.assertIn(phrase, guide)
@@ -1777,7 +1872,7 @@ class InstallerDocAdopterEndToEndTests(InstallerDocFixture):  # R6
         value = self.suggestion()
         prefix = ('---\ntype: Capability\ntitle: Installer docs\nnamespace: INSTALLER\nstatus: draft\n---\n'
                   '# Installer docs\n\n## Requirements\n\n- INSTALLER-R1: The static check MUST pass.\n'
-                  '  - Verify: `' + ' '.join(INSTALLER_DOC_COMMAND) + '`\n')
+                  '  - Verify: `' + shlex.join(INSTALLER_DOC_COMMAND) + '`\n')
         original = prefix + value['inputs_line'] + '\n'
         capability = self.write('knowledge/capabilities/installer.md', original)
         self.commit()
@@ -1841,9 +1936,9 @@ class InstallerDocControlTests(InstallerDocFixture):  # R6
                         replacement = (original.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
                                        + '\nLIMITATIONS =' + original.split('\nLIMITATIONS =', 1)[1])
                     elif variant == 'loose':
-                        old = "p['argv'] == list(argv)"
+                        old = "exact_profile_command(p['argv'], argv)"
                         case.assertEqual(original.count(old), 1)
-                        replacement = original.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                        replacement = original.replace(old, "exact_profile_command(p['argv'], list(argv)[:len(p['argv'])])")
                     else:
                         path = case.root / INSTALLER_DOC_TESTS[0]
                         original = path.read_text()
@@ -1867,7 +1962,7 @@ class InstallerDocControlTests(InstallerDocFixture):  # R6
 
 
 # Validation policy: specification-5f.md R1-R6. Independent of PROFILES.
-VALIDATION_POLICY_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+VALIDATION_POLICY_COMMAND = [sys.executable if os.name == 'nt' else 'python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
                              'Relocation.test_agents_md_points_to_the_policy_and_the_policy_keeps_its_must_rules']
 VALIDATION_POLICY_TESTS = [VALIDATION_POLICY_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
 VALIDATION_POLICY_DOCS = ['AGENTS.md', '.ai/validation-policy.md']
@@ -1875,7 +1970,7 @@ VALIDATION_POLICY_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**',
                            *VALIDATION_POLICY_TESTS, *VALIDATION_POLICY_DOCS]
 VALIDATION_POLICY_IMPORTS = ['.ai/scripts/' + name + '.py' for name in
                             ('scratch', 'lifecycle', 'review_guard', 'ledger', 'brownfield',
-                             'okf', 'learning', 'scan', 'project_context', 'assurance')]
+                             'okf', 'learning', 'scan', 'project_context', 'assurance', 'process_runtime')]
 VALIDATION_POLICY_RULES = (
     'MUST NOT rerun an unchanged failing check',
     '`--max` below 300 s is a violation',
@@ -1972,7 +2067,7 @@ class ValidationPolicyProfileTests(ValidationPolicyFixture):  # R1
         self.assert_prior_profiles()
         for argv in (VALIDATION_POLICY_COMMAND[:2], VALIDATION_POLICY_COMMAND[:2] + ['Relocation'],
                      VALIDATION_POLICY_COMMAND[:2] + ['Distribution.test_eval_and_installer_share_one_kit_list'],
-                     VALIDATION_POLICY_COMMAND + ['-v'], [sys.executable, *VALIDATION_POLICY_COMMAND[1:]],
+                     VALIDATION_POLICY_COMMAND + ['-v'], [OTHER_PYTHON, *VALIDATION_POLICY_COMMAND[1:]],
                      ['python3', './' + VALIDATION_POLICY_COMMAND[1], VALIDATION_POLICY_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -2000,7 +2095,7 @@ class ValidationPolicyExportTests(ValidationPolicyFixture):  # R3
                      json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
             self.assertIn(item, text.stdout)
         raw = ('- POLICY-R1: The check MUST pass.\n  - Verify: `'
-               + ' '.join(VALIDATION_POLICY_COMMAND) + '`\n' + value['inputs_line'] + '\n')
+               + shlex.join(VALIDATION_POLICY_COMMAND) + '`\n' + value['inputs_line'] + '\n')
         parsed = assurance.parse('POLICY-R1', 'capabilities/policy.md', raw, root=self.root)
         self.assertIsNone(parsed.invalid)
         self.assertEqual(list(parsed.globs), value['inputs'])
@@ -2027,7 +2122,7 @@ class ValidationPolicyExportTests(ValidationPolicyFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -2039,13 +2134,14 @@ class ValidationPolicyExportTests(ValidationPolicyFixture):  # R3
 
 # Fixed expectations for the independently inspected shared eager/called setup.
 VALIDATION_POLICY_SETUP_PINS = {
-    '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
-    '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
-    '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
-    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
-    '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
+    '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
+    '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
+    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+    '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
+    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
+    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
 }
 
 
@@ -2097,7 +2193,7 @@ class ValidationPolicyDependencyTests(ValidationPolicyFixture):  # R2
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (VALIDATION_POLICY_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 14)
+        self.assertEqual(len(variants), 15)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = ValidationPolicyDependencyTests('test_order_scope_and_independent_oracle')
@@ -2165,7 +2261,7 @@ class ValidationPolicyCompatibilityTests(ValidationPolicyFixture):  # R4
         self.assertTrue(value['review_required'])
         self.assertIn('runtime', ' '.join(value['limitations']).lower())
         guide = (self.root / ARCH_GUIDE).read_text()
-        for phrase in ('python-validation-policy-contract', ' '.join(VALIDATION_POLICY_COMMAND),
+        for phrase in ('python-validation-policy-contract', ' '.join(['python3', *VALIDATION_POLICY_COMMAND[1:]]),
                        'static', 'conservative', 'explicit', 'manual', 'text placement',
                        'policy enforcement', *VALIDATION_POLICY_DOCS):
             self.assertIn(phrase, guide)
@@ -2240,7 +2336,7 @@ class ValidationPolicyAdopterEndToEndTests(ValidationPolicyFixture):  # R6
         value = self.suggestion()
         prefix = ('---\ntype: Capability\ntitle: Policy\nnamespace: POLICY\nstatus: draft\n---\n'
                   '# Policy\n\n## Requirements\n\n- POLICY-R1: The static check MUST pass.\n'
-                  '  - Verify: `' + ' '.join(VALIDATION_POLICY_COMMAND) + '`\n')
+                  '  - Verify: `' + shlex.join(VALIDATION_POLICY_COMMAND) + '`\n')
         original = prefix + value['inputs_line'] + '\n'
         capability = self.write('knowledge/capabilities/policy.md', original)
         self.commit()
@@ -2304,9 +2400,9 @@ class ValidationPolicyControlTests(ValidationPolicyFixture):  # R6
                         replacement = (original.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
                                        + '\nLIMITATIONS =' + original.split('\nLIMITATIONS =', 1)[1])
                     elif variant == 'loose':
-                        old = "p['argv'] == list(argv)"
+                        old = "exact_profile_command(p['argv'], argv)"
                         case.assertEqual(original.count(old), 1)
-                        replacement = original.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                        replacement = original.replace(old, "exact_profile_command(p['argv'], list(argv)[:len(p['argv'])])")
                     else:
                         path = case.root / VALIDATION_POLICY_TESTS[0]
                         original = path.read_text()
@@ -2332,14 +2428,14 @@ class ValidationPolicyControlTests(ValidationPolicyFixture):  # R6
 
 
 # Audit documentation: specification-5g.md R1-R6. Independent of PROFILES.
-AUDIT_DOC_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+AUDIT_DOC_COMMAND = [sys.executable if os.name == 'nt' else 'python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
                      'Tiers.test_the_committed_audit_record_is_documented']
 AUDIT_DOC_TESTS = [AUDIT_DOC_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
 AUDIT_DOC_DOCS = ['.ai/lifecycle.md', '.ai/docs/lifecycle.md']
 AUDIT_DOC_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**', *AUDIT_DOC_TESTS, *AUDIT_DOC_DOCS]
 AUDIT_DOC_IMPORTS = ['.ai/scripts/' + name + '.py' for name in
                      ('scratch', 'lifecycle', 'review_guard', 'ledger', 'brownfield',
-                      'okf', 'learning', 'scan', 'project_context', 'assurance')]
+                      'okf', 'learning', 'scan', 'project_context', 'assurance', 'process_runtime')]
 AUDIT_DOC_TOKENS = ('knowledge/history/lifecycle/', 'lifecycle.py audit')
 
 
@@ -2433,7 +2529,7 @@ class AuditDocProfileTests(AuditDocFixture):  # R1
         sibling = self.suggestion(argv=AUDIT_DOC_COMMAND[:2] + ['Tiers.test_analyze_and_converge_are_documented'])
         self.assertEqual(sibling['profile_id'], 'python-analysis-convergence-doc-contract')
         for argv in (AUDIT_DOC_COMMAND[:2], AUDIT_DOC_COMMAND[:2] + ['Tiers'],
-                     AUDIT_DOC_COMMAND + ['-v'], [sys.executable, *AUDIT_DOC_COMMAND[1:]],
+                     AUDIT_DOC_COMMAND + ['-v'], [OTHER_PYTHON, *AUDIT_DOC_COMMAND[1:]],
                      ['python3', './' + AUDIT_DOC_COMMAND[1], AUDIT_DOC_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -2461,7 +2557,7 @@ class AuditDocExportTests(AuditDocFixture):  # R3
                      json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
             self.assertIn(item, text.stdout)
         raw = ('- AUDITDOC-R1: The check MUST pass.\n  - Verify: `'
-               + ' '.join(AUDIT_DOC_COMMAND) + '`\n' + value['inputs_line'] + '\n')
+               + shlex.join(AUDIT_DOC_COMMAND) + '`\n' + value['inputs_line'] + '\n')
         parsed = assurance.parse('AUDITDOC-R1', 'capabilities/audit-doc.md', raw, root=self.root)
         self.assertIsNone(parsed.invalid)
         self.assertEqual(list(parsed.globs), value['inputs'])
@@ -2488,7 +2584,7 @@ class AuditDocExportTests(AuditDocFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -2500,13 +2596,14 @@ class AuditDocExportTests(AuditDocFixture):  # R3
 
 # Independently reviewed shared initialization and called-body boundary.
 AUDIT_DOC_SETUP_PINS = {
-    '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
-    '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
-    '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
-    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
-    '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
+    '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
+    '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
+    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+    '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
+    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
+    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
 }
 
 
@@ -2569,7 +2666,7 @@ class AuditDocDependencyTests(AuditDocFixture):  # R2
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (AUDIT_DOC_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 14)
+        self.assertEqual(len(variants), 15)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = AuditDocDependencyTests('test_order_scope_and_independent_oracle')
@@ -2637,7 +2734,7 @@ class AuditDocCompatibilityTests(AuditDocFixture):  # R4
         self.assertTrue(value['review_required'])
         self.assertIn('runtime', ' '.join(value['limitations']).lower())
         guide = (self.root / ARCH_GUIDE).read_text()
-        for phrase in ('python-audit-doc-contract', ' '.join(AUDIT_DOC_COMMAND),
+        for phrase in ('python-audit-doc-contract', ' '.join(['python3', *AUDIT_DOC_COMMAND[1:]]),
                        'static', 'conservative', 'explicit', 'manual', 'substring',
                        'tamper detection', *AUDIT_DOC_DOCS):
             self.assertIn(phrase, guide)
@@ -2705,7 +2802,7 @@ class AuditDocAdopterEndToEndTests(AuditDocFixture):  # R6
         value = self.suggestion()
         prefix = ('---\ntype: Capability\ntitle: Audit documentation\nnamespace: AUDITDOC\nstatus: draft\n---\n'
                   '# Audit documentation\n\n## Requirements\n\n- AUDITDOC-R1: The static check MUST pass.\n'
-                  '  - Verify: `' + ' '.join(AUDIT_DOC_COMMAND) + '`\n')
+                  '  - Verify: `' + shlex.join(AUDIT_DOC_COMMAND) + '`\n')
         original = prefix + value['inputs_line'] + '\n'
         capability = self.write('knowledge/capabilities/audit-doc.md', original)
         self.commit()
@@ -2770,9 +2867,9 @@ class AuditDocControlTests(AuditDocFixture):  # R6
                         replacement = (original.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
                                        + '\nLIMITATIONS =' + original.split('\nLIMITATIONS =', 1)[1])
                     elif variant == 'loose':
-                        old = "p['argv'] == list(argv)"
+                        old = "exact_profile_command(p['argv'], argv)"
                         case.assertEqual(original.count(old), 1)
-                        replacement = original.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                        replacement = original.replace(old, "exact_profile_command(p['argv'], list(argv)[:len(p['argv'])])")
                     else:
                         path = case.root / AUDIT_DOC_TESTS[0]
                         original = path.read_text()
@@ -2798,7 +2895,7 @@ class AuditDocControlTests(AuditDocFixture):  # R6
 
 
 # Analysis/convergence documentation: specification-5h.md R1-R6. Independent of PROFILES.
-ANALYSIS_CONVERGENCE_DOC_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+ANALYSIS_CONVERGENCE_DOC_COMMAND = [sys.executable if os.name == 'nt' else 'python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
                                     'Tiers.test_analyze_and_converge_are_documented']
 ANALYSIS_CONVERGENCE_DOC_TESTS = [ANALYSIS_CONVERGENCE_DOC_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
 ANALYSIS_CONVERGENCE_DOC_DOCS = ['.ai/lifecycle.md', '.ai/docs/lifecycle.md', '.ai/validation-policy.md']
@@ -2806,7 +2903,7 @@ ANALYSIS_CONVERGENCE_DOC_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**',
                                   *ANALYSIS_CONVERGENCE_DOC_TESTS, *ANALYSIS_CONVERGENCE_DOC_DOCS]
 ANALYSIS_CONVERGENCE_DOC_IMPORTS = ['.ai/scripts/' + name + '.py' for name in
                                    ('scratch', 'lifecycle', 'review_guard', 'ledger', 'brownfield',
-                                    'okf', 'learning', 'scan', 'project_context', 'assurance')]
+                                    'okf', 'learning', 'scan', 'project_context', 'assurance', 'process_runtime')]
 ANALYSIS_CONVERGENCE_DOC_TOKENS = ('lifecycle.py analyze', 'lifecycle.py converge')
 ANALYSIS_CONVERGENCE_DOC_PHRASE = 'cites a passing converge run of an identical command on the current tree'
 
@@ -2902,7 +2999,7 @@ class AnalysisConvergenceDocProfileTests(AnalysisConvergenceDocFixture):  # R1
         for argv in (ANALYSIS_CONVERGENCE_DOC_COMMAND[:2], ANALYSIS_CONVERGENCE_DOC_COMMAND[:2] + ['Tiers'],
                      ANALYSIS_CONVERGENCE_DOC_COMMAND[:2] + ['Tiers.test_tiers_match'],
                      ANALYSIS_CONVERGENCE_DOC_COMMAND + ['-v'],
-                     [sys.executable, *ANALYSIS_CONVERGENCE_DOC_COMMAND[1:]],
+                     [OTHER_PYTHON, *ANALYSIS_CONVERGENCE_DOC_COMMAND[1:]],
                      ['python3', './' + ANALYSIS_CONVERGENCE_DOC_COMMAND[1], ANALYSIS_CONVERGENCE_DOC_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -2935,7 +3032,7 @@ class AnalysisConvergenceDocExportTests(AnalysisConvergenceDocFixture):  # R3
                      json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
             self.assertIn(item, text.stdout)
         raw = ('- ANALYSISDOC-R1: The check MUST pass.\n  - Verify: `'
-               + ' '.join(ANALYSIS_CONVERGENCE_DOC_COMMAND) + '`\n' + value['inputs_line'] + '\n')
+               + shlex.join(ANALYSIS_CONVERGENCE_DOC_COMMAND) + '`\n' + value['inputs_line'] + '\n')
         parsed = assurance.parse('ANALYSISDOC-R1', 'capabilities/analysis-doc.md', raw, root=self.root)
         self.assertIsNone(parsed.invalid)
         self.assertEqual(list(parsed.globs), value['inputs'])
@@ -2962,7 +3059,7 @@ class AnalysisConvergenceDocExportTests(AnalysisConvergenceDocFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -2974,13 +3071,14 @@ class AnalysisConvergenceDocExportTests(AnalysisConvergenceDocFixture):  # R3
 
 # Shared setup/called bodies independently reviewed for the exact 5h method.
 ANALYSIS_CONVERGENCE_DOC_SETUP_PINS = {
-    '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
-    '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
-    '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
-    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
-    '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
+    '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
+    '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
+    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+    '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
+    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
+    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
 }
 
 
@@ -3057,7 +3155,7 @@ class AnalysisConvergenceDocDependencyTests(AnalysisConvergenceDocFixture):  # R
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (ANALYSIS_CONVERGENCE_DOC_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 14)
+        self.assertEqual(len(variants), 15)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = AnalysisConvergenceDocDependencyTests('test_order_scope_and_independent_oracle')
@@ -3126,7 +3224,7 @@ class AnalysisConvergenceDocCompatibilityTests(AnalysisConvergenceDocFixture):  
         self.assertTrue(value['review_required'])
         self.assertIn('runtime', ' '.join(value['limitations']).lower())
         guide = (self.root / ARCH_GUIDE).read_text()
-        for phrase in ('python-analysis-convergence-doc-contract', ' '.join(ANALYSIS_CONVERGENCE_DOC_COMMAND),
+        for phrase in ('python-analysis-convergence-doc-contract', ' '.join(['python3', *ANALYSIS_CONVERGENCE_DOC_COMMAND[1:]]),
                        'static', 'conservative', 'explicit', 'manual', 'substring',
                        'separate literal', 'seven', 'section placement', 'evidence matching',
                        *ANALYSIS_CONVERGENCE_DOC_DOCS):
@@ -3197,7 +3295,7 @@ class AnalysisConvergenceDocAdopterEndToEndTests(AnalysisConvergenceDocFixture):
         value = self.suggestion()
         prefix = ('---\ntype: Capability\ntitle: Analysis documentation\nnamespace: ANALYSISDOC\nstatus: draft\n---\n'
                   '# Analysis documentation\n\n## Requirements\n\n- ANALYSISDOC-R1: The static check MUST pass.\n'
-                  '  - Verify: `' + ' '.join(ANALYSIS_CONVERGENCE_DOC_COMMAND) + '`\n')
+                  '  - Verify: `' + shlex.join(ANALYSIS_CONVERGENCE_DOC_COMMAND) + '`\n')
         original = prefix + value['inputs_line'] + '\n'
         capability = self.write('knowledge/capabilities/analysis-doc.md', original)
         self.commit()
@@ -3265,9 +3363,9 @@ class AnalysisConvergenceDocControlTests(AnalysisConvergenceDocFixture):  # R6
                         replacement = (original.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
                                        + '\nLIMITATIONS =' + original.split('\nLIMITATIONS =', 1)[1])
                     elif variant == 'loose':
-                        old = "p['argv'] == list(argv)"
+                        old = "exact_profile_command(p['argv'], argv)"
                         case.assertEqual(original.count(old), 1)
-                        replacement = original.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                        replacement = original.replace(old, "exact_profile_command(p['argv'], list(argv)[:len(p['argv'])])")
                     else:
                         path = case.root / ANALYSIS_CONVERGENCE_DOC_TESTS[0]
                         original = path.read_text()
@@ -3294,7 +3392,7 @@ class AnalysisConvergenceDocControlTests(AnalysisConvergenceDocFixture):  # R6
 
 
 # Stage documentation/runtime names: specification-5i.md R1-R6. Independent of PROFILES.
-STAGE_DOC_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+STAGE_DOC_COMMAND = [sys.executable if os.name == 'nt' else 'python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
                      'Tiers.test_every_stage_the_script_gates_is_described_in_the_lifecycle']
 STAGE_DOC_TESTS = [STAGE_DOC_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
 STAGE_DOC_DOCS = ['.ai/lifecycle.md']
@@ -3302,7 +3400,7 @@ STAGE_DOC_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**',
                     *STAGE_DOC_TESTS, *STAGE_DOC_DOCS]
 STAGE_DOC_IMPORTS = ['.ai/scripts/' + name + '.py' for name in
                      ('scratch', 'lifecycle', 'review_guard', 'ledger', 'brownfield',
-                      'okf', 'learning', 'scan', 'project_context', 'assurance')]
+                      'okf', 'learning', 'scan', 'project_context', 'assurance', 'process_runtime')]
 STAGE_DOC_HEADINGS = ('Stage 0: Intent', 'Stage 1: Plan', 'Stage 3: Review',
                       'Stage 4: Verify and sync', 'Stage 5: Ship')
 STAGE_DOC_NAMES = {'intent', 'plan', 'review', 'verify', 'ship'}
@@ -3400,7 +3498,7 @@ class StageDocProfileTests(StageDocFixture):  # R1
         for argv in (STAGE_DOC_COMMAND[:2], STAGE_DOC_COMMAND[:2] + ['Tiers'],
                      STAGE_DOC_COMMAND[:2] + ['Tiers.test_tiers_match'],
                      STAGE_DOC_COMMAND + ['-v'],
-                     [sys.executable, *STAGE_DOC_COMMAND[1:]],
+                     [OTHER_PYTHON, *STAGE_DOC_COMMAND[1:]],
                      ['python3', './' + STAGE_DOC_COMMAND[1], STAGE_DOC_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -3428,7 +3526,7 @@ class StageDocExportTests(StageDocFixture):  # R3
                      json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
             self.assertIn(item, text.stdout)
         raw = ('- STAGEDOC-R1: The check MUST pass.\n  - Verify: `'
-               + ' '.join(STAGE_DOC_COMMAND) + '`\n' + value['inputs_line'] + '\n')
+               + shlex.join(STAGE_DOC_COMMAND) + '`\n' + value['inputs_line'] + '\n')
         parsed = assurance.parse('STAGEDOC-R1', 'capabilities/stage-doc.md', raw, root=self.root)
         self.assertIsNone(parsed.invalid)
         self.assertEqual(list(parsed.globs), value['inputs'])
@@ -3455,7 +3553,7 @@ class StageDocExportTests(StageDocFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -3467,13 +3565,14 @@ class StageDocExportTests(StageDocFixture):  # R3
 
 # Shared setup/called bodies independently reviewed for the exact 5i method.
 STAGE_DOC_SETUP_PINS = {
-    '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
-    '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
-    '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
-    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
-    '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
+    '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
+    '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
+    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+    '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
+    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
+    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
 }
 
 
@@ -3550,7 +3649,7 @@ class StageDocDependencyTests(StageDocFixture):  # R2
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (STAGE_DOC_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 14)
+        self.assertEqual(len(variants), 15)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = StageDocDependencyTests('test_order_scope_and_independent_oracle')
@@ -3619,7 +3718,7 @@ class StageDocCompatibilityTests(StageDocFixture):  # R4
         self.assertTrue(value['review_required'])
         self.assertIn('runtime', ' '.join(value['limitations']).lower())
         guide = (self.root / ARCH_GUIDE).read_text()
-        for phrase in ('python-stage-doc-contract', ' '.join(STAGE_DOC_COMMAND),
+        for phrase in ('python-stage-doc-contract', ' '.join(['python3', *STAGE_DOC_COMMAND[1:]]),
                        'static', 'conservative', 'explicit', 'manual', 'substring',
                        'five heading', 'runtime', 'set equality', 'Stage 2', 'tuple type',
                        'section bodies', 'duplicates', 'enforcement', 'eight prior profiles',
@@ -3708,7 +3807,7 @@ class StageDocAdopterEndToEndTests(StageDocFixture):  # R6
         value = self.suggestion()
         prefix = ('---\ntype: Capability\ntitle: Stage documentation\nnamespace: STAGEDOC\nstatus: draft\n---\n'
                   '# Stage documentation\n\n## Requirements\n\n- STAGEDOC-R1: The static check MUST pass.\n'
-                  '  - Verify: `' + ' '.join(STAGE_DOC_COMMAND) + '`\n')
+                  '  - Verify: `' + shlex.join(STAGE_DOC_COMMAND) + '`\n')
         original = prefix + value['inputs_line'] + '\n'
         capability = self.write('knowledge/capabilities/stage-doc.md', original)
         self.commit()
@@ -3776,9 +3875,9 @@ class StageDocControlTests(StageDocFixture):  # R6
                         replacement = (original.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
                                        + '\nLIMITATIONS =' + original.split('\nLIMITATIONS =', 1)[1])
                     elif variant == 'loose':
-                        old = "p['argv'] == list(argv)"
+                        old = "exact_profile_command(p['argv'], argv)"
                         case.assertEqual(original.count(old), 1)
-                        replacement = original.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                        replacement = original.replace(old, "exact_profile_command(p['argv'], list(argv)[:len(p['argv'])])")
                     else:
                         path = case.root / STAGE_DOC_TESTS[0]
                         original = path.read_text()
@@ -3803,7 +3902,7 @@ class StageDocControlTests(StageDocFixture):  # R6
                 self.assertIn(criterion, result.failures[0][1])
 
 
-TIER_DOC_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+TIER_DOC_COMMAND = [sys.executable if os.name == 'nt' else 'python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
                      'Tiers.test_tier_definitions_agree_across_agents_lifecycle_and_script']
 TIER_DOC_TESTS = [TIER_DOC_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
 TIER_DOC_DOCS = ['AGENTS.md', '.ai/lifecycle.md']
@@ -3811,7 +3910,7 @@ TIER_DOC_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**',
                     *TIER_DOC_TESTS, *TIER_DOC_DOCS]
 TIER_DOC_IMPORTS = ['.ai/scripts/' + name + '.py' for name in
                      ('scratch', 'lifecycle', 'review_guard', 'ledger', 'brownfield',
-                      'okf', 'learning', 'scan', 'project_context', 'assurance')]
+                      'okf', 'learning', 'scan', 'project_context', 'assurance', 'process_runtime')]
 TIER_DOC_BASELINE = ('L0', 'L1', 'L2', 'L3')
 
 
@@ -3932,7 +4031,7 @@ class TierDocProfileTests(TierDocFixture):  # R1
         for argv in (TIER_DOC_COMMAND[:2], TIER_DOC_COMMAND[:2] + ['Tiers'],
                      TIER_DOC_COMMAND[:2] + ['Tiers.test_tiers_match'],
                      TIER_DOC_COMMAND + ['-v'],
-                     [sys.executable, *TIER_DOC_COMMAND[1:]],
+                     [OTHER_PYTHON, *TIER_DOC_COMMAND[1:]],
                      ['python3', './' + TIER_DOC_COMMAND[1], TIER_DOC_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -3960,7 +4059,7 @@ class TierDocExportTests(TierDocFixture):  # R3
                      json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
             self.assertIn(item, text.stdout)
         raw = ('- TIERDOC-R1: The check MUST pass.\n  - Verify: `'
-               + ' '.join(TIER_DOC_COMMAND) + '`\n' + value['inputs_line'] + '\n')
+               + shlex.join(TIER_DOC_COMMAND) + '`\n' + value['inputs_line'] + '\n')
         parsed = assurance.parse('TIERDOC-R1', 'capabilities/tier-doc.md', raw, root=self.root)
         self.assertIsNone(parsed.invalid)
         self.assertEqual(list(parsed.globs), value['inputs'])
@@ -3988,7 +4087,7 @@ class TierDocExportTests(TierDocFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -4001,13 +4100,14 @@ class TierDocExportTests(TierDocFixture):  # R3
 
 # Shared setup/called bodies independently reviewed for the exact 5j method.
 TIER_DOC_SETUP_PINS = {
-    '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
-    '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
-    '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
-    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
-    '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
+    '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
+    '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
+    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+    '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
+    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
+    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
 }
 
 
@@ -4152,7 +4252,7 @@ class TierDocCompatibilityTests(TierDocFixture):  # R4
         self.assertTrue(value['review_required'])
         self.assertIn('runtime', ' '.join(value['limitations']).lower())
         guide = (self.root / ARCH_GUIDE).read_text()
-        for phrase in ('python-tier-doc-contract', ' '.join(TIER_DOC_COMMAND),
+        for phrase in ('python-tier-doc-contract', ' '.join(['python3', *TIER_DOC_COMMAND[1:]]),
                        'static', 'conservative', 'explicit', 'manual', 'substring',
                        'observed runtime tier', 'runtime', 'set equality', 'nonempty', 'tuple type',
                        'section bodies', 'duplicates', 'enforcement', 'nine prior profiles',
@@ -4255,7 +4355,7 @@ class TierDocAdopterEndToEndTests(TierDocFixture):  # R6
         value = self.suggestion()
         prefix = ('---\ntype: Capability\ntitle: Tier documentation\nnamespace: TIERDOC\nstatus: draft\n---\n'
                   '# Tier documentation\n\n## Requirements\n\n- TIERDOC-R1: The static check MUST pass.\n'
-                  '  - Verify: `' + ' '.join(TIER_DOC_COMMAND) + '`\n')
+                  '  - Verify: `' + shlex.join(TIER_DOC_COMMAND) + '`\n')
         original = prefix + value['inputs_line'] + '\n'
         capability = self.write('knowledge/capabilities/tier-doc.md', original)
         self.commit()
@@ -4323,9 +4423,9 @@ class TierDocControlTests(TierDocFixture):  # R6
                         replacement = (original.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
                                        + '\nLIMITATIONS =' + original.split('\nLIMITATIONS =', 1)[1])
                     elif variant == 'loose':
-                        old = "p['argv'] == list(argv)"
+                        old = "exact_profile_command(p['argv'], argv)"
                         case.assertEqual(original.count(old), 1)
-                        replacement = original.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                        replacement = original.replace(old, "exact_profile_command(p['argv'], list(argv)[:len(p['argv'])])")
                     else:
                         path = case.root / TIER_DOC_TESTS[0]
                         original = path.read_text()
@@ -4349,7 +4449,7 @@ class TierDocControlTests(TierDocFixture):  # R6
                 self.assertEqual(len(result.failures), 1, 'broken variant survived: ' + variant)
                 self.assertIn(criterion, result.failures[0][1])
 
-ASSURANCE_DOC_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+ASSURANCE_DOC_COMMAND = [sys.executable if os.name == 'nt' else 'python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
                          'Assurance.test_assurance_documented']
 ASSURANCE_DOC_TESTS = [ASSURANCE_DOC_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
 ASSURANCE_DOC_DOCS = ['.ai/lifecycle.md']
@@ -4452,7 +4552,7 @@ class AssuranceDocProfileTests(AssuranceDocFixture):  # R1
         self.assert_prior_profiles()
         for argv in (ASSURANCE_DOC_COMMAND[:2], ASSURANCE_DOC_COMMAND[:2] + ['Assurance'],
                      ASSURANCE_DOC_COMMAND[:2] + ['Assurance.test_other'],
-                     ASSURANCE_DOC_COMMAND + ['-v'], [sys.executable, *ASSURANCE_DOC_COMMAND[1:]],
+                     ASSURANCE_DOC_COMMAND + ['-v'], [OTHER_PYTHON, *ASSURANCE_DOC_COMMAND[1:]],
                      ['python3', './' + ASSURANCE_DOC_COMMAND[1], ASSURANCE_DOC_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -4479,7 +4579,7 @@ class AssuranceDocExportTests(AssuranceDocFixture):  # R3
                      json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
             self.assertIn(item, text.stdout)
         raw = ('- ASSURANCEDOC-R1: The check MUST pass.\n  - Verify: `'
-               + ' '.join(ASSURANCE_DOC_COMMAND) + '`\n' + value['inputs_line'] + '\n')
+               + shlex.join(ASSURANCE_DOC_COMMAND) + '`\n' + value['inputs_line'] + '\n')
         parsed = assurance.parse('ASSURANCEDOC-R1', 'capabilities/assurance-doc.md', raw, root=self.root)
         self.assertIsNone(parsed.invalid)
         self.assertEqual(list(parsed.globs), value['inputs'])
@@ -4507,7 +4607,7 @@ class AssuranceDocExportTests(AssuranceDocFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -4531,13 +4631,14 @@ ASSURANCE_DOC_SECTION = r'(?s)## Assurance status\n(.*?)(?=\n## )'
 ASSURANCE_DOC_ROW = r'(?m)^\| Assurance \| `assure'
 # Reviewed eager setup and called bodies for this selection, not reached producer bodies.
 ASSURANCE_DOC_SETUP_PINS = {
-    '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
-    '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
-    '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
-    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
-    '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
+    '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
+    '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
+    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+    '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
+    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
+    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
 }
 
 
@@ -4568,7 +4669,7 @@ class AssuranceDocDependencyTests(AssuranceDocFixture):  # R2
         selected = set(ledger.input_paths(self.root, value['inputs']))
         imports = ['.ai/scripts/' + n + '.py' for n in
                    ('scratch', 'lifecycle', 'review_guard', 'ledger', 'brownfield',
-                    'okf', 'learning', 'scan', 'project_context', 'assurance')]
+                    'okf', 'learning', 'scan', 'project_context', 'assurance', 'process_runtime')]
         self.assertTrue(set([*ASSURANCE_DOC_TESTS, *ASSURANCE_DOC_DOCS, *imports, *included]).issubset(selected))
         self.assertFalse(set(excluded) & selected)
         import ast
@@ -4676,7 +4777,7 @@ class AssuranceDocCompatibilityTests(AssuranceDocFixture):  # R4
         self.assertTrue(value['review_required'])
         self.assertIn('runtime', ' '.join(value['limitations']).lower())
         guide = (self.root / ARCH_GUIDE).read_text()
-        for phrase in ('python-assurance-doc-contract', ' '.join(ASSURANCE_DOC_COMMAND),
+        for phrase in ('python-assurance-doc-contract', ' '.join(['python3', *ASSURANCE_DOC_COMMAND[1:]]),
                        'two literal reads', '20', 'seven', '29 assertions', 'one test',
                        'DOTALL', 'MULTILINE', 'unanchored', 'first matching capture',
                        'case-sensitive', 'row-prefix', 'no end anchor', 'semantics',
@@ -4684,8 +4785,7 @@ class AssuranceDocCompatibilityTests(AssuranceDocFixture):  # R4
                        *ASSURANCE_DOC_INPUTS):
             self.assertIn(phrase, guide)
         baseline_source = read_baseline('22c65521b281fce485ec5d10e45359cded53ec3f', '.ai/lifecycle.md')
-        for paragraph in baseline_source.split('\n\n'):
-            self.assertIn(paragraph, guide, 'previous guide paragraph changed')
+        assert_prior_guide_paragraphs(self, self.root, baseline_source, guide)
 
 
 class AssuranceDocFrameworkEndToEndTests(AssuranceDocFixture):  # R5
@@ -4783,7 +4883,7 @@ class AssuranceDocAdopterEndToEndTests(AssuranceDocFixture):  # R6
         value = self.suggestion()
         prefix = ('---\ntype: Capability\ntitle: Assurance documentation\nnamespace: ASSURANCEDOC\nstatus: draft\n---\n'
                   '# Assurance documentation\n\n## Requirements\n\n- ASSURANCEDOC-R1: The static check MUST pass.\n'
-                  '  - Verify: `' + ' '.join(ASSURANCE_DOC_COMMAND) + '`\n')
+                  '  - Verify: `' + shlex.join(ASSURANCE_DOC_COMMAND) + '`\n')
         original = prefix + value['inputs_line'] + '\n'
         capability = self.write('knowledge/capabilities/assurance-doc.md', original)
         self.commit()
@@ -4850,9 +4950,9 @@ class AssuranceDocControlTests(AssuranceDocFixture):  # R6
                         replacement = (original.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
                                        + '\nLIMITATIONS =' + original.split('\nLIMITATIONS =', 1)[1])
                     elif variant == 'loose':
-                        old = "p['argv'] == list(argv)"
+                        old = "exact_profile_command(p['argv'], argv)"
                         case.assertEqual(original.count(old), 1)
-                        replacement = original.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                        replacement = original.replace(old, "exact_profile_command(p['argv'], list(argv)[:len(p['argv'])])")
                     else:
                         path = case.root / ASSURANCE_DOC_TESTS[0]
                         original = path.read_text()
@@ -4877,7 +4977,7 @@ class AssuranceDocControlTests(AssuranceDocFixture):  # R6
                 self.assertIn(criterion, result.failures[0][1])
 
 
-AGENTS_BUDGET_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+AGENTS_BUDGET_COMMAND = [sys.executable if os.name == 'nt' else 'python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
                          'AgentsBudget.test_agents_md_stays_below_its_cold_start_budget']
 AGENTS_BUDGET_TESTS = [AGENTS_BUDGET_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
 AGENTS_BUDGET_INPUTS = ['.ai/scripts/**', '!.ai/scripts/tests/**', *AGENTS_BUDGET_TESTS, 'AGENTS.md']
@@ -4984,7 +5084,7 @@ class AgentsBudgetProfileTests(AgentsBudgetFixture):  # R1
         self.assert_prior_profiles()
         for argv in (AGENTS_BUDGET_COMMAND[:2], AGENTS_BUDGET_COMMAND[:2] + ['AgentsBudget'],
                      AGENTS_BUDGET_COMMAND[:2] + ['AgentsBudget.test_every_heading_survives'],
-                     AGENTS_BUDGET_COMMAND + ['-v'], [sys.executable, *AGENTS_BUDGET_COMMAND[1:]],
+                     AGENTS_BUDGET_COMMAND + ['-v'], [OTHER_PYTHON, *AGENTS_BUDGET_COMMAND[1:]],
                      ['python3', './' + AGENTS_BUDGET_COMMAND[1], AGENTS_BUDGET_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -5010,7 +5110,7 @@ class AgentsBudgetExportTests(AgentsBudgetFixture):  # R3
                      json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
             self.assertIn(item, text.stdout)
         raw = ('- AGENTSBUDGET-R1: The check MUST pass.\n  - Verify: `'
-               + ' '.join(AGENTS_BUDGET_COMMAND) + '`\n' + value['inputs_line'] + '\n')
+               + shlex.join(AGENTS_BUDGET_COMMAND) + '`\n' + value['inputs_line'] + '\n')
         parsed = assurance.parse('AGENTSBUDGET-R1', 'capabilities/agents-budget.md', raw, root=self.root)
         self.assertIsNone(parsed.invalid)
         self.assertEqual(list(parsed.globs), value['inputs'])
@@ -5037,7 +5137,7 @@ class AgentsBudgetExportTests(AgentsBudgetFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -5048,13 +5148,14 @@ class AgentsBudgetExportTests(AgentsBudgetFixture):  # R3
 
 
 AGENTS_BUDGET_SETUP_PINS = {
-    '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
-    '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
-    '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
-    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
-    '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
+    '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
+    '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
+    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+    '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
+    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
+    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
 }
 
 
@@ -5085,7 +5186,7 @@ class AgentsBudgetDependencyTests(AgentsBudgetFixture):  # R2
         selected = set(ledger.input_paths(self.root, value['inputs']))
         imports = ['.ai/scripts/' + n + '.py' for n in
                    ('scratch', 'lifecycle', 'review_guard', 'ledger', 'brownfield',
-                    'okf', 'learning', 'scan', 'project_context', 'assurance')]
+                    'okf', 'learning', 'scan', 'project_context', 'assurance', 'process_runtime')]
         self.assertTrue(set([*AGENTS_BUDGET_TESTS, 'AGENTS.md', *imports, *included]).issubset(selected))
         self.assertFalse(set(excluded) & selected)
         import ast
@@ -5128,7 +5229,7 @@ class AgentsBudgetDependencyTests(AgentsBudgetFixture):  # R2
                     addition = '__import__("pathlib").Path("unrelated.md").read_text()\n'
                     if body == ('import-helper',):
                         helper = '.ai/scripts/tests/unreviewed_budget_helper.py'
-                        case.write(helper, addition)
+                        (case.root / helper).write_bytes(addition.encode('utf-8'))
                         case.assertEqual((case.root / helper).read_bytes(), addition.encode('utf-8'))
                         case.assertNotIn(helper, ledger.input_paths(case.root, AGENTS_BUDGET_INPUTS))
                         addition = 'import unreviewed_budget_helper\n'
@@ -5184,7 +5285,7 @@ class AgentsBudgetCompatibilityTests(AgentsBudgetFixture):  # R4
         self.assertTrue(value['review_required'])
         self.assertIn('runtime', ' '.join(value['limitations']).lower())
         guide = (self.root / ARCH_GUIDE).read_text()
-        for phrase in ('python-agents-budget-contract', ' '.join(AGENTS_BUDGET_COMMAND),
+        for phrase in ('python-agents-budget-contract', ' '.join(['python3', *AGENTS_BUDGET_COMMAND[1:]]),
                        'one literal read', 'one strict assertion', 'one test', '30000',
                        'default decoding', 'universal-newline', 'UTF-8 re-encoding',
                        'raw-file size', 'characters', 'tokens', 'latency', 'semantics',
@@ -5192,8 +5293,7 @@ class AgentsBudgetCompatibilityTests(AgentsBudgetFixture):  # R4
                        'eleven prior profiles', *AGENTS_BUDGET_INPUTS):
             self.assertIn(phrase, guide)
         baseline_source = read_baseline(AGENTS_BUDGET_HEAD, '.ai/lifecycle.md')
-        for paragraph in baseline_source.split('\n\n'):
-            self.assertIn(paragraph, guide, 'previous guide paragraph changed')
+        assert_prior_guide_paragraphs(self, self.root, baseline_source, guide)
 
 
 class AgentsBudgetFrameworkEndToEndTests(AgentsBudgetFixture):  # R5
@@ -5278,7 +5378,7 @@ class AgentsBudgetAdopterEndToEndTests(AgentsBudgetFixture):  # R6
         value = self.suggestion()
         prefix = ('---\ntype: Capability\ntitle: AGENTS budget\nnamespace: AGENTSBUDGET\nstatus: draft\n---\n'
                   '# AGENTS budget\n\n## Requirements\n\n- AGENTSBUDGET-R1: The budget check MUST pass.\n'
-                  '  - Verify: `' + ' '.join(AGENTS_BUDGET_COMMAND) + '`\n')
+                  '  - Verify: `' + shlex.join(AGENTS_BUDGET_COMMAND) + '`\n')
         original = prefix + value['inputs_line'] + '\n'
         capability = self.write('knowledge/capabilities/agents-budget.md', original)
         self.commit()
@@ -5346,9 +5446,9 @@ class AgentsBudgetControlTests(AgentsBudgetFixture):  # R6
                         replacement = (source.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
                                        + '\nLIMITATIONS =' + source.split('\nLIMITATIONS =', 1)[1])
                     elif variant == 'loose':
-                        old = "p['argv'] == list(argv)"
+                        old = "exact_profile_command(p['argv'], argv)"
                         case.assertEqual(source.count(old), 1)
-                        replacement = source.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                        replacement = source.replace(old, "exact_profile_command(p['argv'], list(argv)[:len(p['argv'])])")
                     else:
                         path = case.root / AGENTS_BUDGET_TESTS[0]
                         original = path.read_bytes()
@@ -5375,7 +5475,7 @@ class AgentsBudgetControlTests(AgentsBudgetFixture):  # R6
 
 
 # Semantic lens: specification-5m.md R1-R6. Independent reviewed declarations.
-SEMANTIC_LENS_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+SEMANTIC_LENS_COMMAND = [sys.executable if os.name == 'nt' else 'python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
                          'RolesAndSkills.test_semantic_lens_in_analyst_reviewer_and_skills']
 SEMANTIC_LENS_TESTS = [SEMANTIC_LENS_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
 SEMANTIC_LENS_DOCS = ['.ai/agents/analyst.md', '.ai/agents/reviewer.md',
@@ -5467,7 +5567,7 @@ class SemanticLensProfileTests(SemanticLensFixture):  # R1
         self.assert_prior_profiles()
         for argv in (SEMANTIC_LENS_COMMAND[:2], SEMANTIC_LENS_COMMAND[:2] + ['RolesAndSkills'],
                      SEMANTIC_LENS_COMMAND[:2] + ['RolesAndSkills.test_codex_skills_are_a_symlink_to_the_claude_skills'],
-                     SEMANTIC_LENS_COMMAND + ['-v'], [sys.executable, *SEMANTIC_LENS_COMMAND[1:]],
+                     SEMANTIC_LENS_COMMAND + ['-v'], [OTHER_PYTHON, *SEMANTIC_LENS_COMMAND[1:]],
                      ['python3', './' + SEMANTIC_LENS_COMMAND[1], SEMANTIC_LENS_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -5494,7 +5594,7 @@ class SemanticLensExportTests(SemanticLensFixture):  # R3
                      json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
             self.assertIn(item, text.stdout)
         raw = ('- SEMANTICLENS-R1: The check MUST pass.\n  - Verify: `'
-               + ' '.join(SEMANTIC_LENS_COMMAND) + '`\n' + value['inputs_line'] + '\n')
+               + shlex.join(SEMANTIC_LENS_COMMAND) + '`\n' + value['inputs_line'] + '\n')
         parsed = assurance.parse('SEMANTICLENS-R1', 'capabilities/semantic-lens.md', raw, root=self.root)
         self.assertIsNone(parsed.invalid)
         self.assertEqual(list(parsed.globs), value['inputs'])
@@ -5522,7 +5622,7 @@ class SemanticLensExportTests(SemanticLensFixture):  # R3
         outside = Path(self.temp.name) / 'outside.md'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -5533,13 +5633,14 @@ class SemanticLensExportTests(SemanticLensFixture):  # R3
 
 
 SEMANTIC_LENS_SETUP_PINS = {
-    '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
-    '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
-    '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
-    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
-    '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
+    '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
+    '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
+    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+    '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
+    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
+    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
 }
 
 
@@ -5613,7 +5714,7 @@ for path, body in ((".ai/agents/reviewer.md#Passes", passes), (".claude/skills/r
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (SEMANTIC_LENS_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 15)
+        self.assertEqual(len(variants), 16)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = SemanticLensDependencyTests('test_order_scope_and_independent_oracle')
@@ -5633,7 +5734,7 @@ for path, body in ((".ai/agents/reviewer.md#Passes", passes), (".claude/skills/r
                     addition = '__import__("pathlib").Path("unrelated.md").read_text()\n'
                     if body == ('import-helper',):
                         helper = '.ai/scripts/tests/unreviewed_semantic_helper.py'
-                        case.write(helper, addition)
+                        (case.root / helper).write_bytes(addition.encode('utf-8'))
                         case.assertEqual((case.root / helper).read_bytes(), addition.encode('utf-8'))
                         case.assertNotIn(helper, ledger.input_paths(case.root, SEMANTIC_LENS_INPUTS))
                         addition = 'import unreviewed_semantic_helper\n'
@@ -5689,15 +5790,14 @@ class SemanticLensCompatibilityTests(SemanticLensFixture):  # R4
         self.assertTrue(value['review_required'])
         self.assertIn('runtime', ' '.join(value['limitations']).lower())
         guide = (self.root / ARCH_GUIDE).read_text()
-        for phrase in ('python-semantic-lens-doc-contract', ' '.join(SEMANTIC_LENS_COMMAND),
+        for phrase in ('python-semantic-lens-doc-contract', ' '.join(['python3', *SEMANTIC_LENS_COMMAND[1:]]),
                        'four literal reads', 'fourteen case-sensitive', 'one test',
                        'first literal', 'IndexError', 'inline', 'semantic-lens effectiveness',
                        'conservative', 'explicit', 'manual', 'twelve prior profiles',
                        *SEMANTIC_LENS_INPUTS):
             self.assertIn(phrase, guide)
         baseline_source = read_baseline(SEMANTIC_LENS_HEAD, '.ai/lifecycle.md')
-        for paragraph in baseline_source.split('\n\n'):
-            self.assertIn(paragraph, guide, 'previous guide paragraph changed')
+        assert_prior_guide_paragraphs(self, self.root, baseline_source, guide)
 
 
 class SemanticLensFrameworkEndToEndTests(SemanticLensFixture):  # R5
@@ -5814,7 +5914,7 @@ class SemanticLensAdopterEndToEndTests(SemanticLensFixture):  # R6
         value = self.suggestion()
         prefix = ('---\ntype: Capability\ntitle: Semantic lens\nnamespace: SEMANTICLENS\nstatus: draft\n---\n'
                   '# Semantic lens\n\n## Requirements\n\n- SEMANTICLENS-R1: The documentation check MUST pass.\n'
-                  '  - Verify: `' + ' '.join(SEMANTIC_LENS_COMMAND) + '`\n')
+                  '  - Verify: `' + shlex.join(SEMANTIC_LENS_COMMAND) + '`\n')
         original = prefix + value['inputs_line'] + '\n'
         capability = self.write('knowledge/capabilities/semantic-lens.md', original)
         self.commit()
@@ -5882,9 +5982,9 @@ class SemanticLensControlTests(SemanticLensFixture):  # R6
                         replacement = (source.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
                                        + '\nLIMITATIONS =' + source.split('\nLIMITATIONS =', 1)[1])
                     elif variant == 'loose':
-                        old = "p['argv'] == list(argv)"
+                        old = "exact_profile_command(p['argv'], argv)"
                         case.assertEqual(source.count(old), 1)
-                        replacement = source.replace(old, "p['argv'] == list(argv)[:len(p['argv'])]")
+                        replacement = source.replace(old, "exact_profile_command(p['argv'], list(argv)[:len(p['argv'])])")
                     else:
                         path = case.root / SEMANTIC_LENS_TESTS[0]
                         original = path.read_bytes()
@@ -5915,7 +6015,7 @@ class SemanticLensControlTests(SemanticLensFixture):  # R6
 
 
 # Skill frontmatter: specification-5n.md R1-R6. Independent reviewed declarations.
-SKILL_FRONTMATTER_COMMAND = ['python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
+SKILL_FRONTMATTER_COMMAND = [sys.executable if os.name == 'nt' else 'python3', '.ai/scripts/tests/test_lifecycle_conformance.py',
                              'RolesAndSkills.test_skills_have_name_matching_directory_and_a_description']
 SKILL_FRONTMATTER_TESTS = [SKILL_FRONTMATTER_COMMAND[1], '.ai/scripts/tests/disk_tmp.py']
 SKILL_FRONTMATTER_DOCS = ['.claude/skills/' + name + '/SKILL.md' for name in
@@ -5970,7 +6070,7 @@ events = []
 read, name_check, description_check = module.text, case.assertIn, case.assertRegex
 def text(path):
     value = read(path)
-    events.append([path, []])
+    events.append([Path(path).as_posix(), []])
     return value
 def name(*args, **kwargs):
     name_check(*args, **kwargs)
@@ -6060,7 +6160,7 @@ class SkillFrontmatterProfileTests(SkillFrontmatterFixture):  # R1
         self.assert_prior_profiles()
         for argv in (SKILL_FRONTMATTER_COMMAND[:2], SKILL_FRONTMATTER_COMMAND[:2] + ['RolesAndSkills'],
                      SKILL_FRONTMATTER_COMMAND[:2] + [SKILL_FRONTMATTER_SIBLING],
-                     SKILL_FRONTMATTER_COMMAND + ['-v'], [sys.executable, *SKILL_FRONTMATTER_COMMAND[1:]],
+                     SKILL_FRONTMATTER_COMMAND + ['-v'], [OTHER_PYTHON, *SKILL_FRONTMATTER_COMMAND[1:]],
                      ['python3', './' + SKILL_FRONTMATTER_COMMAND[1], SKILL_FRONTMATTER_COMMAND[2]],
                      ['python3', '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests',
                       '-p', 'test_lifecycle_conformance.py']):
@@ -6087,7 +6187,7 @@ class SkillFrontmatterExportTests(SkillFrontmatterFixture):  # R3
                      json.dumps(value['lifecycle_inputs_argv']), *value['rationale'].values(), *value['limitations']):
             self.assertIn(item, text.stdout)
         raw = ('- SKILLFRONT-R1: The check MUST pass.\n  - Verify: `'
-               + ' '.join(SKILL_FRONTMATTER_COMMAND) + '`\n' + value['inputs_line'] + '\n')
+               + shlex.join(SKILL_FRONTMATTER_COMMAND) + '`\n' + value['inputs_line'] + '\n')
         parsed = assurance.parse('SKILLFRONT-R1', 'capabilities/skill-frontmatter.md', raw, root=self.root)
         self.assertIsNone(parsed.invalid)
         self.assertEqual(list(parsed.globs), value['inputs'])
@@ -6115,7 +6215,7 @@ class SkillFrontmatterExportTests(SkillFrontmatterFixture):  # R3
         outside = Path(self.temp.name) / 'outside.py'
         outside.write_bytes(original)
         path.unlink()
-        path.symlink_to(outside)
+        self.link_input(path, outside)
         try:
             self.refused()
         finally:
@@ -6141,13 +6241,14 @@ class SkillFrontmatterExportTests(SkillFrontmatterFixture):  # R3
 
 
 SKILL_FRONTMATTER_SETUP_PINS = {
-    '.ai/scripts/tests/test_lifecycle_conformance.py': '50977be9e0fc2636e75b83eba96f267339efd91e89f3d035690d0a0e24e8a02b',
-    '.ai/scripts/tests/disk_tmp.py': 'fff9eed82f770bce05c477c507ad3c00dae4a16c216521b004646837c0bdd02f',
-    '.ai/scripts/scratch.py': '523cbb977066b41423329249d132d2dc27a2f963db15b71489c2579fdb093060',
-    '.ai/scripts/lifecycle.py': '8be245fbb9424213cf0527cb27463b7230f99235087ca6900e8727591a427eb7',
-    '.ai/scripts/pr_hook.py': '108ab317ed46f87ced68da7974ca831b085142f24e2d04ebeaedc6773fb13045',
-    '.ai/scripts/review_guard.py': '2d806b1c16cb028a8b2197aec8881b0a4db1a962125f5a5d50a8599b01c45d69',
+    '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
+    '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
+    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+    '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
+    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
+    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
 }
 
 
@@ -6203,7 +6304,7 @@ class SkillFrontmatterDependencyTests(SkillFrontmatterFixture):  # R2
                      ('.ai/scripts/review_guard.py', ('protected',)),
                      ('.ai/scripts/review_guard.py', ('protected', 'decorate')),
                      (SKILL_FRONTMATTER_TESTS[0], ('import-helper',))]
-        self.assertEqual(len(variants), 15)
+        self.assertEqual(len(variants), 16)
         for name, body in variants:
             with self.subTest(name=name, body=body):
                 case = SkillFrontmatterDependencyTests('test_order_scope_and_independent_oracle')
@@ -6223,8 +6324,8 @@ class SkillFrontmatterDependencyTests(SkillFrontmatterFixture):  # R2
                     addition = '__import__("pathlib").Path("unrelated.md").read_text()\n'
                     if body == ('import-helper',):
                         helper = '.ai/scripts/tests/unreviewed_skill_helper.py'
-                        case.write(helper, addition)
-                        case.assertEqual((case.root / helper).read_bytes(), addition.encode())
+                        (case.root / helper).write_bytes(addition.encode('utf-8'))
+                        case.assertEqual((case.root / helper).read_bytes(), addition.encode('utf-8'))
                         case.assertNotIn(helper, ledger.input_paths(case.root, SKILL_FRONTMATTER_INPUTS))
                         addition = 'import unreviewed_skill_helper\n'
                     if body and body != ('import-helper',):
@@ -6279,15 +6380,14 @@ class SkillFrontmatterCompatibilityTests(SkillFrontmatterFixture):  # R4
         self.assertTrue(value['review_required'])
         self.assertIn('runtime', ' '.join(value['limitations']).lower())
         guide = (self.root / ARCH_GUIDE).read_text()
-        for phrase in ('python-skill-frontmatter-contract', ' '.join(SKILL_FRONTMATTER_COMMAND),
+        for phrase in ('python-skill-frontmatter-contract', ' '.join(['python3', *SKILL_FRONTMATTER_COMMAND[1:]]),
                        'dynamic', 'immediate parent', 'one test', 'zero assertions',
                        'split', 'IndexError', 'YAML', 'extra invalidation', 'non-SKILL',
                        'conservative', 'explicit', 'manual', 'thirteen prior profiles',
                        *SKILL_FRONTMATTER_INPUTS):
             self.assertIn(phrase, guide)
         baseline_source = read_baseline(SKILL_FRONTMATTER_HEAD, '.ai/lifecycle.md')
-        for paragraph in baseline_source.split('\n\n'):
-            self.assertIn(paragraph, guide, 'previous guide paragraph changed')
+        assert_prior_guide_paragraphs(self, self.root, baseline_source, guide)
 
 
 SKILL_FRONTMATTER_FRESH = [*SKILL_FRONTMATTER_DOCS, *SKILL_FRONTMATTER_TESTS,
@@ -6467,7 +6567,7 @@ class SkillFrontmatterAdopterEndToEndTests(SkillFrontmatterFixture):  # R6
         value = self.suggestion()
         prefix = ('---\ntype: Capability\ntitle: Skill frontmatter\nnamespace: SKILLFRONT\nstatus: draft\n---\n'
                   '# Skill frontmatter\n\n## Requirements\n\n- SKILLFRONT-R1: The documentation check MUST pass.\n'
-                  '  - Verify: `' + ' '.join(SKILL_FRONTMATTER_COMMAND) + '`\n')
+                  '  - Verify: `' + shlex.join(SKILL_FRONTMATTER_COMMAND) + '`\n')
         original = prefix + value['inputs_line'] + '\n'
         capability = self.write('knowledge/capabilities/skill-frontmatter.md', original)
         self.commit()
@@ -6493,13 +6593,14 @@ class SkillFrontmatterAdopterEndToEndTests(SkillFrontmatterFixture):  # R6
                 self.assertEqual(status(), 'VERIFIED')
         try:
             reordered = [*value['inputs'][:-2], value['inputs'][-1], value['inputs'][-2]]
-            capability.write_text(prefix + '  - Inputs: ' + ' '.join('`' + p + '`' for p in reordered) + '\n')
+            capability.write_text(prefix + '  - Inputs: ' + ' '.join('`' + p + '`' for p in reordered) + '\n',
+                                  newline='\n')
             self.assertEqual(status(), 'UNVERIFIED')
             capability.write_text(original.replace(SKILL_FRONTMATTER_COMMAND[2] + '`',
-                                                   SKILL_FRONTMATTER_COMMAND[2] + ' -v`'))
+                                                   SKILL_FRONTMATTER_COMMAND[2] + ' -v`'), newline='\n')
             self.assertEqual(status(), 'UNVERIFIED')
         finally:
-            capability.write_text(original)
+            capability.write_text(original, newline='\n')
             self.assertEqual(capability.read_bytes(), original.encode())
         self.assertEqual(status(), 'VERIFIED')
         entries = [e for p in (self.root / 'knowledge/history/lifecycle').glob('*.json')
@@ -6536,9 +6637,9 @@ class SkillFrontmatterControlTests(SkillFrontmatterFixture):  # R6
                         replacement = (source.split('PROFILES = ', 1)[0] + 'PROFILES = ' + repr(catalog)
                                        + '\nLIMITATIONS =' + source.split('\nLIMITATIONS =', 1)[1])
                     elif variant == 'loose':
-                        old = "p['argv'] == list(argv)"
+                        old = "exact_profile_command(p['argv'], argv)"
                         case.assertEqual(source.count(old), 1)
-                        replacement = source.replace(old, old + " or (p['id'] == 'python-skill-frontmatter-contract' and p['argv'][:2] == list(argv)[:2])")
+                        replacement = source.replace(old, old + " or (p['id'] == 'python-skill-frontmatter-contract' and exact_profile_command(p['argv'][:2], list(argv)[:2]))")
                     else:
                         path = case.root / SKILL_FRONTMATTER_TESTS[0]
                         original = path.read_bytes()

@@ -5,14 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-import signal
+import shlex
 import sys
-import tempfile
 from typing import Callable, Optional, TextIO
 
 sys.dont_write_bytecode = True
 
-from assurance_demo import Session, build, _base, DemoFailure, LIMIT
+from assurance_demo import Session, build, _base, DemoFailure, LIMIT, temporary_repository, install_exit_handlers
 
 ADR = 'knowledge/project/decisions/layers.md'
 DECLARATION = '  - Governed-by: [Layer boundary](../project/decisions/layers.md#boundary)'
@@ -20,7 +19,7 @@ CHECK = '''import ast
 from pathlib import Path
 import sys
 
-nodes = ast.walk(ast.parse(Path('src/calc.py').read_text()))
+nodes = ast.walk(ast.parse(Path('src/calc.py').read_text(encoding='utf-8')))
 for node in nodes:
     names = [alias.name for alias in node.names] if isinstance(node, ast.Import) else []
     if isinstance(node, ast.ImportFrom):
@@ -42,10 +41,10 @@ status: draft
 
 - DEMO-R1: The core MUST avoid imports from adapter.
 ''' + DECLARATION + '''
-  - Verify: `python3 check.py`
+  - Verify: `{python} check.py`
   - Inputs: `check.py` `src/**` `knowledge/project/decisions/layers.md`
   - Scenario boundary: A forbidden import fails the checker.
-'''
+'''.replace('{python}', shlex.quote(sys.executable))
 
 
 def run(base: Optional[Path] = None, prepare: Optional[Callable[[Path], None]] = None,
@@ -53,7 +52,7 @@ def run(base: Optional[Path] = None, prepare: Optional[Callable[[Path], None]] =
     out = out or sys.stdout
     err = err or sys.stderr
     try:
-        with tempfile.TemporaryDirectory(prefix='architecture-demo-', dir=base or _base()) as directory:
+        with temporary_repository(prefix='architecture-demo-', dir=base or _base()) as directory:
             session = Session(Path(directory) / 'repo', [])
 
             def configure(repo: Path) -> None:
@@ -99,9 +98,11 @@ def run(base: Optional[Path] = None, prepare: Optional[Callable[[Path], None]] =
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.parse_args(argv)
-    signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(143))
+    install_exit_handlers()
     return run()
 
 
 if __name__ == '__main__':
+    import process_runtime
+    process_runtime.configure_windows_environment()
     sys.exit(main())

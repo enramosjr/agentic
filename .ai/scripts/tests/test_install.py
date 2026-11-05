@@ -90,6 +90,110 @@ def tree_state(root):
             for p in root.rglob("*")}
 
 
+class WindowsHookMergeTests(unittest.TestCase):
+    def test_owned_windows_override_is_added_without_losing_custom_options(self):  # R3
+        old = {'type': 'command', 'command': 'managed-hook', 'timeout': 17}
+        custom = {'type': 'command', 'command': 'adopter-hook', 'commandWindows': 'custom.exe'}
+        adopter = {'hooks': {'SessionStart': [{'hooks': [old, custom]}]}}
+        desired = {'type': 'command', 'command': 'managed-hook', 'commandWindows': 'windows-hook'}
+        kit = {'hooks': {'SessionStart': [{'hooks': [desired]}]}}
+        merged = install.merge_hooks(adopter, kit, ['managed-hook'])
+        hooks = merged['hooks']['SessionStart'][0]['hooks']
+        self.assertEqual(hooks, [{**old, 'commandWindows': 'windows-hook'}, custom])
+        self.assertEqual(install.merge_hooks(merged, kit, ['managed-hook']), merged)
+        self.assertEqual(adopter['hooks']['SessionStart'][0]['hooks'][0], old)
+
+    def test_unowned_or_custom_windows_override_is_preserved(self):  # R3
+        for owned, override in (([], None), (['managed-hook'], 'custom.exe')):
+            hook = {'type': 'command', 'command': 'managed-hook'}
+            if override:
+                hook['commandWindows'] = override
+            adopter = {'hooks': {'SessionStart': [{'hooks': [hook]}]}}
+            kit = {'hooks': {'SessionStart': [{'hooks': [
+                {'type': 'command', 'command': 'managed-hook', 'commandWindows': 'windows-hook'}]}]}}
+            self.assertEqual(install.merge_hooks(adopter, kit, owned), adopter)
+
+
+class WindowsHookUpgradeTests(InstallerCase):
+    def test_cli_upgrades_legacy_windows_hooks_and_preserves_adopter(self):  # R3
+        name = '.codex/hooks.json'
+        desired = json.loads((self.template / name).read_text())
+        legacy = copy.deepcopy(desired)
+        for groups in legacy['hooks'].values():
+            for group in groups:
+                for hook in group['hooks']:
+                    hook.pop('commandWindows', None)
+        self.write(name, json.dumps(legacy), template=True)
+        self.installed()
+        adopter = json.loads((self.target / name).read_text())
+        custom = {'type': 'command', 'command': 'adopter-only', 'commandWindows': 'custom.exe'}
+        adopter['hooks']['SessionStart'].append({'hooks': [custom]})
+        self.write(name, json.dumps(adopter))
+        self.commit()
+        self.write(name, json.dumps(desired), template=True)
+        self.run_install()
+        updated = json.loads((self.target / name).read_text())
+        self.assertIn({'hooks': [custom]}, updated['hooks']['SessionStart'])
+        for event, groups in desired['hooks'].items():
+            for group in groups:
+                for hook in group['hooks']:
+                    found = [h for g in updated['hooks'][event]
+                             if g.get('matcher') == group.get('matcher')
+                             for h in g['hooks'] if h.get('command') == hook['command']]
+                    self.assertEqual(len(found), 1)
+                    self.assertEqual(found[0]['commandWindows'], hook['commandWindows'])
+
+
+class BaselineAttributesTests(InstallerCase):
+    def test_adopter_attributes_survive_and_cloned_baselines_keep_exact_bytes(self):
+        original = b'# adopter\r\n*.bin -text\r\n'
+        self.write('.gitattributes', original)
+        self.commit()
+        self.run_install('--no-knowledge')
+        attributes = (self.target / '.gitattributes').read_bytes()
+        rule = b'.ai/scripts/tests/fixtures/qualification-baselines/** -text'
+        self.assertTrue(attributes.startswith(original))
+        self.assertEqual(attributes.count(rule), 1)
+        self.commit()
+        self.run_install('--no-knowledge', '--check')
+        clone = self.target.parent / 'clone with spaces'
+        subprocess.run(['git', 'clone', '--no-hardlinks', '-q', str(self.target), str(clone)], check=True)
+        code = ('import sys;sys.path.insert(0,sys.argv[1]);import compatibility_baselines as b;'
+                'assert b.read_baseline(b.HEAD_BASELINE,".ai/scripts/assurance_inputs.py");print("pinned")')
+        result = subprocess.run([sys.executable, '-c', code, str(clone / '.ai/scripts/tests')],
+                                capture_output=True, text=True)
+        self.assertEqual((result.returncode, result.stdout.strip()), (0, 'pinned'), result.stderr)
+
+
+class SourceSkillsTests(InstallerCase):
+    def command(self, *flags):
+        return subprocess.run([sys.executable, str(self.template / '.ai/scripts/install.py'),
+                               '--sync-source-skills', *flags], capture_output=True, text=True)
+
+    def test_source_skills_are_materialized_and_check_detects_drift(self):
+        self.write('.agentic.json', '{"repository_kind":"framework"}', template=True)
+        result = self.command()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        aliases = self.template / '.agents/skills'
+        self.assertTrue(aliases.is_dir())
+        self.assertFalse(aliases.is_symlink())
+        for source in (self.template / '.claude/skills').rglob('SKILL.md'):
+            self.assertEqual((aliases / source.relative_to(self.template / '.claude/skills')).read_bytes(),
+                             source.read_bytes())
+        self.assertEqual(self.command('--check').returncode, 0)
+        alias = aliases / 'spec/SKILL.md'
+        alias.write_text('drift')
+        self.assertEqual(self.command('--check').returncode, 1)
+        self.assertEqual(alias.read_text(), 'drift')
+        self.assertEqual(self.command().returncode, 0)
+        self.assertEqual(self.command('--check').returncode, 0)
+
+    def test_source_sync_refuses_an_unproven_framework_root(self):
+        result = self.command()
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('framework', result.stderr)
+
+
 class BootstrapCase(InstallerCase):
     def setUp(self):
         super().setUp()
@@ -274,14 +378,42 @@ class BootstrapDocumentationTests(BootstrapCase):
 
 
 class CopyTests(InstallerCase):
+    def test_failed_atomic_replacement_preserves_readonly_original(self):
+        path = self.write('readonly.txt', b'original')
+        path.chmod(0o444)
+        with patch.object(install.os, 'replace', side_effect=OSError('replace failed')):
+            with self.assertRaisesRegex(OSError, 'replace failed'):
+                install.atomic_write(path, b'changed', 0o444)
+        self.assertEqual(path.read_bytes(), b'original')
+        self.assertFalse(path.stat().st_mode & 0o200)
+        self.assertEqual(list(path.parent.glob('.kit-*')), [])
+
+    def test_owned_readonly_file_can_be_repaired_without_changing_its_bytes(self):
+        self.installed()
+        path = self.target / '.ai/VERSION'
+        before = path.read_bytes()
+        path.chmod(0o444)
+        self.run_install('--force')
+        self.assertEqual(path.read_bytes(), before)
+        self.assertTrue(path.stat().st_mode & 0o200)
+
     # R2
     def test_files_copied_byte_equal_with_modes_and_skills_symlink(self):
         self.write(".ai/sample", b"\x00sample\xff", template=True).chmod(0o751)
         self.run_install()
         self.assertEqual((self.target / ".ai/sample").read_bytes(), b"\x00sample\xff")
-        self.assertEqual((self.target / ".ai/sample").stat().st_mode & 0o777, 0o751)
-        self.assertTrue((self.target / ".agents/skills").is_symlink())
-        self.assertEqual((self.target / ".agents/skills").resolve(), self.target / ".claude/skills")
+        self.assertEqual((self.target / ".ai/sample").stat().st_mode & 0o777,
+                         (self.template / ".ai/sample").stat().st_mode & 0o777)
+        link = self.target / ".agents/skills"
+        if self.manifest()['skills_link'] == 'symlink':
+            self.assertTrue(link.is_symlink())
+            self.assertEqual(link.resolve(), self.target / ".claude/skills")
+        else:
+            self.assertFalse(link.is_symlink())
+            for path in (self.target / '.claude/skills').rglob('*'):
+                if path.is_file():
+                    self.assertEqual((link / path.relative_to(self.target / '.claude/skills')).read_bytes(),
+                                     path.read_bytes())
         for name in install.plain_files(self.template):
             self.assertEqual((self.target / name).read_bytes(), (self.template / name).read_bytes(), name)
 
@@ -450,11 +582,12 @@ class InstructionsTests(InstallerCase):
     # R4
     def test_absent_agents_md_gets_block_only(self):
         self.run_install()
-        self.assertEqual((self.target / "AGENTS.md").read_bytes(), install.BEGIN + b"\n" + (self.template / "AGENTS.md").read_bytes() + install.END + b"\n")
+        canonical = (self.template / 'AGENTS.md').read_bytes().replace(b'\r\n', b'\n')
+        self.assertEqual((self.target / "AGENTS.md").read_bytes(), install.BEGIN + b"\n" + canonical + install.END + b"\n")
 
     def test_installed_governance_including_markers_stays_below_budget(self):
         self.run_install()
-        body = (self.template / "AGENTS.md").read_bytes()
+        body = (self.template / "AGENTS.md").read_bytes().replace(b'\r\n', b'\n')
         installed = (self.target / "AGENTS.md").read_bytes()
         self.assertEqual(installed, install.BEGIN + b"\n" + body + install.END + b"\n")
         self.assertLess(len(body.decode().encode()), 30_000)
@@ -492,7 +625,12 @@ class ManifestTests(InstallerCase):
         self.assertEqual(set(data), {"format", "template_version", "files", "hooks", "agents_block", "skills_link"})
         self.assertEqual(data["format"], 1)
         self.assertEqual(data["template_version"], (self.template / ".ai/VERSION").read_text().strip())
-        self.assertEqual(data["agents_block"], hashlib.sha256((self.template / "AGENTS.md").read_bytes()).hexdigest())
+        installed = (self.target / 'AGENTS.md').read_bytes()
+        prefix, body = installed.split(install.BEGIN + b'\n', 1)
+        body, suffix = body.split(install.END + b'\n', 1)
+        self.assertEqual((prefix, suffix), (b'', b''))
+        self.assertEqual(body, (self.template / 'AGENTS.md').read_bytes().replace(b'\r\n', b'\n'))
+        self.assertEqual(data["agents_block"], hashlib.sha256(body).hexdigest())
         self.assertEqual((self.target / ".ai/install-manifest.json").read_text(), json.dumps(data, indent=2, sort_keys=True) + "\n")
         for name, digest in data["files"].items():
             self.assertEqual(digest, hashlib.sha256((self.target / name).read_bytes()).hexdigest())
@@ -619,8 +757,14 @@ class CheckTests(InstallerCase):
     def test_wrong_skills_mode_reports_drift_without_writes(self):
         # R8: a copied tree in place of the recorded link is drift, not bad usage.
         self.installed()
-        (self.target / ".agents/skills").unlink()
-        shutil.copytree(self.target / ".claude/skills", self.target / ".agents/skills")
+        link = self.target / '.agents/skills'
+        if link.is_symlink():
+            link.unlink()
+            shutil.copytree(self.target / ".claude/skills", link)
+        else:
+            manifest = self.manifest()
+            manifest['skills_link'] = 'symlink'
+            self.write('.ai/install-manifest.json', json.dumps(manifest))
         before = self.snapshot()
         self.assertIn("drift: .agents/skills", self.run_install("--check", code=1))
         self.assertEqual(before, self.snapshot())

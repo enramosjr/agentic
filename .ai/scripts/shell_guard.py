@@ -20,20 +20,23 @@ import re
 import shlex
 import sys
 from pathlib import Path
+import process_runtime
+import pr_hook
 
-OKF = "python3 .ai/scripts/okf.py"
+OKF = f"{process_runtime.python_hint()} .ai/scripts/okf.py"
 READERS = frozenset({"cat", "head", "tail", "less", "more", "nl", "bat"})
 SEARCHERS = frozenset({"grep", "egrep", "fgrep", "rg", "ag", "ack"})
 LISTERS = frozenset({"ls", "find", "tree"})
 SEPARATORS = frozenset({";", "&&", "||", "|", "&", "|&"})
 REDIRECTS = frozenset({"<", ">", ">>", "<<", "<<<", ">&", "&>", "<&", ">|", "&>>"})
+_NATIVE_TOKEN = re.compile(r'<<<|<<|&>>|&>|>>|>&|<&|>\||' + pr_hook.WINDOWS_TOKEN.pattern)
 EXEMPT_PREFIXES = ("/tmp/", "/dev/", "/proc/")
 _HEREDOC_RE = re.compile(r"<<-?\s*(['\"]?)(\w+)\1")
 _PY_WRITE_RE = re.compile(r"write_text\(|write_bytes\(|\.write\(|open\([^)]*['\"][wax]")
 _ASSIGNMENT_RE = re.compile(r"^[A-Za-z_]\w*=")
 _LIVE_DISPLAY_RE = re.compile(r"(?<![\w.])(?:DISPLAY=:[01](?:\.\d+)?(?!\d)|WAYLAND_DISPLAY=)")
 
-REPO = "python3 .ai/scripts/repo.py"
+REPO = f"{process_runtime.python_hint()} .ai/scripts/repo.py"
 TOOLS = "Claude Code: Read (file_path, offset, limit), Edit, Write. Cursor: Read, Grep, Glob, StrReplace, Write."
 MESSAGES = {
     "okf-read": (
@@ -83,18 +86,70 @@ def _strip_heredoc_bodies(command: str) -> str:
     return "\n".join(kept)
 
 
+def _native_escapes(line: str) -> tuple[str, dict[str, str]]:
+    """Hide PowerShell escaped literals from the structural token scanner."""
+    escaped: dict[str, str] = {}
+    pieces: list[str] = []
+    quote = ''
+    index = 0
+    codepoint = 0xE000
+    controls = {'0': '\0', 'a': '\a', 'b': '\b', 'e': '\x1b',
+                'f': '\f', 'n': '\n', 'r': '\r', 't': '\t', 'v': '\v'}
+    while index < len(line):
+        char = line[index]
+        if char == '`' and quote != "'" and index + 1 < len(line):
+            while chr(codepoint) in line or chr(codepoint) in escaped:
+                codepoint += 1
+            marker = chr(codepoint)
+            literal = line[index + 1]
+            escaped[marker] = controls.get(literal, literal)
+            pieces.append(marker)
+            index += 2
+            continue
+        if char in ('"', "'"):
+            if char == quote:
+                if quote == "'" and line[index:index + 2] == "''":
+                    pieces.append("''")
+                    index += 2
+                    continue
+                quote = ''
+            elif not quote:
+                quote = char
+        pieces.append(char)
+        index += 1
+    return ''.join(pieces), escaped
+
+
 def _segments(command: str) -> list[tuple[list[str], bool]]:
     """(tokens, reads_from_pipe) for each simple command."""
     result: list[tuple[list[str], bool]] = []
     for line in _strip_heredoc_bodies(command).split("\n"):
-        lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
-        lexer.whitespace_split = True
-        lexer.commenters = ""
-        tokens = list(lexer)
+        if os.name == 'nt':
+            line, escaped = _native_escapes(line)
+            tokens = []
+            offset = 0
+            for match in _NATIVE_TOKEN.finditer(line):
+                if line[offset:match.start()].strip():
+                    raise ValueError('unsupported native shell spelling')
+                raw = match.group()
+                offset = match.end()
+                if raw.startswith('#'):
+                    offset = len(line)
+                    break
+                words = pr_hook.split_words(raw)
+                word = ''.join(escaped.get(char, char) for char in words[0])
+                tokens.append((word, raw in SEPARATORS))
+            if line[offset:].strip() and not line[offset:].lstrip().startswith('#'):
+                raise ValueError('unsupported native shell spelling')
+        else:
+            lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
+            lexer.whitespace_split = True
+            lexer.commenters = ""
+            tokens = [(token, token in SEPARATORS) for token in lexer]
         current: list[str] = []
         piped = False
-        for token in tokens + [";"]:
-            if token in SEPARATORS:
+        for token, separator in tokens + [(";", True)]:
+            if separator:
                 if current:
                     result.append((current, piped))
                 piped = token in ("|", "|&")
@@ -110,11 +165,11 @@ class Scope:
         self.cwd_protected = False
 
     def outside(self, arg: str) -> bool:
+        if arg.startswith(EXEMPT_PREFIXES):
+            return True
         path = Path(os.path.expanduser(arg))
         if not path.is_absolute():
             return False
-        if arg.startswith(EXEMPT_PREFIXES):
-            return True
         try:
             path.resolve().relative_to(self.root)
         except ValueError:
@@ -151,8 +206,15 @@ def _judge_segment(tokens: list[str], piped: bool, scope: Scope, raw: str) -> st
         tokens = tokens[1:]
     if not tokens:
         return None
-    prog = os.path.basename(tokens[0])
+    prog = os.path.basename(tokens[0]).lower()
+    if os.name == 'nt' and prog == 'type':
+        prog = 'cat'
+    prog = {'get-content': 'cat', 'gc': 'cat', 'get-childitem': 'ls', 'gci': 'ls',
+            'dir': 'ls', 'select-string': 'grep', 'sls': 'grep',
+            'set-location': 'cd', 'sl': 'cd'}.get(prog, prog)
     operands = _operands(tokens)
+    if prog in ('set-content', 'add-content', 'out-file', 'sc', 'ac'):
+        return 'write' if not operands or any(not scope.outside(p) for p in operands) else None
     if prog == "cd":
         scope.cwd_protected = bool(operands) and scope.protected(operands[0])
         return None
@@ -249,4 +311,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    import process_runtime
+    process_runtime.configure_windows_environment()
     sys.exit(main())

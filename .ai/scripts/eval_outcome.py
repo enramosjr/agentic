@@ -21,7 +21,7 @@ def fixture_command(scenario_id: str, root: Path) -> list[str] | None:
     if scenario_id == "feature-l2":
         return [sys.executable, str(root / "cli.py"), "--json"]
     probes = {
-        "typo-l0": "from pathlib import Path; text=Path('app.py').read_text(); assert 'recieve' not in text and 'receive' in text",
+    "typo-l0": "from pathlib import Path; text=Path('app.py').read_text(encoding='utf-8'); assert 'recieve' not in text and 'receive' in text",
         "bugfix-l1": "from calc import add; assert add(2,3)==5 and add(-2,3)==1 and add(0,0)==0",
         "escalation-l2": "import api,__init__ as exported; assert callable(api.get) and exported.get('a')==1",
         "user-tier-held": "from util import greet; assert greet('Ada')=='Hello, Ada'",
@@ -39,7 +39,7 @@ def digest(value: object) -> str:
 
 def git(root: Path, *args: str) -> str:
     return subprocess.run(["git", "-C", str(root), *args], stdin=subprocess.DEVNULL,
-                          capture_output=True, text=True, check=True, timeout=60).stdout.strip()
+                          capture_output=True, text=True, encoding='utf-8', check=True, timeout=60).stdout.strip()
 
 
 def safe_ref(root: Path, ref: object) -> Path:
@@ -183,7 +183,7 @@ def completion(root: Path, base: str, state: dict, observation: dict | None) -> 
         if not isinstance(task, str) or not re.fullmatch(r"[\w.-]+", task):
             return failures + ["invalid task audit identity"], details
         record = lifecycle.record_path(root, state)
-        if not record.is_file() or comparable(json.loads(record.read_text())) != comparable(state):
+        if not record.is_file() or comparable(json.loads(record.read_text(encoding='utf-8'))) != comparable(state):
             failures.append("durable audit record disagrees with final task state")
         run = state.get("converge")
         spec = stages.get("intent", {}).get("ref")
@@ -202,7 +202,7 @@ def completion(root: Path, base: str, state: dict, observation: dict | None) -> 
             reviewed = ""
             if review_ref:
                 report = safe_ref(root, review_ref)
-                reviewed = "\n".join(lifecycle.find_section(lifecycle.sections(report.read_text()), "validation reviewed") or [])
+                reviewed = "\n".join(lifecycle.find_section(lifecycle.sections(report.read_text(encoding='utf-8')), "validation reviewed") or [])
             for result in results:
                 command = lifecycle.BACKTICK.search(model["acceptance"].get(result["id"], ""))
                 if command:
