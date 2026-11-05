@@ -15,6 +15,9 @@ from test_autonomy import AutonomyTestCase, HAS_GIT, SCRIPTS
 import autonomy_validation
 import process_runtime
 
+# Interpreter startup takes about a second on Windows, more under parallel load.
+SHORT = 2 if os.name != "nt" else 10
+
 
 @unittest.skipUnless(HAS_GIT, "git not installed")
 class ValidationTests(AutonomyTestCase):
@@ -500,7 +503,7 @@ class ValidationTests(AutonomyTestCase):
                     "deadline=time.monotonic()+2\n"
                     "while not peer.exists() and time.monotonic()<deadline: time.sleep(.01)\n"
                     "assert peer.exists(), 'peer never ran concurrently'\nprint('overlap asserted')")
-            commands.append({**self.command(code), "resources": [name], "timeout_seconds": 3})
+            commands.append({**self.command(code), "resources": [name], "timeout_seconds": SHORT + 1})
         request = self.request(self.runtime / "parallel", commands, max_parallel=2)
         result = autonomy_validation.run(request, self.repo, time.monotonic() + 10, .02,
                     lambda *args: callback_threads.append(threading.get_ident()),
@@ -515,7 +518,7 @@ class ValidationTests(AutonomyTestCase):
             for number, declared in enumerate(resources):
                 code = ("from pathlib import Path; import time; "
                         f"p=Path({str(lock)!r}); p.mkdir(); print({number}); time.sleep(.1); p.rmdir()")
-                command = {**self.command(code), "timeout_seconds": 2}
+                command = {**self.command(code), "timeout_seconds": SHORT}
                 if declared is not None:
                     command["resources"] = declared
                 commands.append(command)
@@ -540,7 +543,7 @@ class ValidationTests(AutonomyTestCase):
         peer = {**self.command(f"from pathlib import Path; import os,time; Path({str(pid)!r}).write_text(str(os.getpid())); time.sleep(10); Path({str(marker)!r}).touch()"),
                 "label": "peer", "resources": ["peer"], "timeout_seconds": 20}
         fail = {**self.command(f"from pathlib import Path; import time; p=Path({str(pid)!r})\nwhile not p.exists(): time.sleep(.01)\nraise SystemExit(7)"),
-                "label": "fail", "resources": ["fail"], "timeout_seconds": 2}
+                "label": "fail", "resources": ["fail"], "timeout_seconds": SHORT}
         dependent = {**self.command(f"from pathlib import Path; Path({str(marker)!r}).touch()"),
                      "label": "dependent", "resources": [], "after": ["peer"]}
         started = time.monotonic()
@@ -596,7 +599,7 @@ class ValidationTests(AutonomyTestCase):
                     "with file_lock(mutex):\n"
                     " value=json.loads(p.read_text()); value['active']-=1; "
                     f"p.write_text(json.dumps(value)); print({number})")
-            commands.append({**self.command(code), "resources": [], "timeout_seconds": 2})
+            commands.append({**self.command(code), "resources": [], "timeout_seconds": SHORT})
         result = self.run_commands(commands, max_parallel=2)
         self.assertEqual(result["state"], "PASS")
         self.assertEqual(json.loads(state.read_text()), {"active": 0, "maximum": 2})
@@ -606,7 +609,7 @@ class ValidationTests(AutonomyTestCase):
         peer = {**self.command(f"from pathlib import Path; import os,time; Path({str(pid)!r}).write_text(str(os.getpid())); time.sleep(10)"),
                 "resources": ["peer"], "timeout_seconds": 20}
         drift = {**self.command(f"from pathlib import Path; import time; p=Path({str(pid)!r})\nwhile not p.exists(): time.sleep(.01)\nPath('drift.py').write_text('changed')"),
-                 "resources": ["drift"], "timeout_seconds": 2}
+                 "resources": ["drift"], "timeout_seconds": SHORT}
         result = self.run_commands([peer, drift], max_parallel=2)
         self.assertEqual(result["state"], "INVALIDATED")
         self.assertEqual(result["commands"][0]["state"], "CANCELLED")

@@ -71,6 +71,19 @@ class OnboardE2ETests(unittest.TestCase):
             return closed_coordination_snapshot(self.root, files)
         return files
 
+    def test_closed_administration_snapshot_accepts_a_root_alias(self):
+        import review_guard
+        from review_test_support import closed_coordination_snapshot
+        with tempfile.TemporaryDirectory() as directory:
+            alias = Path(directory) / 'root alias'
+            disk_tmp.directory_link(alias, self.root)
+            before = closed_coordination_snapshot(alias, self.snapshot())
+            with review_guard.producer(self.root):
+                self.assertTrue(review_guard.read(self.root)['writers'])
+            self.assertEqual(closed_coordination_snapshot(alias, self.snapshot()), before)
+            self.write('untracked.py', 'changed product bytes\n')
+            self.assertNotEqual(closed_coordination_snapshot(alias, self.snapshot()), before)
+
     def test_cited_drafts_validate_and_second_run_is_noop(self):
         self.cli('onboard')
         bundle = self.root / 'knowledge'

@@ -54,6 +54,12 @@ class DiskTmp(unittest.TestCase):  # R1
     def probe(self, tmpdir: str) -> str:
         code = self.PROBE.format(tests=str(TESTS), scripts=str(SCRIPTS))
         env = {**os.environ, "TMPDIR": tmpdir}
+        if os.name == "nt":
+            # Windows ignores a POSIX TMPDIR once rejected and reads TEMP/TMP; a harness may point those
+            # into a repository, which is not the "system temp" this test models.
+            system = Path(os.environ["LOCALAPPDATA"]) / "Temp"
+            system.mkdir(parents=True, exist_ok=True)
+            env.update(TEMP=str(system), TMP=str(system))
         result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, cwd="/")
         self.assertEqual(result.returncode, 0, result.stderr)
         return result.stdout.strip()

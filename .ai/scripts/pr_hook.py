@@ -77,7 +77,7 @@ def _gh(value: str) -> bool:
 
 def _dynamic(raw: str) -> bool:
     quote, escaped = '', False
-    for char in raw:
+    for index, char in enumerate(raw):
         if escaped:
             escaped = False
         elif char == '\\' and quote != "'" and os.name != 'nt':
@@ -89,6 +89,14 @@ def _dynamic(raw: str) -> bool:
                 return True
         elif char in "'\"":
             quote = char
+        elif char == '~' and os.name == 'nt':
+            # A DOS short-name component is literal, unlike a home selector.
+            component = re.split(r'[\\/:=]', raw[:index])[-1] + raw[index:]
+            component = re.split(r'[\\/]', component, maxsplit=1)[0]
+            if (len(component.partition('.')[0]) <= 8 and
+                    re.fullmatch(r"[\w!#%&'()@^-]{1,6}~[0-9]{1,6}(?:\.[\w!#%&'()@^-]{1,3})?", component)):
+                continue
+            return True
         elif char in '$`*?[]{}~':
             return True
     return False

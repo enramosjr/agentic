@@ -11,6 +11,7 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / ".ai" / "scripts"))
+import disk_tmp
 import validation_select
 
 
@@ -56,7 +57,7 @@ class SelectionTests(unittest.TestCase):
         self.assertNotIn("requirements", value)
 
     def test_cross_package_rename_keeps_core_in_actual_cli_selection(self):
-        with tempfile.TemporaryDirectory() as name:
+        with tempfile.TemporaryDirectory() as name, tempfile.TemporaryDirectory() as alias_name:
             root = Path(name)
             subprocess.run(["git", "init", "-q", str(root)], check=True)
             (root / "Cargo.toml").write_text("[workspace]\n")
@@ -69,6 +70,9 @@ class SelectionTests(unittest.TestCase):
             destination.parent.mkdir(parents=True)
             source.rename(destination)
             subprocess.run(["git", "-C", str(root), "add", "."], check=True)
+            alias = Path(alias_name) / 'workspace alias'
+            disk_tmp.directory_link(alias, root)
+            root = alias
             metadata = {"workspace_members": [p["name"] for p in self.packages], "packages": [
                 {"id": p["name"], "name": p["name"], "manifest_path": str(root / p["directory"] / "Cargo.toml"),
                  "dependencies": [{"name": d} for d in p["dependencies"]]} for p in self.packages]}

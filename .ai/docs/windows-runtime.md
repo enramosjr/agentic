@@ -18,6 +18,8 @@ PowerShell paths, executable names and environment selectors while rejecting
 dynamic target spellings. The shell guard recognizes native PowerShell file
 commands. Git namespace discovery retains supplied `safe.directory` entries but
 strips configuration that could redirect the protected repository.
+DOS short names and repository-root aliases use resolved repository identities;
+shell directory spelling is retained while resolving traversal commands.
 
 Evidence still records the actual declared and executed argv. On Windows, an
 otherwise exact registered profile may use the active resolved Python executable;
@@ -33,6 +35,17 @@ Git transport tests retain names that the Windows filesystem itself cannot creat
 alongside real native filesystem cases. Platform coverage is implemented with
 equivalent assertions rather than disabling the corresponding capability.
 
+Evaluation and autonomy tooling follow the same rule. Scenario fixtures are
+written byte-exact with LF so pinned hashes hold. Behavior probes drain child
+output on a thread, because Windows selectors cannot watch pipes. The live
+observer locks its event file with `msvcrt`, recovery of interrupted attempts
+clears read-only Git objects, and the autonomy driver retries a chat
+acknowledgement that races its writer. Two evaluation tests are POSIX-only and
+skip on Windows with a stated reason: hook deadline supervision uses
+`signal.setitimer`, and the scripted CLI fixture is a shebang script. Tests with
+short timing limits use longer limits on Windows, where interpreter startup takes
+about a second.
+
 ## Verification
 
 Use the interpreter available in the shell (`python`, `py -3`, or its full path).
@@ -44,6 +57,8 @@ python .ai/scripts/run_tests.py -j 4
 
 Set `AGENTIC_TEST_PROGRESS=1` in the shell environment to print each test class's
 start and completion during a long run. The inventory and final verdict are unchanged.
+Set `AGENTIC_TEST_RESUME` to a file path to make an interrupted run resumable: classes
+that already passed on exactly the same tree are skipped, and any edit reruns everything.
 
 The `Framework parity` CI workflow runs that shared inventory on Windows and
 Linux, on the supported Python floor and Python 3.15, with full repository history.

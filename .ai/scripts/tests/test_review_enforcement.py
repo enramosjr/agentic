@@ -35,6 +35,27 @@ REPORT = ('# Review Report\n\n## Verdict\n\nApproved\n\n## Scope\n\nTask.\n\n'
 
 
 class NativeRuntimeTests(unittest.TestCase):
+    def test_native_short_name_tilde_is_literal_but_expansions_are_refused(self):
+        from unittest import mock
+        import pr_hook
+        literals = (r'C:\Users\RUNNER~1\AppData\Local\Temp\repo',
+                    r'C:\MY-DIR~1\repo', r'C:\CAFÉ~1\repo', r'C:\NAME!~1\repo',
+                    r'C:\my-dir\repo', r'C:\café\repo')
+        with mock.patch.object(pr_hook.os, 'name', 'nt'):
+            for literal in literals:
+                with self.subTest(literal=literal):
+                    self.assertFalse(pr_hook._dynamic(literal))
+                    self.assertEqual(pr_hook.recognize(f'cd {literal}; gh pr create').directory, literal)
+                    invocation, = guard.git_invocations(f'git -C {literal} add file', Path.cwd(), {})
+                    self.assertEqual(invocation['prefix'], ['-C', literal])
+            for value in ('~', '~/repo', '~other/repo', '-C~/repo',
+                          r'C:\Users\RUNNER~x\repo', r'C:\path\$selected',
+                          r'C:\path\`selected', r'C:\path\*', r'C:\path\?', r'C:\path\[abc]'):
+                with self.subTest(value=value):
+                    self.assertTrue(pr_hook._dynamic(value))
+        with mock.patch.object(pr_hook.os, 'name', 'posix'):
+            self.assertTrue(pr_hook._dynamic(literals[0]))
+
     def test_native_location_alias_prefix_routes_pr_to_literal_directory(self):
         import pr_hook
         path = str(Path.cwd())
@@ -144,6 +165,11 @@ class NativeRuntimeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             launcher = Path(temp) / ('codex.exe' if os.name == 'nt' else 'codex')
             shutil.copy2(sys.executable, launcher)
+            if os.name == 'nt':
+                # Some Windows installs keep the runtime DLLs beside python.exe;
+                # a lone copy then fails with STATUS_DLL_NOT_FOUND (0xC0000135).
+                for dll in Path(sys.executable).parent.glob('*.dll'):
+                    shutil.copy2(dll, launcher.parent / dll.name)
             result = subprocess.run([str(launcher), '-c', parent], capture_output=True,
                 text=True, timeout=15, env={**os.environ, 'PYTHONPATH': source,
                                           'PYTHONHOME': sys.base_prefix})
@@ -736,6 +762,32 @@ class CompatibilityTests(NativeCase):  # R8
 
 
 class ReadOnlyTests(NativeCase):  # R3
+    @unittest.skipUnless(os.name == 'nt', 'native namespace alias contract')
+    def test_native_alias_keeps_stack_identity_and_malformed_witness_refusal(self):
+        import ctypes
+        from ctypes import wintypes
+        import disk_tmp
+        alias = self.root.parent / 'RUNNER~1'
+        disk_tmp.directory_link(alias, self.root)
+        self.assertNotEqual(alias, alias.resolve())
+        self.assertEqual(alias.resolve(), self.root.resolve())
+        self.addCleanup(setattr, self, 'root', self.root)
+        self.root = alias
+        self.test_malformed_physical_git_directory_witness_refuses()
+        # Exercise shell cwd spelling with a real DOS alias, independently of
+        # the junction used above to prove canonical metadata interception.
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.GetShortPathNameW.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+        kernel.GetShortPathNameW.restype = wintypes.DWORD
+        path = str(alias.resolve())
+        size = kernel.GetShortPathNameW(path, None, 0)
+        self.assertGreater(size, 0, ctypes.get_last_error())
+        buffer = ctypes.create_unicode_buffer(size)
+        self.assertGreater(kernel.GetShortPathNameW(path, buffer, size), 0)
+        self.root = Path(buffer.value)
+        self.assertEqual(self.root.resolve(), alias.resolve())
+        self.test_directory_stack_changes_are_tracked_or_refused_without_proof()
+
     def test_native_location_commands_match_actual_shell_worktree_and_freeze(self):
         target = self.root.parent / 'location-target'
         self.git('worktree', 'add', '-qb', 'location-target', str(target))
@@ -769,7 +821,7 @@ class ReadOnlyTests(NativeCase):  # R3
         push, pop = ('Push-Location', 'Pop-Location') if os.name == 'nt' else ('pushd', 'popd')
         command = f"{push} '{quoted}'; {pop}; git restore --worktree notes.txt"
         invocation, = guard.git_invocations(command, self.root, self.env)
-        self.assertEqual(invocation['cwd'], self.root.resolve())
+        self.assertEqual(invocation['cwd'].resolve(), self.root.resolve())
         shell = ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command'] if os.name == 'nt' else ['bash', '-c']
         result = subprocess.run([*shell, f"{push} '{quoted}'; {pop}; git rev-parse --show-toplevel"],
                                 cwd=self.root, env=self.env, capture_output=True, text=True,
@@ -955,14 +1007,17 @@ class ReadOnlyTests(NativeCase):  # R3
         from unittest import mock
         original = guard.git_probe
         for answer in ([], ['relative'], ['/one', '/two']):
+            intercepted = []
             def probe(invocation, arguments):
-                if invocation['prefix'] == ['-C', str(self.root)] and arguments == ['rev-parse', '--absolute-git-dir']:
+                if invocation['prefix'] == ['-C', str(self.root.resolve())] and arguments == ['rev-parse', '--absolute-git-dir']:
+                    intercepted.append(answer)
                     return answer
                 return original(invocation, arguments)
             with self.subTest(answer=answer), mock.patch.object(guard, 'git_probe', side_effect=probe):
                 with self.assertRaisesRegex(guard.ReviewError, 'Git directory identity'):
                     guard.operation_roots({'cwd': str(self.root), 'tool_name': 'Bash',
                         'tool_input': {'command': 'git switch -c invalid'}})
+                self.assertEqual(intercepted, [answer], 'malformed physical witness was not exercised')
 
     def test_unsupported_env_wrapper_never_silently_hides_git(self):
         for command in ('env -i git -C /other restore file',

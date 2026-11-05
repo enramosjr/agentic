@@ -21,6 +21,17 @@ import scratch
 import process_runtime
 
 
+def remove_tree(path) -> None:
+    """Delete a tree; on Windows, git object files are read-only and block rmtree."""
+    try:
+        shutil.rmtree(path)
+    except PermissionError:
+        for parent, directories, files in os.walk(path):
+            for name in directories + files:
+                os.chmod(os.path.join(parent, name), 0o700)
+        shutil.rmtree(path)
+
+
 STATUSES = ("PASS", "FAIL", "ERROR", "NOT_RUN", "RUNNING")
 TERMINAL = {"PASS", "FAIL", "ERROR"}
 
@@ -415,7 +426,7 @@ def recover(path: Path, report: dict) -> dict:
         reconcile(supervisor, report["supervision_root"])
     for cell in running:
         if cell["workspace_directory"] and Path(cell["workspace_directory"]).exists():
-            shutil.rmtree(cell["workspace_directory"])
+            remove_tree(cell["workspace_directory"])
     for cell in running:
         cell.update(status="ERROR", phase="interrupted", ended_at=utc(),
                     elapsed_seconds=max(0, time.time() - datetime.fromisoformat(cell["started_at"].replace("Z", "+00:00")).timestamp()),
@@ -424,7 +435,7 @@ def recover(path: Path, report: dict) -> dict:
     publish(path, report)
     for supervisor in supervisors:
         directory = Path(supervisor["directory"])
-        if directory.exists(): shutil.rmtree(directory)
+        if directory.exists(): remove_tree(directory)
     return report
 
 

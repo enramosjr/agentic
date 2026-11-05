@@ -282,13 +282,21 @@ class ReportOnlyTests(unittest.TestCase):
             installed.parent.mkdir(parents=True)
             installed.write_bytes(b'installed but not committed')
             (root / 'ignored.txt').write_bytes(b'private cache')
-            (root / 'untracked-link').symlink_to('tracked.py')
+            try:
+                (root / 'untracked-link').symlink_to('tracked.py')
+                linked = True
+            except OSError:
+                # Windows refuses file symlinks without a privilege; every other assertion still runs.
+                if os.name != 'nt':
+                    raise
+                linked = False
             with mock.patch(__name__ + '.ROOT', root):
                 before = snapshot()
                 self.assertEqual(before[b'.ai/scripts/assurance.py'], installed.read_bytes())
                 self.assertEqual(before[b'tracked.py'], b'tracked')
                 self.assertEqual(before[b'tracked-ignored.py'], b'owned despite ignore')
-                self.assertEqual(before[b'untracked-link'], 'tracked.py')
+                if linked:
+                    self.assertEqual(before[b'untracked-link'], 'tracked.py')
                 self.assertNotIn(b'ignored.txt', before)
                 installed.write_bytes(b'changed installation')
                 changed = snapshot()

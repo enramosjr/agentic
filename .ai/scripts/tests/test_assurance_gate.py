@@ -1,4 +1,5 @@
 """Assurance increment 2: R1-R8, real CLI completion and evidence boundaries."""
+import os
 import shutil
 import subprocess
 import sys
@@ -147,9 +148,11 @@ class TouchedScopeTests(GateCase):  # R2
         self.git('add', 'src/calc.py')
         self.assertEqual(self.selected(), {'CALC-R1'})
         self.git('restore', '--staged', '--worktree', 'src/calc.py')
-        self.write('src/new\nfile.py', 'ok\n')
+        # A newline in a name exercises NUL-delimited paths; Windows cannot create such a file.
+        odd = 'src/new\nfile.py' if os.name != 'nt' else 'src/new file.py'
+        self.write(odd, 'ok\n')
         self.assertEqual(self.selected(), {'CALC-R1'})
-        (self.root / 'src/new\nfile.py').unlink()
+        (self.root / odd).unlink()
         (self.root / 'src/calc.py').unlink()
         self.assertEqual(self.selected(), {'CALC-R1'})
         self.git('restore', 'src/calc.py')

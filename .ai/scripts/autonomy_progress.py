@@ -36,11 +36,20 @@ class Progress:
             self.output.write(json.dumps(event, ensure_ascii=False) + "\n")
             self.output.flush()
 
+    def read_ack(self):
+        # Windows refuses to open a file while the writer replaces it: retry that transient state.
+        for _ in range(50):
+            try:
+                return json.loads(self.ack.read_text(encoding='utf-8'))
+            except PermissionError:
+                time.sleep(0.01)
+        return json.loads(self.ack.read_text(encoding='utf-8'))
+
     def check(self):
         if self.ack is None:
             return
         try:
-            value = json.loads(self.ack.read_text(encoding='utf-8'))
+            value = self.read_ack()
             age = time.monotonic() - value["acknowledged_at"]
             valid = (value["run_id"] == self.run_id and 0 <= age <= self.timeout
                      and type(value["sequence"]) is int and 1 <= value["sequence"] <= self.sequence)
@@ -113,7 +122,14 @@ def main() -> int:
         value = {"run_id": event["run_id"], "sequence": event["sequence"], "acknowledged_at": time.monotonic()}
         temporary = args.ack_file.with_suffix(args.ack_file.suffix + ".tmp")
         temporary.write_text(json.dumps(value), encoding="utf-8")
-        temporary.replace(args.ack_file)
+        for attempt in range(100):
+            try:
+                temporary.replace(args.ack_file)
+                return
+            except PermissionError:  # Windows: the driver is reading the target right now.
+                if attempt == 99:
+                    raise
+                time.sleep(0.01)
 
     try:
         if args.action == "ack":

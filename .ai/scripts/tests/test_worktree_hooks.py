@@ -293,6 +293,41 @@ class WorktreeHookTests(unittest.TestCase):
         self.decision(self.payload(f'git -C "{selected}" commit -m fixture'), True)
         self.decision(self.payload(f"git -C '{selected}' commit -m fixture"), False)
 
+    @unittest.skipUnless(os.name == 'nt', 'native short-name namespace contract')
+    def test_native_short_name_alias_keeps_actual_worktree_shipping_gates(self) -> None:
+        import ctypes
+        from ctypes import wintypes
+        renamed = self.base / 'my-dir long worktree'
+        self.git(self.outer, 'worktree', 'move', str(self.target), str(renamed))
+        self.target = renamed
+        self.ready(self.target)
+        alias = self.base / 'LK-DIR~1'
+        disk_tmp.directory_link(alias, self.target)
+        self.assertEqual(alias.resolve(), self.target.resolve())
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.GetShortPathNameW.argtypes = [wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.DWORD]
+        kernel.GetShortPathNameW.restype = wintypes.DWORD
+        size = kernel.GetShortPathNameW(str(self.target), None, 0)
+        self.assertGreater(size, 0, ctypes.get_last_error())
+        buffer = ctypes.create_unicode_buffer(size)
+        self.assertGreater(kernel.GetShortPathNameW(str(self.target), buffer, size), 0)
+        spellings = {alias, Path(buffer.value)}
+        # Volumes may disable creation of new DOS aliases. The junction still
+        # exercises an unquoted short-name component; retain the API's real path.
+        def literal(path):
+            value = str(path)
+            return "'" + value.replace("'", "''") + "'" if any(c.isspace() for c in value) else value
+        for selected in spellings:
+            with self.subTest(selected=str(selected)):
+                actual = self.git(selected, 'rev-parse', '--show-toplevel')
+                self.assertEqual(Path(actual).resolve(), self.target.resolve())
+                self.decision(self.payload(f'git -C {literal(selected)} commit -m fixture'), False)
+                self.decision(self.payload(f'cd {literal(selected)} && gh pr create'), False)
+        self.git(self.target, 'switch', '-qc', 'short-alias-unready')
+        for selected in spellings:
+            self.decision(self.payload(f'git -C {literal(selected)} commit -m fixture'), True)
+            self.decision(self.payload(f'cd {literal(selected)} && gh pr create'), True)
+
     def test_native_git_executable_spelling_keeps_commit_gates(self) -> None:
         self.ready(self.target)
         executable = shutil.which('git')

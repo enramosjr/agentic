@@ -42,6 +42,8 @@ class Case(unittest.TestCase):
         self.env = {**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'}
         self.env.pop('_AGENTIC_LIFECYCLE_RUN_ROOTS', None)
         self.git('init', '-q')
+        # Blob bytes must equal worktree bytes here; a system autocrlf=true would normalize only the blob.
+        self.git('config', 'core.autocrlf', 'false')
         self.cli('okf.py', 'init')
         (self.root / 'knowledge/project/sync-ignore').write_text('*\n')
         self.write('check.py', CHECK)
@@ -53,7 +55,7 @@ class Case(unittest.TestCase):
     def write(self, name, text):
         path = self.root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text)
+        path.write_text(text, newline='\n')
         return path
 
     def capability(self, requirements, namespace='CALC'):
@@ -243,7 +245,11 @@ class RuntimeTests(Case):  # R4 environment reason
         bin_dir.mkdir()
         tool = bin_dir / ('calc-check.exe' if os.name == 'nt' else 'calc-check')
         shutil.copy2(sys.executable, tool)
-        self.env['PATH'] = f"{bin_dir}{os.pathsep}{self.env.get('PATH', '')}"
+        if os.name == 'nt':
+            # Some installs keep the runtime DLLs beside python.exe; a lone copy exits 0xC0000135.
+            for dll in Path(sys.executable).parent.glob('*.dll'):
+                shutil.copy2(dll, bin_dir / dll.name)
+        self.env['PATH']= f"{bin_dir}{os.pathsep}{self.env.get('PATH', '')}"
         self.env['PYTHONHOME'] = sys.prefix
         self.capability(f'- CALC-R1: Tool MUST pass.\n  - Verify: `{tool.name} -c pass`\n  - Inputs: `src/**`\n')
         self.task()

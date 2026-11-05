@@ -81,7 +81,7 @@ def main():
         if (root / "Cargo.toml").is_file():
             metadata = json.loads(subprocess.check_output(["cargo", "metadata", "--format-version", "1", "--no-deps", "--offline", "--locked"], cwd=root))
             members = set(metadata["workspace_members"])
-            packages = [{"name": p["name"], "directory": Path(p["manifest_path"]).parent.relative_to(root).as_posix(),
+            packages = [{"name": p["name"], "directory": Path(p["manifest_path"]).parent.resolve().relative_to(root.resolve()).as_posix(),
                          "dependencies": [d["name"] for d in p["dependencies"]]} for p in metadata["packages"] if p["id"] in members]
         result = select(sorted(paths), packages, args.full, args.core)
         result["changed_paths"] = sorted(paths)

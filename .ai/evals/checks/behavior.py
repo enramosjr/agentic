@@ -11,6 +11,7 @@ import selectors
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 
@@ -26,20 +27,42 @@ def run(argv, root, expected=0):
         with subprocess.Popen(argv, cwd=root, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                               stderr=subprocess.STDOUT, env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}) as child:
             try:
-                with selectors.DefaultSelector() as selector:
-                    selector.register(child.stdout, selectors.EVENT_READ)
-                    while selector.get_map():
-                        remaining = end - time.monotonic()
-                        if remaining <= 0:
-                            raise ProbeExecutionError("fixture probe timeout")
-                        for key, _ in selector.select(remaining):
-                            data = os.read(key.fd, 16384)
+                if os.name == "nt":
+                    # Windows selectors cannot watch pipes: drain on a thread, same limits.
+                    overflow = threading.Event()
+
+                    def drain():
+                        while True:
+                            data = child.stdout.read1(16384)
                             if not data:
-                                selector.unregister(key.fd)
-                            elif len(output) + len(data) > 4 * 1024 * 1024:
-                                raise ProbeExecutionError("fixture probe output limit exceeded")
-                            else:
-                                output.extend(data)
+                                return
+                            if len(output) + len(data) > 4 * 1024 * 1024:
+                                overflow.set()
+                                return
+                            output.extend(data)
+
+                    reader = threading.Thread(target=drain, daemon=True)
+                    reader.start()
+                    reader.join(max(0.0, end - time.monotonic()))
+                    if overflow.is_set():
+                        raise ProbeExecutionError("fixture probe output limit exceeded")
+                    if reader.is_alive():
+                        raise ProbeExecutionError("fixture probe timeout")
+                else:
+                    with selectors.DefaultSelector() as selector:
+                        selector.register(child.stdout, selectors.EVENT_READ)
+                        while selector.get_map():
+                            remaining = end - time.monotonic()
+                            if remaining <= 0:
+                                raise ProbeExecutionError("fixture probe timeout")
+                            for key, _ in selector.select(remaining):
+                                data = os.read(key.fd, 16384)
+                                if not data:
+                                    selector.unregister(key.fd)
+                                elif len(output) + len(data) > 4 * 1024 * 1024:
+                                    raise ProbeExecutionError("fixture probe output limit exceeded")
+                                else:
+                                    output.extend(data)
                 code = child.wait(timeout=max(0.01, end - time.monotonic()))
             finally:
                 if child.poll() is None:

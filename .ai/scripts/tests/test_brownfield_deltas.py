@@ -107,6 +107,33 @@ class DeltaCase(unittest.TestCase):
 
 
 class CompatibilityTests(DeltaCase):  # R1
+    def test_repository_directory_alias_keeps_one_brownfield_namespace(self):
+        import brownfield
+        alias = self.root.parent / (self.root.name + '-alias')
+        disk_tmp.directory_link(alias, self.root)
+        try:
+            original = brownfield.model(self.spec, self.root.resolve())
+            relative = self.spec.relative_to(self.root)
+            before = self.spec.read_bytes(), self.cap.read_bytes()
+            for root, spec in ((self.root.resolve(), alias / relative),
+                               (alias, self.spec.resolve())):
+                with self.subTest(root=root, spec=spec):
+                    model = brownfield.model(spec, root)
+                    self.assertEqual(model['operations'], original['operations'])
+                    self.assertEqual(model['warnings'], original['warnings'])
+                    self.assertEqual(model['cap'].resolve(), self.cap.resolve())
+            self.lc('analyze', str(alias / relative))
+            self.assertEqual((self.spec.read_bytes(), self.cap.read_bytes()), before)
+            # The written source resource must not depend on the spec's spelling.
+            model = brownfield.model(self.spec, self.root.resolve())
+            self.assertEqual(brownfield.render(model, alias / relative),
+                             brownfield.render(model, self.spec.resolve()))
+        finally:
+            if os.name == 'nt':
+                alias.rmdir()
+            else:
+                alias.unlink()
+
     def test_valid_delta_and_legacy_spec(self):
         self.analyze()
         write_text(self.spec, '# Legacy\n\n## Requirements\n- R1: The tool MUST print a greeting.\n'

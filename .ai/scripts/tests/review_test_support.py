@@ -13,6 +13,7 @@ def closed_coordination_snapshot(root: Path, files: dict) -> dict:
     their complete raw filesystem snapshots. New borrower/launch/capture files remain
     visible, so a refused operation cannot hide command execution or approval changes.
     """
+    root = root.resolve()
     namespace = review_guard.directory(root)
     policy = review_guard.read(root)
     if policy['writers']:

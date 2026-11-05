@@ -648,7 +648,7 @@ if mode.startswith("validation"):
         plan_path = log.with_suffix(".plan.json")
         marker = log.with_suffix(".validated")
         code = "import pathlib,time,sys; time.sleep(.8); pathlib.Path(" + repr(str(marker)) + ").write_text('actual assertion passed'); print('private command output')"
-        timeout = 1.5
+        timeout = 1.5 if os.name != "nt" else 6  # the command sleeps .8 s and Windows interpreter startup adds ~1 s
         if mode == "validation-budget":
             timeout = 20
         if mode == "validation-fail":
@@ -657,7 +657,7 @@ if mode.startswith("validation"):
             code = "import os,sys; sys.exit(0 if os.environ.get('QUALIFICATION_READY')=='yes' else 7)"
         if mode == "validation-timeout":
             code = "import pathlib,subprocess,sys,time; c=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)']); pathlib.Path(" + repr(str(log.with_suffix('.test.pid'))) + ").write_text(str(c.pid)); time.sleep(60)"
-            timeout = .2
+            timeout = .2 if os.name != "nt" else 3  # Windows interpreter startup exceeds 0.2 s before the pid file is written
         if mode == "validation-mutate":
             code = "import pathlib; pathlib.Path('unexpected.rs').write_text('source changed')"
         if mode == "validation-repeat":
@@ -689,10 +689,11 @@ if mode in ("rotate", "recover", "crash", "unsafe-recovery", "stuck-recovery", "
         if mode == "deadline-recovery":
             sys.exit(7)
         if mode == "rotate":
+            log.with_suffix(".checkpoint-ready-" + str(launch)).write_text(str(child.pid))
             request = Path(os.environ["OKF_HANDOFF_REQUEST"])
             while not request.exists():
                 time.sleep(.01)
-            child.wait(timeout=2)
+            assert child.wait(timeout=2) == 0
             (Path.cwd() / "check-result.txt").write_text("current check completed successfully\\n")
         else:
             interrupt_ready()
@@ -824,19 +825,20 @@ class DriverTests(AutonomyTestCase):
             [sys.executable, str(SCRIPTS / "autonomy_driver.py"), "--bundle", str(self.bundle), "--no-pr-sync", "--headless", *options,
              "--", sys.executable, str(self.agent), str(self.log), mode],
             capture_output=True, text=True, env=environment, check=False,
-            timeout=15,
+            timeout=15 if os.name != "nt" else 90,
         )
 
     def sessions(self) -> list[dict[str, str]]:
         return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
 
-    def drive_policy(self, mode: str, *options: str) -> subprocess.CompletedProcess[str]:
+    def drive_policy(self, mode: str, *options: str, checkpoint_after=None) -> subprocess.CompletedProcess[str]:
         """Exercise policy transitions with real children, independent of startup speed.
 
         Intentional fixture hangs declare readiness after their edits/receipts.
         Only then inject the timeout selected by the unmodified driver; real
         timed_check owns and reaps the actual process tree. Actual CLI clocks
-        remain covered by the separate session/run deadline tests.
+        remain covered by the separate session/run deadline tests. A cooperative
+        checkpoint advances the policy clock only once its real check is running.
         """
         clock = mock.Mock(wraps=time)
         instant = [time.monotonic()]
@@ -853,8 +855,15 @@ class DriverTests(AutonomyTestCase):
             self.policy_limits.append(limit)
             marker = self.log.with_suffix('.interrupt-' + str(len(self.sessions()) + 1))
             marker.unlink(missing_ok=True)
+            checkpoint = self.log.with_suffix('.checkpoint-ready-' + str(len(self.sessions()) + 1))
+            checkpoint.unlink(missing_ok=True)
+            checkpoint_requested = False
             tick = kwargs.get('on_tick')
             def ready_tick():
+                nonlocal checkpoint_requested
+                if checkpoint_after is not None and checkpoint.exists() and not checkpoint_requested:
+                    instant[0] += checkpoint_after + 1e-6  # Cross the boundary despite float rounding.
+                    checkpoint_requested = True
                 if marker.exists():
                     instant[0] += limit
                     if tick:
@@ -1138,15 +1147,20 @@ class DriverTests(AutonomyTestCase):
 
     def test_checkpoint_window_finishes_current_check_then_continues_fresh(self) -> None:
         events = self.tmp / "progress.jsonl"
-        result = self.drive("rotate", "--max-session-seconds", ".2", "--handoff-seconds", "1",
-                            "--heartbeat-seconds", ".05", "--progress-file", str(events))
+        result = self.drive_policy("rotate", "--max-session-seconds", ".2", "--handoff-seconds", "1",
+                                   "--heartbeat-seconds", ".05", "--progress-file", str(events),
+                                   checkpoint_after=.2)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len(self.sessions()), 5)
-        self.assertTrue((self.repo / "check-result.txt").exists())
+        self.assertEqual(len(self.sessions()), 5, result.stderr)
+        self.assertEqual(self.policy_limits, [1.2] * 5)
+        self.assertEqual((self.repo / "check-result.txt").read_text(), "current check completed successfully\n")
+        self.assertFalse(process_runtime.alive(int(self.log.with_suffix('.checkpoint-ready-1').read_text())))
         self.assertIn("wip: safe handoff", self.sessions()[1]["prompt"])
         self.assertNotIn('"exit_code": 124', result.stderr)
+        self.assertNotIn('RECOVERY ONLY', ' '.join(session['prompt'] for session in self.sessions()))
         public = [json.loads(line) for line in events.read_text().splitlines()]
         self.assertTrue(any(event["kind"] == "handoff" and "tasks remaining" in event["text"] for event in public))
+        self.assertEqual(json.loads(self.run_ok('queue', '--next', '--json')), [])
         self.assertTrue(all(check.ok for check in okf.checkpoint(self.bundle)))
 
     def test_timeout_recovers_dirty_work_before_replacement_and_finishes_queue(self) -> None:
@@ -1336,14 +1350,15 @@ class DriverTests(AutonomyTestCase):
         self.assertEqual(self.policy_limits, [.5, .5, .3])
 
     def test_closure_budget_does_not_extend_the_original_run_deadline(self) -> None:
+        run_seconds = 2 if os.name != "nt" else 5  # validation alone takes ~1.4 s with Windows startup
         result = self.drive_policy("validation-closure-no-delivery", "--max-closure-seconds", "10",
                             "--max-session-seconds", "10", "--handoff-seconds", ".3",
-                            "--max-run-seconds", "2", "--validation-reserve-seconds", ".05")
+                            "--max-run-seconds", str(run_seconds), "--validation-reserve-seconds", ".05")
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("recovery/run limit reached", result.stderr)
         self.assertEqual(len(self.sessions()), 2)
-        self.assertLess(self.policy_limits[1], 2)
-        self.assertAlmostEqual(self.policy_limits[1] + self.policy_validation_seconds, 2, places=3)
+        self.assertLess(self.policy_limits[1], run_seconds)
+        self.assertAlmostEqual(self.policy_limits[1] + self.policy_validation_seconds, run_seconds, places=3)
 
     def test_environment_only_validation_retry_reuses_candidate_without_source_timer_or_docs_commit(self) -> None:
         result = self.drive("validation-environment", "--max-discovery-seconds", ".4", "--handoff-seconds", ".1",
@@ -1432,13 +1447,13 @@ class DriverTests(AutonomyTestCase):
                 self.assertNotIn("checkpoint now", result.stderr)
                 self.assertTrue((self.repo / "investigated.py").exists())
                 self.assertEqual(json.loads(self.run_ok("queue", "--next", "--json")), [])
-                self.assertLess(time.monotonic() - started, 6)
+                self.assertLess(time.monotonic() - started, 6 if os.name != "nt" else 30)
                 # A fresh fixture is not needed for the second subcase: reopen the same test tasks.
                 if mode == "planning":
                     self.append_tasks("\n### E — Another bounded task\n- State: READY\n")
                     self.commit_all("next scenario")
 
-    def chat_process(self, *, acknowledgement_seconds=1):
+    def chat_process(self, *, acknowledgement_seconds=1 if os.name != "nt" else 3):
         progress, ack, marker, release = (self.tmp / name for name in ("progress.jsonl", "ack.json", "child.pid", "release"))
         child = self.tmp / "long_test.py"
         child.write_text("import json,pathlib,subprocess,sys,time\n"
@@ -1466,7 +1481,14 @@ class DriverTests(AutonomyTestCase):
                                'acknowledged_at': time.monotonic()}
                     temporary = acknowledge.with_suffix('.tmp')
                     temporary.write_text(json.dumps(receipt))
-                    temporary.replace(acknowledge)
+                    for attempt in range(100):
+                        try:
+                            temporary.replace(acknowledge)
+                            break
+                        except PermissionError:  # Windows: the driver is reading the target
+                            if attempt == 99:
+                                raise
+                            time.sleep(0.01)
                 if any(event["kind"] == kind for event in entries):
                     return entries
             time.sleep(0.02)
@@ -1488,7 +1510,8 @@ class DriverTests(AutonomyTestCase):
     def test_lost_chat_cancels_managed_validation_and_preserves_completed_results(self) -> None:
         progress, ack = self.tmp / "job-progress.jsonl", self.tmp / "job-ack.json"
         process = subprocess.Popen([sys.executable, str(SCRIPTS / "autonomy_driver.py"), "--bundle", str(self.bundle),
-                                    "--no-pr-sync", "--chat-timeout-seconds", ".5", "--heartbeat-seconds", ".05",
+                                    "--no-pr-sync", "--chat-timeout-seconds", ".5" if os.name != "nt" else "1.2",
+                                    "--heartbeat-seconds", ".05",
                                     "--validation-reserve-seconds", ".05", "--progress-file", str(progress),
                                     "--chat-ack-file", str(ack), "--", sys.executable, str(self.agent), str(self.log), "validation"],
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)

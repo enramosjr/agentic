@@ -176,17 +176,19 @@ class PersistedTextEncodingTests(unittest.TestCase):
             values = {**os.environ, 'PYTHONUTF8': '0', 'PYTHONIOENCODING': 'cp1252'}
             code = ('import sys,json;from pathlib import Path;sys.path.insert(0,sys.argv[1]);'
                 'import scratch,eval_outcome,pr_sync,scan,completion;root=Path(sys.argv[2]);'
+                'shown=completion.okf(root,"show",".ai/docs/notice.md","--body");'
                 'print(json.dumps([scratch.git_common_dir(root).as_posix(),'
                 'Path(eval_outcome.git(root,"rev-parse","--show-toplevel")).as_posix(),'
                 'Path(pr_sync._git(root,"rev-parse","--show-toplevel").stdout.strip()).as_posix(),'
-                'scan._git(root,"ls-files","-z"),completion.okf(root,"show",".ai/docs/notice.md","--body").stdout]))')
+                'scan._git(root,"ls-files","-z"),[shown.returncode,shown.stdout,shown.stderr]]))')
             result = subprocess.run([sys.executable, '-c', code, str(SCRIPTS), str(root)],
                                     cwd=root, env=values, capture_output=True, encoding='utf-8', timeout=30)
             self.assertEqual(result.returncode, 0, result.stderr)
-            common, outcome, sync, inventory, text = json.loads(result.stdout)
+            common, outcome, sync, inventory, shown = json.loads(result.stdout)
             self.assertEqual((common, outcome, sync), ((root / '.git').as_posix(), root.as_posix(), root.as_posix()))
             self.assertIn(name + '\0', inventory)
-            self.assertIn('\u4e81', text)
+            self.assertEqual(shown[0], 0, shown[2])
+            self.assertIn('\u4e81', shown[1])
             command = [sys.executable if os.name == 'nt' else 'python3',
                        '-m', 'unittest', 'discover', '-s', '.ai/scripts/tests', '-p', 'test_run_tests.py']
             exported = subprocess.run([sys.executable, str(scripts / 'assurance_inputs.py'), '--json', '--', *command],

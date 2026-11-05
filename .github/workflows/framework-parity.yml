@@ -48,8 +48,20 @@ jobs:
         id: onboarding
         continue-on-error: true
         run: python -m unittest -v test_onboard.OnboardE2ETests
+      - name: Native Codex hooks
+        id: hooks
+        continue-on-error: true
+        run: python -m unittest -v test_windows_hooks.NativeWindowsHookTests
+      - name: Detached process supervision
+        id: background
+        continue-on-error: true
+        run: python -m unittest -v test_wait_check.WaitCheckTests
+      - name: Package selection contracts
+        id: selection
+        continue-on-error: true
+        run: python -m unittest -v test_qualification_speed.SelectionTests
       - name: Require every preflight to pass
-        if: always() && (steps.brownfield.outcome != 'success' || steps.review.outcome != 'success' || steps.evaluation.outcome != 'success' || steps.onboarding.outcome != 'success')
+        if: always() && (steps.brownfield.outcome != 'success' || steps.review.outcome != 'success' || steps.evaluation.outcome != 'success' || steps.onboarding.outcome != 'success' || steps.hooks.outcome != 'success' || steps.background.outcome != 'success' || steps.selection.outcome != 'success')
         run: exit 1
   regressions:
     needs: windows_preflight

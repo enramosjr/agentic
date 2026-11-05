@@ -151,7 +151,10 @@ def receipt_schema(receipt):
 
 def find_receipt(root, spec, target):
     found = None
-    relative = spec.relative_to(root).as_posix()
+    try:
+        relative = spec.relative_to(root).as_posix()
+    except ValueError as error:
+        raise DeltaError('spec resolves outside the repository', 'delta-receipt') from error
     for file in sorted((root / 'knowledge/history/lifecycle').glob('*.json')):
         try:
             record = json.loads(read(file))
@@ -208,6 +211,8 @@ def replacement(block, old, kind):
 
 
 def model(spec, root):
+    # Git and native file APIs can spell one repository through different aliases.
+    root, spec = root.resolve(), spec.resolve()
     bundle = root / 'knowledge'
     text = read(spec)
     meta, spans = document(text)
@@ -374,7 +379,7 @@ def render(model, spec):
     sources = model['capmeta'].get('sources', [])
     if not isinstance(sources, list):
         raise DeltaError('capability sources must be a list', 'delta-target')
-    resource = Path(os.path.relpath(spec, model['cap'].parent)).as_posix()
+    resource = Path(os.path.relpath(spec.resolve(), model['cap'].parent)).as_posix()
     if not any(isinstance(s, dict) and s.get('resource') == resource for s in sources):
         text = okf.update_frontmatter(text, {'sources': [*sources, {'id': 'delta-' + sha(resource)[:16], 'resource': resource}]})
     return text
