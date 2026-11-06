@@ -20,13 +20,13 @@ def python_hint(*, as_argument: bool = False) -> str:
 
 
 def configure_windows_environment() -> None:
-    """Discover installed prerequisites for this CLI process, never global PATH."""
-    if os.name != 'nt':
-        return
+    """Use UTF-8 CLI streams and discover Windows tools without global PATH edits."""
     for stream in (sys.stdin, sys.stdout, sys.stderr):
         reconfigure = getattr(stream, 'reconfigure', None)
         if reconfigure is not None:
             reconfigure(encoding='utf-8')
+    if os.name != 'nt':
+        return
     if shutil.which('git'):
         return
     bases = [os.environ.get('ProgramFiles'), os.environ.get('ProgramFiles(x86)')]

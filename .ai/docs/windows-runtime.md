@@ -28,6 +28,10 @@ hints use PowerShell invocation syntax; those hints do not rewrite recorded
 commands. Immutable evidence and pinned compatibility snapshots retain their
 hash checks.
 
+CLI standard streams use UTF-8 on both platforms, including when the invoking
+environment selects a legacy encoding. This keeps captured document bodies and
+Unicode diagnostic paths consistent with the tools' UTF-8 subprocess decoding.
+
 Directory-junction tests exercise native alias escapes and retargeting without
 administrator symlink privileges. Input fingerprints include native junction
 targets so identical bytes at another target cannot reuse old evidence. Literal
@@ -45,6 +49,11 @@ skip on Windows with a stated reason: hook deadline supervision uses
 `signal.setitimer`, and the scripted CLI fixture is a shebang script. Tests with
 short timing limits use longer limits on Windows, where interpreter startup takes
 about a second.
+Cross-platform parser fixtures isolate the modules' platform view without changing
+`pathlib`'s host OS. Process-metadata tests wait for the child to report readiness
+before asserting its actual parent, birth identity, and exact argument spelling.
+Synthetic launcher fixtures also control the current process birth, so their
+ancestry checks do not depend on host uptime.
 
 ## Verification
 

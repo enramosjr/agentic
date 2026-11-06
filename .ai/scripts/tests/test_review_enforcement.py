@@ -5,6 +5,7 @@ import shlex
 from pathlib import Path
 import subprocess
 import sys
+from types import SimpleNamespace
 import unittest
 
 from test_assurance import Case
@@ -41,7 +42,9 @@ class NativeRuntimeTests(unittest.TestCase):
         literals = (r'C:\Users\RUNNER~1\AppData\Local\Temp\repo',
                     r'C:\MY-DIR~1\repo', r'C:\CAFÉ~1\repo', r'C:\NAME!~1\repo',
                     r'C:\my-dir\repo', r'C:\café\repo')
-        with mock.patch.object(pr_hook.os, 'name', 'nt'):
+        # Change the parsers' platform view without changing pathlib's host OS.
+        with mock.patch.object(pr_hook, 'os', SimpleNamespace(name='nt')), \
+                mock.patch.object(guard, 'os', SimpleNamespace(name='nt')):
             for literal in literals:
                 with self.subTest(literal=literal):
                     self.assertFalse(pr_hook._dynamic(literal))
@@ -53,7 +56,7 @@ class NativeRuntimeTests(unittest.TestCase):
                           r'C:\path\`selected', r'C:\path\*', r'C:\path\?', r'C:\path\[abc]'):
                 with self.subTest(value=value):
                     self.assertTrue(pr_hook._dynamic(value))
-        with mock.patch.object(pr_hook.os, 'name', 'posix'):
+        with mock.patch.object(pr_hook, 'os', SimpleNamespace(name='posix')):
             self.assertTrue(pr_hook._dynamic(literals[0]))
 
     def test_native_location_alias_prefix_routes_pr_to_literal_directory(self):
@@ -188,6 +191,7 @@ class NativeRuntimeTests(unittest.TestCase):
             100: {'pid': 100, 'birth': '100', 'parent': 1, 'argv': ['C:/tools/codex.exe']},
         }
         with mock.patch.object(review_native.os, 'getppid', return_value=42), \
+                mock.patch.object(guard.process_runtime, 'identity', return_value={'pid': 43, 'birth': '250'}), \
                 mock.patch.object(guard.process_runtime, 'process_info', side_effect=processes.__getitem__, create=True):
             self.assertEqual(review_native.native_launcher('codex'), {'pid': 100, 'birth': '100'})
 
@@ -199,6 +203,7 @@ class NativeRuntimeTests(unittest.TestCase):
             100: {'pid': 100, 'birth': '300', 'parent': 1, 'argv': ['codex.exe']},
         }
         with mock.patch.object(review_native.os, 'getppid', return_value=42), \
+                mock.patch.object(guard.process_runtime, 'identity', return_value={'pid': 43, 'birth': '250'}), \
                 mock.patch.object(guard.process_runtime, 'process_info', side_effect=processes.__getitem__, create=True):
             with self.assertRaises(guard.ReviewError):
                 review_native.native_launcher('codex')
@@ -209,6 +214,7 @@ class NativeRuntimeTests(unittest.TestCase):
         for argv, birth in ((['python.exe', 'user.py'], 'birth'), (['codex.exe'], None)):
             with self.subTest(argv=argv, birth=birth), \
                     mock.patch.object(review_native.os, 'getppid', return_value=42), \
+                    mock.patch.object(guard.process_runtime, 'identity', return_value={'pid': 43, 'birth': '250'}), \
                     mock.patch.object(guard.process_runtime, 'process_info', return_value={
                         'pid': 42, 'birth': birth, 'parent': 1, 'argv': argv}, create=True):
                 with self.assertRaises(guard.ReviewError):

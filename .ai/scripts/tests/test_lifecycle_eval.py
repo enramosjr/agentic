@@ -499,9 +499,12 @@ class NativeRuntimeTests(unittest.TestCase):
 
     def test_os_metadata_has_real_parent_and_exact_argv(self):
         import process_runtime
-        child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)',
-                                  'argument with spaces', 'quote"argument'])
+        child = subprocess.Popen([sys.executable, '-c',
+                                  'import time; print("ready", flush=True); time.sleep(30)',
+                                  'argument with spaces', 'quote"argument'],
+                                 stdout=subprocess.PIPE, text=True, encoding='utf-8')
         try:
+            self.assertEqual(child.stdout.readline(), 'ready\n')
             value = process_runtime.process_info(child.pid)
             self.assertEqual(value['parent'], os.getpid())
             self.assertEqual(value['argv'][-2:], ['argument with spaces', 'quote"argument'])
@@ -509,6 +512,7 @@ class NativeRuntimeTests(unittest.TestCase):
         finally:
             child.kill()
             child.wait()
+            child.stdout.close()
 
     def test_owned_tree_stops_descendants_and_proves_terminal_state(self):
         import process_runtime
