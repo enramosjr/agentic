@@ -1074,6 +1074,15 @@ class OutcomeTests(FrozenBehaviorChecks, unittest.TestCase):
         case.lc("stage", "verify", "--note", "fixture records/convergence pass")
         state = lifecycle_eval.lifecycle.load(root)
         self.assertEqual(self.check(root, base, state)[0], [])
+        alias = root.parent / (root.name + '-alias')
+        disk_tmp.directory_link(alias, root)
+        try:
+            self.assertEqual(self.check(alias, base, state)[0], [])
+        finally:
+            if os.name == 'nt':
+                alias.rmdir()
+            else:
+                alias.unlink()
         original = copy.deepcopy(state)
         capability_bytes = case.cap.read_bytes()
         capability = capability_bytes.decode('utf-8')

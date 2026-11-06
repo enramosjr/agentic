@@ -234,7 +234,7 @@ def prepare(scenario: dict, work: Path, *, deadline: float | None = None, superv
     for name, text in setup.get("files", {}).items():
         target = setup_path(name, work)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(text, encoding='utf-8', newline='\n')  # fixtures are byte-exact; pinned hashes assume LF
+        target.write_bytes(text.encode('utf-8'))  # byte-exact LF fixtures, including on Python 3.9
     git = ["git", "-C", str(work), "-c", "user.email=eval@eval", "-c", "user.name=eval"]
     storage = supervision_storage or scratch.require_disk(work.parent)
     env = {k: v for k, v in os.environ.items() if k not in ("OKF_AUTONOMOUS", "LIFECYCLE_GUARD")}

@@ -96,7 +96,7 @@ class Fixture(unittest.TestCase):
     def write(self, name, value):
         path = self.root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(value, encoding='utf-8', newline='\n')
+        path.write_bytes(value.encode('utf-8'))
         return path
 
     def process(self, argv, cwd=None):
@@ -6593,14 +6593,13 @@ class SkillFrontmatterAdopterEndToEndTests(SkillFrontmatterFixture):  # R6
                 self.assertEqual(status(), 'VERIFIED')
         try:
             reordered = [*value['inputs'][:-2], value['inputs'][-1], value['inputs'][-2]]
-            capability.write_text(prefix + '  - Inputs: ' + ' '.join('`' + p + '`' for p in reordered) + '\n',
-                                  newline='\n')
+            capability.write_bytes((prefix + '  - Inputs: ' + ' '.join('`' + p + '`' for p in reordered) + '\n').encode('utf-8'))
             self.assertEqual(status(), 'UNVERIFIED')
-            capability.write_text(original.replace(SKILL_FRONTMATTER_COMMAND[2] + '`',
-                                                   SKILL_FRONTMATTER_COMMAND[2] + ' -v`'), newline='\n')
+            capability.write_bytes(original.replace(SKILL_FRONTMATTER_COMMAND[2] + '`',
+                                                    SKILL_FRONTMATTER_COMMAND[2] + ' -v`').encode('utf-8'))
             self.assertEqual(status(), 'UNVERIFIED')
         finally:
-            capability.write_text(original, newline='\n')
+            capability.write_bytes(original.encode('utf-8'))
             self.assertEqual(capability.read_bytes(), original.encode())
         self.assertEqual(status(), 'VERIFIED')
         entries = [e for p in (self.root / 'knowledge/history/lifecycle').glob('*.json')

@@ -64,7 +64,20 @@ The `Framework parity` CI workflow runs that shared inventory on Windows and
 Linux, on the supported Python floor and Python 3.15, with full repository history.
 Both native Windows preflights must pass before the complete matrix starts.
 The preflight retains individual failure traces and fails if any selected class fails.
+Qualification fixtures write explicit UTF-8/LF bytes using APIs available on Python
+3.9. Delta completion compares specification provenance through resolved paths,
+including repositories opened through a directory junction or DOS short name.
+The native missing-tool tests mask system-wide discovery roots after PowerShell
+startup, so a hosted runner's installed launcher cannot satisfy an absent-tool case.
 The installed-qualification test exercises an uncommitted upgrade and its actual
 qualification commands; the installer also tests a new clone with pinned snapshots.
 No platform is considered verified from startup-only checks or a submitted job.
 Use completed command results for the candidate being delivered.
+
+Default-branch required checks must use the exact successful job names from that
+candidate: `Windows preflight / Python 3.9`, `Windows preflight / Python 3.15`,
+`ubuntu-latest / Python 3.9`, `ubuntu-latest / Python 3.15`,
+`windows-latest / Python 3.9`, and `windows-latest / Python 3.15`.
+Require an up-to-date branch and retain the existing pull-request and branch-safety
+rules. Record the candidate SHA, completed workflow URL, and ruleset readback in
+the delivery evidence; a submitted or skipped matrix is not a passing baseline.

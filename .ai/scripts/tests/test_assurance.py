@@ -55,7 +55,7 @@ class Case(unittest.TestCase):
     def write(self, name, text):
         path = self.root / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, newline='\n')
+        path.write_bytes(text.encode('utf-8'))
         return path
 
     def capability(self, requirements, namespace='CALC'):
