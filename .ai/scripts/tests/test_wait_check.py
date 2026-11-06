@@ -1,9 +1,12 @@
 """Exercise wait_check's real CLI: detached start, blocking wait and every exit state."""
 import json
+import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 
@@ -15,8 +18,21 @@ import process_runtime
 class WaitCheckTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
-        self.addCleanup(self.directory.cleanup)
+        self.addCleanup(self.cleanup_directory)
         self.log = Path(self.directory.name) / "check.log"
+
+    def cleanup_directory(self):
+        # Job termination waits for the supervisor, but Windows can release its
+        # descendants' inherited log handles just after that process exits.
+        deadline = time.monotonic() + 10
+        while Path(self.directory.name).exists():
+            try:
+                shutil.rmtree(self.directory.name)
+            except (PermissionError, NotADirectoryError):
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(.01)
+        self.directory.cleanup()
 
     def cli(self, *args, timeout=30):
         return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, timeout=timeout)
@@ -67,6 +83,18 @@ class WaitCheckTests(unittest.TestCase):
         result = self.cli("wait", "--log", str(self.log), "--done", "capture ready", "--max", "20")
         self.assertEqual(result.returncode, 0)
         self.assertEqual(self.record(result)["state"], "done-match")
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows denies deletion of an open log')
+    def test_cleanup_waits_for_log_handle_release(self):
+        handle = self.log.open('wb')
+        release = threading.Timer(.2, handle.close)
+        release.start()
+        try:
+            self.cleanup_directory()
+        finally:
+            release.join()
+            handle.close()
+        self.assertFalse(Path(self.directory.name).exists())
 
     def test_timeout_reports_running_and_leaves_check_alive(self):
         pid = self.start("import time; print('progress 1', flush=True); time.sleep(60)")

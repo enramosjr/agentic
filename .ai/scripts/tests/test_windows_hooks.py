@@ -137,10 +137,13 @@ class NativeWindowsHookTests(unittest.TestCase):
         self.env['PROGRAMFILES(X86)'] = str(self.root / 'missing x86')
         self.env['USERPROFILE'] = str(self.root / 'missing user')
         # PowerShell restores ProgramFiles at startup; hosted runners can also
-        # have a system-wide py.exe. Mask both discovery roots after startup.
+        # have a system-wide py.exe. Hide that file without changing SystemRoot,
+        # which .NET still needs to load assemblies while the hook runs.
         self.command_prefix = ("$env:ProgramFiles='C:\\missing programs'; "
                                "${env:ProgramFiles(x86)}='C:\\missing x86'; "
-                               "$env:SystemRoot='C:\\missing windows'; ")
+                               "function Get-Item { param($Path,$LiteralPath,$ErrorAction) "
+                               "if ($Path -eq (Join-Path $env:SystemRoot 'py.exe')) { return }; "
+                               "Microsoft.PowerShell.Management\\Get-Item @PSBoundParameters }; ")
         # Keep only Git available while proving that missing Python fails closed.
         system_path = self.env['PATH']
         self.env['PATH'] += ';' + str(Path(shutil.which('git')).parent)

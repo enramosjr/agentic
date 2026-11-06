@@ -69,6 +69,8 @@ Qualification fixtures write explicit UTF-8/LF bytes using APIs available on Pyt
 including repositories opened through a directory junction or DOS short name.
 The native missing-tool tests mask system-wide discovery roots after PowerShell
 startup, so a hosted runner's installed launcher cannot satisfy an absent-tool case.
+Detached-check fixtures wait for Windows to release inherited log handles before
+removing their temporary directories; cleanup has a bounded deadline.
 The installed-qualification test exercises an uncommitted upgrade and its actual
 qualification commands; the installer also tests a new clone with pinned snapshots.
 No platform is considered verified from startup-only checks or a submitted job.
