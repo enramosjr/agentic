@@ -595,7 +595,10 @@ class ValidationTests(AutonomyTestCase):
                     "with file_lock(mutex):\n"
                     " value=json.loads(p.read_text()); value['active']+=1; "
                     "value['maximum']=max(value['maximum'],value['active']); p.write_text(json.dumps(value))\n"
-                    "time.sleep(.1)\n"
+                    f"p.with_name('started-{number}').touch()\n"
+                    f"deadline=time.monotonic()+{SHORT}\n"
+                    f"while len(list(p.parent.glob('started-*'))) < {(number // 2 + 1) * 2}:\n"
+                    " assert time.monotonic()<deadline, 'parallel peer did not start'\n time.sleep(.01)\n"
                     "with file_lock(mutex):\n"
                     " value=json.loads(p.read_text()); value['active']-=1; "
                     f"p.write_text(json.dumps(value)); print({number})")

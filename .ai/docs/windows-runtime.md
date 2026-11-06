@@ -60,6 +60,16 @@ Cross-platform parser fixtures isolate the modules' platform view without changi
 before asserting its actual parent, birth identity, and exact argument spelling.
 Synthetic launcher fixtures also control the current process birth, so their
 ancestry checks do not depend on host uptime.
+Recovery policy tests advance their clock only after the real child publishes
+readiness; separate CLI tests retain actual deadline and process-tree assertions.
+Concurrency tests use peer readiness rather than assuming startup overlaps a short
+sleep. Child completion checks include birth identity, so a reused PID cannot
+falsely report a surviving owned child.
+
+The installer creates relative skill links with native separators and compares
+their normalized target spelling. Scratch checks resolve dangling junctions on
+Python 3.9 before accepting a disk location. Evaluation supervisors publish a
+timeout result even when their deadline expires before launch authorization.
 
 ## Verification
 

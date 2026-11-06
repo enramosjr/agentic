@@ -1069,12 +1069,12 @@ REPORT_IMPORTS = ['.ai/scripts/' + name + '.py' for name in
 REPORT_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
-    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
     '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
-    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
+    '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
+    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
 }
 
 
@@ -1677,12 +1677,12 @@ class InstallerDocExportTests(InstallerDocFixture):  # R3
 INSTALLER_DOC_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
-    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
     '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
-    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
+    '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
+    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
 }
 
 
@@ -2136,12 +2136,12 @@ class ValidationPolicyExportTests(ValidationPolicyFixture):  # R3
 VALIDATION_POLICY_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
-    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
     '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
-    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
+    '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
+    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
 }
 
 
@@ -2598,12 +2598,12 @@ class AuditDocExportTests(AuditDocFixture):  # R3
 AUDIT_DOC_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
-    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
     '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
-    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
+    '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
+    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
 }
 
 
@@ -3073,12 +3073,12 @@ class AnalysisConvergenceDocExportTests(AnalysisConvergenceDocFixture):  # R3
 ANALYSIS_CONVERGENCE_DOC_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
-    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
     '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
-    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
+    '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
+    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
 }
 
 
@@ -3567,12 +3567,12 @@ class StageDocExportTests(StageDocFixture):  # R3
 STAGE_DOC_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
-    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
     '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
-    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
+    '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
+    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
 }
 
 
@@ -4102,12 +4102,12 @@ class TierDocExportTests(TierDocFixture):  # R3
 TIER_DOC_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
-    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
     '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
-    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
+    '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
+    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
 }
 
 
@@ -4633,12 +4633,12 @@ ASSURANCE_DOC_ROW = r'(?m)^\| Assurance \| `assure'
 ASSURANCE_DOC_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
-    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
     '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
-    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
+    '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
+    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
 }
 
 
@@ -5150,12 +5150,12 @@ class AgentsBudgetExportTests(AgentsBudgetFixture):  # R3
 AGENTS_BUDGET_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
-    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
     '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
-    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
+    '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
+    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
 }
 
 
@@ -5635,12 +5635,12 @@ class SemanticLensExportTests(SemanticLensFixture):  # R3
 SEMANTIC_LENS_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
-    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
     '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
-    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
+    '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
+    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
 }
 
 
@@ -6243,12 +6243,12 @@ class SkillFrontmatterExportTests(SkillFrontmatterFixture):  # R3
 SKILL_FRONTMATTER_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
-    '.ai/scripts/scratch.py': '0e0b2e0f45926bce7168992bfc0bb9785216170b17b38dfcc7fe282f228bad35',
+    '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
     '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
-    '.ai/scripts/review_guard.py': 'f36fe035999ab1aa17524095b87251ff11b7016f38a52a4e7fc6b175ed313e7b',
+    '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '974a7b50dc0912bd54d409eba7de3d2bbd863474563c987d2ef2ffd47ee7a8f3',
+    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
 }
 
 

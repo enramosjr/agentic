@@ -97,7 +97,11 @@ def supervise(directory: Path) -> int:
     publish(directory / "ready.json", {"pid": os.getpid(), "token": request["token"]})
     arm = directory / "launch.json"
     while not arm.exists():
-        if (time.time() >= request["deadline"] or (directory / "cancel.json").exists()
+        if time.time() >= request['deadline']:
+            publish(directory / 'result.json', {'code': 'timeout', 'exit': None,
+                                               'message': 'command timed out before launch authorization'})
+            return 0
+        if ((directory / "cancel.json").exists()
                 or not (directory / "request.json").exists()):
             return 1
         time.sleep(0.01)

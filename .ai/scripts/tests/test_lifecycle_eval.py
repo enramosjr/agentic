@@ -367,7 +367,7 @@ class ScenarioContractTests(unittest.TestCase):
                   f"w=Path({str(work)!r});e.prepare(s,w);"
                   "assert (w/'\\u6d4b\\u8bd5.txt').read_text(encoding='utf-8')=='\\u4e2d\\u6587 body'")
         result = subprocess.run([sys.executable, '-c', source], capture_output=True,
-                                env={**os.environ, 'PYTHONUTF8': '0', 'PYTHONIOENCODING': 'cp1252'}, timeout=30)
+                                env={**os.environ, 'PYTHONUTF8': '0', 'PYTHONIOENCODING': 'cp1252'}, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 0, result.stderr.decode('utf-8', errors='replace'))
 
 
@@ -613,6 +613,17 @@ class NativeRuntimeTests(unittest.TestCase):
 
 
 class ProcessTests(unittest.TestCase):
+    def test_deadline_before_authorization_publishes_timeout_without_launch(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            eval_process.publish(directory / 'request.json', {'deadline': time.time() - 1, 'token': 'expired'})
+            with mock.patch.object(eval_process.process_runtime.ProcessTree, 'start') as launch:
+                self.assertEqual(eval_process.supervise(directory), 0)
+            launch.assert_not_called()
+            result = json.loads((directory / 'result.json').read_text())
+            self.assertEqual(result['code'], 'timeout')
+            self.assertIn('timed out', result['message'])
+
     """R4: matching artifacts cannot turn a crashed process into a PASS."""
 
     setUp = EvalRunnerTests.setUp
@@ -758,8 +769,8 @@ lifecycle.state_path(Path.cwd()).write_text('[]')
     def test_public_cli_errors_publish_non_pass_json_and_preserve_exit_diagnostics(self):
         malformed = COMPLIANT + "\nsys.path.insert(0, '.ai/scripts')\nimport lifecycle\nlifecycle.state_path(Path.cwd()).write_text('[]')\n"
         cases = [(COMPLIANT + "\nsys.exit(7)", (), "ERROR", "exit 7"),
-                 # Starting the deadline owner takes longer than 0.2 s on Windows.
-                 ("import time; time.sleep(10)", ("--timeout", "0.2" if os.name != "nt" else "4"), "ERROR", "timed out"),
+                 # Admit owner startup before testing an actual launched-agent timeout.
+                 ("import time; time.sleep(10)", ("--timeout", "4"), "ERROR", "timed out"),
                  ("import sys; sys.stdout.write('x' * (5 * 1024 * 1024))", (), "ERROR", "output limit"),
                  (malformed, (), "FAIL", "invalid lifecycle state")]
         for source, options, status, diagnostic in cases:

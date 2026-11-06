@@ -9,7 +9,9 @@ import tempfile
 
 
 def require_disk(path: Path) -> Path:
-    root = path.resolve()
+    # ntpath.realpath also resolves dangling directory junctions on Python 3.9;
+    # pathlib.resolve there can leave the alias unchanged and miss a refused target.
+    root = Path(os.path.realpath(path))
     if any(root == path or path in root.parents for path in
            (Path("/tmp").resolve(), Path("/var/tmp").resolve(), Path("/dev/shm").resolve())):
         raise ValueError(f"scratch must be outside system temporary storage: {root}")

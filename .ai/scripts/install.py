@@ -407,7 +407,7 @@ def install(target, template, check=False, force=False, no_knowledge=False):
     make_link = False
     skill_names = [n for n in plain_files(template) if n.startswith(".claude/skills/")]
     if mode == "symlink":
-        if not link.is_symlink() or os.readlink(link) != "../.claude/skills":
+        if not link.is_symlink() or os.readlink(link).replace('\\', '/') != "../.claude/skills":
             problems.append("drift: .agents/skills")
             if link.exists() or link.is_symlink():
                 conflicts.append(".agents/skills")
@@ -494,7 +494,7 @@ def install(target, template, check=False, force=False, no_knowledge=False):
         if make_link:
             link.parent.mkdir(parents=True, exist_ok=True)
             try:
-                os.symlink("../.claude/skills", link, target_is_directory=True)
+                os.symlink(os.path.join('..', '.claude', 'skills'), link, target_is_directory=True)
             except OSError:
                 for name in skill_names:
                     dest = name.replace(".claude/skills/", ".agents/skills/", 1)
