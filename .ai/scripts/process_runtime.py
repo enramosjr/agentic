@@ -210,6 +210,64 @@ def _resume_primary(pid: int) -> None:
         kernel.CloseHandle(snapshot)
 
 
+def _job_counts(job) -> tuple[int, int]:
+    import ctypes
+    from ctypes import wintypes
+
+    class Accounting(ctypes.Structure):
+        _fields_ = [(key, ctypes.c_int64) for key in ('user', 'kernel', 'period_user', 'period_kernel')]
+        _fields_ += [(key, wintypes.DWORD) for key in ('faults', 'total', 'active', 'terminated')]
+
+    value = Accounting()
+    if not _job_api().QueryInformationJobObject(job, 1, ctypes.byref(value), ctypes.sizeof(value), None):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return value.total, value.active
+
+
+def _job_process_handles(job, deadline: float) -> list:
+    """Retain member handles before termination can remove their IDs from the Job."""
+    import ctypes
+    from ctypes import wintypes
+    kernel = _job_api()
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.IsProcessInJob.argtypes = [wintypes.HANDLE, wintypes.HANDLE, ctypes.POINTER(wintypes.BOOL)]
+    capacity, handles = 16, []
+    try:
+        while True:
+            class Members(ctypes.Structure):
+                _fields_ = [('assigned', wintypes.DWORD), ('count', wintypes.DWORD),
+                            ('pids', ctypes.c_size_t * capacity)]
+            members = Members()
+            if kernel.QueryInformationJobObject(job, 3, ctypes.byref(members), ctypes.sizeof(members), None):
+                break
+            if ctypes.get_last_error() != 234:  # ERROR_MORE_DATA
+                raise ctypes.WinError(ctypes.get_last_error())
+            if time.monotonic() >= deadline or capacity >= 1048576:
+                raise TimeoutError('owned process membership did not stabilize')
+            capacity = min(1048576, max(capacity * 2, members.assigned))
+        for pid in members.pids[:members.count]:
+            handle = kernel.OpenProcess(0x00101000, False, pid)  # SYNCHRONIZE | QUERY_LIMITED_INFORMATION
+            if not handle:
+                if ctypes.get_last_error() == 87:  # The process already exited.
+                    continue
+                raise ctypes.WinError(ctypes.get_last_error())
+            belongs = wintypes.BOOL()
+            if not kernel.IsProcessInJob(handle, job, ctypes.byref(belongs)):
+                error = ctypes.get_last_error()
+                kernel.CloseHandle(handle)
+                raise ctypes.WinError(error)
+            if belongs.value:
+                handles.append(handle)
+            else:
+                kernel.CloseHandle(handle)  # The original process exited and its PID was reused.
+        return handles
+    except BaseException:
+        for handle in handles:
+            kernel.CloseHandle(handle)
+        raise
+
+
 class ProcessTree:
     """Own a child tree before its first instruction and reap it on owner death."""
     def __init__(self):
@@ -296,10 +354,39 @@ class ProcessTree:
                 pass
 
     def close(self):
-        self.stop()
-        if os.name == 'nt' and self.job:
-            _job_api().CloseHandle(self.job)
-            self.job = None
+        handles, kernel = [], None
+        try:
+            if os.name == 'nt' and self.job:
+                import ctypes
+                from ctypes import wintypes
+                kernel = _job_api()
+                kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+                kernel.WaitForSingleObject.restype = wintypes.DWORD
+                deadline = time.monotonic() + 10
+                total, _ = _job_counts(self.job)
+                handles = _job_process_handles(self.job, deadline)
+            self.stop()
+            if kernel is not None:
+                # Job accounting can reach zero before process handles are
+                # signaled. Only held process handles witness termination.
+                for handle in handles:
+                    result = kernel.WaitForSingleObject(handle, max(0, int((deadline - time.monotonic()) * 1000)))
+                    if result == 0xffffffff:
+                        raise ctypes.WinError(ctypes.get_last_error())
+                    if result != 0:
+                        raise TimeoutError('owned process tree did not terminate')
+                if self.process is not None:
+                    self.process.wait(timeout=max(0, deadline - time.monotonic()))
+                final_total, active = _job_counts(self.job)
+                if final_total != total or active:
+                    raise OSError('owned process membership changed during cleanup; termination is not certified')
+        finally:
+            if kernel is not None:
+                for handle in handles:
+                    kernel.CloseHandle(handle)
+                if self.job:
+                    kernel.CloseHandle(self.job)
+                    self.job = None
 
 
 def tree_stopped(descriptor: dict) -> bool:
@@ -315,12 +402,6 @@ def tree_stopped(descriptor: dict) -> bool:
     if os.name != 'nt' or not name.startswith('Local\\AGENTIC-') or len(name) != 46:
         raise ValueError('invalid owned process-tree descriptor')
     import ctypes
-    from ctypes import wintypes
-
-    class Accounting(ctypes.Structure):
-        _fields_ = [(key, ctypes.c_int64) for key in ('user', 'kernel', 'period_user', 'period_kernel')]
-        _fields_ += [(key, wintypes.DWORD) for key in ('faults', 'total', 'active', 'terminated')]
-
     kernel = _job_api()
     handle = kernel.OpenJobObjectW(4, False, name)  # JOB_OBJECT_QUERY
     if not handle:
@@ -328,10 +409,7 @@ def tree_stopped(descriptor: dict) -> bool:
             return True
         raise ctypes.WinError(ctypes.get_last_error())
     try:
-        value = Accounting()
-        if not kernel.QueryInformationJobObject(handle, 1, ctypes.byref(value), ctypes.sizeof(value), None):
-            raise ctypes.WinError(ctypes.get_last_error())
-        return value.active == 0
+        return _job_counts(handle)[1] == 0
     finally:
         kernel.CloseHandle(handle)
 

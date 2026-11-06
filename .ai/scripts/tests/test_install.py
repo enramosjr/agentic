@@ -205,7 +205,7 @@ class BootstrapCase(InstallerCase):
         self.addCleanup(environment.stop)
 
     def assert_bootstrapped(self):
-        self.assertEqual(Path(self.git("rev-parse", "--show-toplevel").strip()).resolve(), self.target)
+        self.assertEqual(Path(self.git("rev-parse", "--show-toplevel").strip()).resolve(), self.target.resolve())
         head = subprocess.run(["git", "-C", str(self.target), "rev-parse", "--verify", "HEAD"], capture_output=True)
         self.assertNotEqual(head.returncode, 0, "bootstrap must not create a commit")
         self.assertEqual(self.git("remote"), "")

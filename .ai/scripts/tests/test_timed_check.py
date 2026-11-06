@@ -66,8 +66,9 @@ class TimedCheckTests(unittest.TestCase):
                                  "import pathlib,tempfile; print(pathlib.Path.cwd()); print(tempfile.gettempdir())",
                                  cwd=directory)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(result.stdout.splitlines(), [str(Path(directory).resolve()),
-                             str(scratch.directory(SCRIPT.parents[2]))])
+            cwd_line, scratch_line = result.stdout.splitlines()
+            self.assertEqual(Path(cwd_line).resolve(), Path(directory).resolve())
+            self.assertEqual(Path(scratch_line).resolve(), scratch.directory(SCRIPT.parents[2]))
 
     def test_invalid_utf8_output_is_retained_as_explicit_byte_escapes(self):
         lines, output, timing = [], io.StringIO(), io.StringIO()

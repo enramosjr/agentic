@@ -11,6 +11,12 @@ assigned to an owned kill-on-close Job and their ownership is published. Linux
 continues to use process groups and kernel birth identity. Supervisors retain
 independent deadlines, bounded output capture, real exit status and descendant
 cleanup when their caller dies.
+Forced Windows cleanup retains member process handles before requesting
+termination and waits for those handles before certifying closure. A changed
+membership snapshot fails closed. A zero Job active count alone is not a process
+termination witness; see Microsoft's [TerminateProcess completion semantics](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-terminateprocess).
+Review-record reads retry brief Windows sharing denials for a bounded interval;
+an unreadable or invalid record still blocks recovery.
 
 Lifecycle, detached checks, autonomous validation, artifact checks and native
 review capture use those mechanisms. Review and Git routing preserve literal
@@ -58,19 +64,25 @@ ancestry checks do not depend on host uptime.
 ## Verification
 
 Use the interpreter available in the shell (`python`, `py -3`, or its full path).
-Focused checks guide implementation; final parity requires the complete suite:
+Focused tests guide repairs. Run an individual bounded segment locally with:
 
 ```text
-python .ai/scripts/run_tests.py -j 4
+python .ai/scripts/run_tests.py -j 4 --shard 1/8
 ```
 
 Set `AGENTIC_TEST_PROGRESS=1` in the shell environment to print each test class's
 start and completion during a long run. The inventory and final verdict are unchanged.
+`--shard I/N` selects test methods deterministically, so large classes are divided
+too. The union of shards 1 through N is the full inventory, with each test assigned
+once. Invalid or empty shards, worker crashes and executed-count mismatches fail.
 Set `AGENTIC_TEST_RESUME` to a file path to make an interrupted run resumable: classes
-that already passed on exactly the same tree are skipped, and any edit reruns everything.
+that already passed on the same tree and shard are skipped; changed inputs or a
+different shard invalidate that evidence.
 
-The `Framework parity` CI workflow runs that shared inventory on Windows and
-Linux, on the supported Python floor and Python 3.15, with full repository history.
+The `Framework parity` CI workflow runs eight parallel segments for each Windows
+and Linux / Python 3.9 and 3.15 variant, with full repository history. Each regression
+segment has a 15-minute job limit. Repair feedback uses the failing tests or segment;
+the integrated gate is the complete segmented matrix on a frozen candidate.
 Both native Windows preflights must pass before the complete matrix starts.
 The preflight retains individual failure traces and fails if any selected class fails.
 Qualification fixtures write explicit UTF-8/LF bytes using APIs available on Python
@@ -85,10 +97,10 @@ qualification commands; the installer also tests a new clone with pinned snapsho
 No platform is considered verified from startup-only checks or a submitted job.
 Use completed command results for the candidate being delivered.
 
-Default-branch required checks must use the exact successful job names from that
-candidate: `Windows preflight / Python 3.9`, `Windows preflight / Python 3.15`,
-`ubuntu-latest / Python 3.9`, `ubuntu-latest / Python 3.15`,
-`windows-latest / Python 3.9`, and `windows-latest / Python 3.15`.
+The always-run `Qualification` summary succeeds only when both preflights and all
+32 regression segments succeed. Failed, canceled, missing or skipped dependencies
+prevent a green summary. Default-branch required checks use the successful names
+`Qualification`, `Windows preflight / Python 3.9` and `Windows preflight / Python 3.15`.
 Require an up-to-date branch and retain the existing pull-request and branch-safety
 rules. Record the candidate SHA, completed workflow URL, and ruleset readback in
 the delivery evidence; a submitted or skipped matrix is not a passing baseline.

@@ -320,7 +320,7 @@ class ReceiptRecoveryTests(DeltaCase):  # R7
 
         def interrupted(path, data):
             merge = data.get('merge', {})
-            is_record = path == self.record()
+            is_record = path.resolve() == self.record().resolve()
             state = merge.get('state')
             selected = ((phase == 'before_pending' and is_record and state == 'pending')
                         or (phase == 'after_pending' and is_record and state == 'pending')

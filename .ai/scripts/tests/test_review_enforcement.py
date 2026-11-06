@@ -36,6 +36,41 @@ REPORT = ('# Review Report\n\n## Verdict\n\nApproved\n\n## Scope\n\nTask.\n\n'
 
 
 class NativeRuntimeTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'nt', 'Windows file sharing semantics')
+    def test_review_document_waits_for_a_transient_sharing_lock(self):
+        import ctypes
+        from ctypes import wintypes
+        import tempfile
+        import threading
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'record.json'
+            path.write_text('{"phase":"done"}')
+            kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+            kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+            kernel.CreateFileW.restype = wintypes.HANDLE
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+            handle = kernel.CreateFileW(str(path), 0x80000000, 0, None, 3, 0x80, None)
+            if handle == ctypes.c_void_p(-1).value:
+                raise ctypes.WinError(ctypes.get_last_error())
+            closed = []
+            release = threading.Timer(.2, lambda: closed.append(kernel.CloseHandle(handle)))
+            release.start()
+            try:
+                self.assertEqual(guard.document(path), {'phase': 'done'})
+            finally:
+                release.join()
+                self.assertEqual(closed, [1])
+
+    def test_unreadable_review_document_stays_fail_closed(self):
+        from unittest import mock
+        import time
+        started = time.monotonic()
+        with mock.patch.object(Path, 'read_text', side_effect=PermissionError('still busy')):
+            with self.assertRaisesRegex(guard.ReviewError, 'invalid review record'):
+                guard.document(Path('unreadable.json'))
+        self.assertLess(time.monotonic() - started, 3)
+
     def test_native_short_name_tilde_is_literal_but_expansions_are_refused(self):
         from unittest import mock
         import pr_hook

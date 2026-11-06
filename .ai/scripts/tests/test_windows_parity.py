@@ -185,7 +185,9 @@ class PersistedTextEncodingTests(unittest.TestCase):
                                     cwd=root, env=values, capture_output=True, encoding='utf-8', timeout=30)
             self.assertEqual(result.returncode, 0, result.stderr)
             common, outcome, sync, inventory, shown = json.loads(result.stdout)
-            self.assertEqual((common, outcome, sync), ((root / '.git').as_posix(), root.as_posix(), root.as_posix()))
+            resolved_root = root.resolve()
+            self.assertEqual((common, outcome, sync), ((resolved_root / '.git').as_posix(),
+                                                     resolved_root.as_posix(), resolved_root.as_posix()))
             self.assertIn(name + '\0', inventory)
             self.assertEqual(shown[0], 0, shown[2])
             self.assertIn('\u4e81', shown[1])

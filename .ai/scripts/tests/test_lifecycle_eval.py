@@ -486,14 +486,15 @@ class NativeRuntimeTests(unittest.TestCase):
         self.assertFalse(process_runtime.alive(child.pid))
 
     def test_capture_bounds_and_nonzero_exit_are_preserved(self):
+        timeout = 10 if os.name == 'nt' else 2
         with self.assertRaises(eval_process.ProcessError) as caught:
             eval_process.run([sys.executable, '-c', 'import sys; sys.stdout.write("x"*10000)'],
-                             self.scratch, dict(os.environ), self.scratch, timeout=2, output_limit=1024)
+                             self.scratch, dict(os.environ), self.scratch, timeout=timeout, output_limit=1024)
         self.assertEqual(caught.exception.code, 'output-limit')
         self.assertEqual(len(caught.exception.output), 1024)
         with self.assertRaises(eval_process.ProcessError) as caught:
             eval_process.run([sys.executable, '-c', 'import sys; print("exit proof");sys.exit(7)'],
-                             self.scratch, dict(os.environ), self.scratch, timeout=2)
+                             self.scratch, dict(os.environ), self.scratch, timeout=timeout)
         self.assertEqual(caught.exception.code, 'exit')
         self.assertIn('exit proof', caught.exception.output)
 
@@ -538,6 +539,55 @@ class NativeRuntimeTests(unittest.TestCase):
         # Job accounting exposes terminal membership without that procfs detail.
         if os.name == 'nt':
             self.assertTrue(process_runtime.tree_stopped(tree.descriptor))
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows Job completion contract')
+    def test_owned_tree_close_waits_for_terminal_descendants(self):
+        import process_runtime
+        command = ('import json,os,subprocess,sys,time;'
+                   'child=subprocess.Popen([sys.executable,"-c","import time;time.sleep(60)"]);'
+                   'print(json.dumps([os.getpid(),child.pid]),flush=True);time.sleep(60)')
+        tree = process_runtime.ProcessTree()
+        child = tree.start([sys.executable, '-c', command], stdout=subprocess.PIPE,
+                           text=True, encoding='utf-8')
+        try:
+            pids = json.loads(child.stdout.readline())
+            tree.close()
+            self.assertTrue(all(not process_runtime.alive(pid) for pid in pids),
+                            'close returned before an owned process terminated')
+        finally:
+            tree.close()
+            child.wait(timeout=5)
+            child.stdout.close()
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows Job membership contract')
+    def test_owned_tree_close_refuses_unwitnessed_new_members(self):
+        import process_runtime
+        command = ('import subprocess,sys,time;print("ready",flush=True);sys.stdin.readline();'
+                   'child=subprocess.Popen([sys.executable,"-c","import time;time.sleep(60)"]);'
+                   'print(child.pid,flush=True);time.sleep(60)')
+        tree = process_runtime.ProcessTree()
+        child = tree.start([sys.executable, '-c', command], stdin=subprocess.PIPE,
+                           stdout=subprocess.PIPE, text=True, encoding='utf-8')
+        original = process_runtime._job_process_handles
+        def snapshot(job, deadline):
+            handles = original(job, deadline)
+            try:
+                child.stdin.write('spawn\n'); child.stdin.flush()
+                self.assertGreater(int(child.stdout.readline()), 0)
+                return handles
+            except BaseException:
+                for handle in handles:
+                    process_runtime._job_api().CloseHandle(handle)
+                raise
+        try:
+            self.assertEqual(child.stdout.readline(), 'ready\n')
+            with mock.patch.object(process_runtime, '_job_process_handles', side_effect=snapshot):
+                with self.assertRaisesRegex(OSError, 'membership changed'):
+                    tree.close()
+        finally:
+            tree.close()
+            child.wait(timeout=5)
+            child.stdin.close(); child.stdout.close()
 
     def test_nonblocking_lock_refuses_a_live_owner_and_recovers_on_exit(self):
         import process_runtime
