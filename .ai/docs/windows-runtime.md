@@ -116,7 +116,7 @@ The `Framework parity` CI workflow runs eight parallel segments for each Windows
 and Linux / Python 3.9 and 3.15 variant, with full repository history. Each regression
 segment has a 15-minute job limit. Repair feedback uses the failing tests or segment;
 the integrated gate is the complete segmented matrix on a frozen candidate.
-Both native Windows preflights must pass before the complete matrix starts.
+Both native Windows preflights must pass before Qualification succeeds.
 The preflight retains individual failure traces and fails if any selected class fails.
 Qualification fixtures write explicit UTF-8/LF bytes using APIs available on Python
 3.9. Delta completion compares specification provenance through resolved paths,
