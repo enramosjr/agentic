@@ -1290,6 +1290,19 @@ class RecoveryTests(NativeCase):  # R7
         import signal
         import time
         self.prepare_native('codex')
+        def recover_when_quiet():
+            # The command can be dead while its registered wrapper is still
+            # closing the Job and borrower receipt. Recovery must refuse until
+            # that actual lifetime has ended, rather than only until pids die.
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    guard.recover_writers(self.root)
+                    return
+                except guard.ReviewError as error:
+                    if 'producer or borrower is still live' not in str(error) or time.monotonic() >= deadline:
+                        raise
+                    time.sleep(.01)
         for with_descendant in (False, True):
             marker = guard.directory(self.root) / f'plain-{with_descendant}.json'
             child_script = 'import time; time.sleep(60)'
@@ -1297,18 +1310,24 @@ class RecoveryTests(NativeCase):  # R7
                     'pids=[os.getpid()]\n' +
                     (f'pids.append(subprocess.Popen([sys.executable,"-c",{child_script!r}]).pid)\n'
                      if with_descendant else '') +
-                    f'pathlib.Path({str(marker)!r}).write_text(json.dumps(pids))\n'
+                    f'marker=pathlib.Path({str(marker)!r})\n'
+                    'pending=marker.with_suffix(".pending")\n'
+                    'pending.write_text(json.dumps(pids)); pending.replace(marker)\n'
                     'time.sleep(60)\n')
             owner = subprocess.Popen([sys.executable, str(self.scripts / 'lifecycle.py'), 'run',
                 'plain-child', '--', sys.executable, '-c', code], cwd=self.root, env=self.env,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             pids = []
+            identities = {}
+            leases = set()
             try:
                 deadline = time.monotonic() + 10
                 while not marker.exists() and time.monotonic() < deadline:
                     time.sleep(.01)
                 self.assertTrue(marker.exists())
                 pids = json.loads(marker.read_text())
+                identities = {pid: guard.identity(pid) for pid in pids}
+                leases.update(guard.read(self.root)['writers'])
                 owner.kill()
                 owner.wait(timeout=5)
                 with self.assertRaisesRegex(guard.ReviewError, 'producer|borrower'):
@@ -1319,10 +1338,10 @@ class RecoveryTests(NativeCase):  # R7
                         # A Windows Job owns descendants even after the product
                         # leader exits; wrapper completion reaps the whole job.
                         deadline = time.monotonic() + 5
-                        while any(guard.process_runtime.alive(pid) for pid in pids) and time.monotonic() < deadline:
+                        while any(not guard.stopped(identities[pid]) for pid in pids) and time.monotonic() < deadline:
                             time.sleep(.01)
-                        self.assertFalse(any(guard.process_runtime.alive(pid) for pid in pids))
-                        guard.recover_writers(self.root)
+                        self.assertFalse(any(not guard.stopped(identities[pid]) for pid in pids))
+                        recover_when_quiet()
                     else:
                         with self.assertRaisesRegex(guard.ReviewError, 'producer|borrower'):
                             guard.recover_writers(self.root)
@@ -1332,16 +1351,25 @@ class RecoveryTests(NativeCase):  # R7
                     owner.wait(timeout=5)
                 for pid in pids:
                     if os.name == 'nt':
-                        guard.process_runtime.terminate_tree(pid)
+                        guard.process_runtime.terminate_tree(pid, identities[pid]['birth'])
                     else:
                         try:
                             os.kill(pid, signal.SIGKILL)
                         except ProcessLookupError:
                             pass
+                if os.name == 'nt':
+                    # A wrapper owns its Job and cwd independently of the plain
+                    # command. Reap every registered, test-owned wrapper too,
+                    # including failure paths before the command marker is read.
+                    leases.update(guard.read(self.root)['writers'])
+                    for lease in leases:
+                        for registration in (guard.lease_path(self.root, lease) / 'borrowers').glob('*.json'):
+                            process = guard.document(registration)['process']
+                            guard.process_runtime.terminate_tree(process['pid'], process['birth'])
             deadline = time.monotonic() + 5
-            while any(not guard.stopped(guard.identity(pid)) for pid in pids) and time.monotonic() < deadline:
+            while any(not guard.stopped(identities[pid]) for pid in pids) and time.monotonic() < deadline:
                 time.sleep(.01)
-            guard.recover_writers(self.root)
+            recover_when_quiet()
         self.event('SubagentStart', agent_id='new-reviewer', agent_type='reviewer')
 
     def test_explicit_recovery_does_not_lease_itself(self):

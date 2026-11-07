@@ -68,6 +68,10 @@ falsely report a surviving owned child.
 Cancellation timing starts at the observed child failure, excluding interpreter
 startup. Chat fixtures renew acknowledgements until a heartbeat and real child
 output are observed, then test acknowledgement loss with the actual lease unchanged.
+Detached-check fixtures observe the actual command before killing a live check,
+and retain supervisor birth identity for cleanup. Recovery fixtures wait for the
+registered wrapper and borrower receipt to finish, rather than treating command
+exit alone as permission to recover a still-live owner.
 
 The installer creates relative skill links with native separators and compares
 their normalized target spelling. Scratch checks resolve dangling junctions on

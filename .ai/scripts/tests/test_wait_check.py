@@ -20,6 +20,8 @@ class WaitCheckTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.cleanup_directory)
         self.log = Path(self.directory.name) / "check.log"
+        self.identities = {}
+        self.launches = 0
 
     def cleanup_directory(self):
         # Job termination waits for the supervisor, but Windows can release its
@@ -38,15 +40,30 @@ class WaitCheckTests(unittest.TestCase):
         return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True, timeout=timeout)
 
     def start(self, code):
+        self.launches += 1
+        ready = self.log.with_name(f'command-ready-{self.launches}')
+        code = f'from pathlib import Path; Path({str(ready)!r}).write_text("ready")\n' + code
         result = self.cli("start", "--log", str(self.log), "--", sys.executable, "-c", code)
         self.assertEqual(result.returncode, 0, result.stderr)
         pid = json.loads(result.stdout)["pid"]
-        self.addCleanup(self.kill, pid)
+        try:
+            self.identities[pid] = process_runtime.identity(pid)['birth']
+        except ProcessLookupError:
+            pass  # A fast command may already have completed; no live owner to kill.
+        else:
+            self.addCleanup(process_runtime.terminate_tree, pid, self.identities[pid])
+        # start is asynchronous. Tests that kill a running check must first
+        # observe its actual command, after native Job assignment and resume.
+        deadline = time.monotonic() + 30
+        while not ready.exists() and time.monotonic() < deadline:
+            time.sleep(.01)
+        self.assertTrue(ready.exists(), 'actual detached command did not start')
         return pid
 
-    @staticmethod
-    def kill(pid):
-        process_runtime.terminate_tree(pid)
+    def kill(self, pid):
+        birth = self.identities.get(pid)
+        if birth is not None:
+            process_runtime.terminate_tree(pid, birth)
 
     def record(self, result):
         lines = [line.removeprefix("wait: ") for line in result.stderr.splitlines() if line.startswith("wait: ")]
