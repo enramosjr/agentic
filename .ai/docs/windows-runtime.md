@@ -83,8 +83,10 @@ mutating commands still fail normally, retaining their diagnostics. Git for
 Windows' [mapping adapter](https://github.com/git-for-windows/git/blob/main/compat/win32mmap.c)
 reports native mapping failures as `EINVAL`; concurrent file publication is one
 possible trigger, rather than a proven diagnosis for every such error.
-Background diff/status snapshots and advisory audits disable Git's optional index
-refresh, preventing readers from contending with a worker's `git add`. Mandatory
+Background status snapshots and advisory audits disable Git's optional index
+refresh. Source observation also disables `diff.autoRefreshIndex`, whose refresh
+can still acquire a lock, and confirms NUL-delimited candidate paths with a quiet
+content diff so stat-only changes do not count as source progress. Mandatory
 writer locks remain required. This follows Git's documented
 [background-operation locking guidance](https://git-scm.com/docs/git).
 

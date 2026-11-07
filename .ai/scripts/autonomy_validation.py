@@ -38,11 +38,14 @@ def command_environment(repo: Path, command: dict, validation_kind: str) -> dict
     return scratch.environment(repo, {**inherited, **command.get("env", {})})
 
 
-def git(repo: Path, *args: str) -> str:
+def git(repo: Path, *args: str, refresh_index: bool = True) -> str:
     options = ['--no-optional-locks'] if args[:1] in (('diff',), ('status',)) else []
+    if not refresh_index:
+        options += ['-c', 'diff.autoRefreshIndex=false']
     command = ["git", *options, "-C", str(repo), *args]
     if os.name != 'nt' or args[:1] != ('diff',):
-        return subprocess.check_output(command, text=True, encoding='utf-8').strip()
+        output = subprocess.check_output(command, text=True, encoding='utf-8')
+        return output if '-z' in args else output.strip()
     # A concurrent edit can race Windows Git's file mapping. Retry only this
     # observed read failure; never retry mutations or accept a failed snapshot.
     for attempt in range(3):
@@ -58,7 +61,7 @@ def git(repo: Path, *args: str) -> str:
             raise
         if result.stderr:
             sys.stderr.write(result.stderr)
-        return result.stdout.strip()
+        return result.stdout if '-z' in args else result.stdout.strip()
 
 
 def write_json(path: Path, value: dict) -> None:
@@ -183,9 +186,19 @@ def source_work(registry: Path) -> bool:
     rows = json.loads(registry.read_text(encoding='utf-8'))
     for worktree, base in rows.items():
         repo = Path(worktree)
-        paths = git(repo, "diff", "--name-only", base).splitlines()
-        paths += git(repo, "ls-files", "--others", "--exclude-standard").splitlines()
-        if any(path and not path.startswith("knowledge/") and Path(path).suffix.lower() not in (".md", ".txt", ".log", ".jsonl") for path in paths):
+        # Porcelain diff can refresh the index even with optional locks disabled.
+        # With refresh disabled, name-only output includes stat-only candidates.
+        paths = git(repo, "diff", "--name-only", "-z", "--no-renames", base, refresh_index=False).split('\0')
+        for path in paths:
+            if path and not path.startswith("knowledge/") and Path(path).suffix.lower() not in (".md", ".txt", ".log", ".jsonl"):
+                try:
+                    git(repo, "diff", "--quiet", base, "--", ":(literal)" + path, refresh_index=False)
+                except subprocess.CalledProcessError as error:
+                    if error.returncode != 1:
+                        raise
+                    return True
+        untracked = git(repo, "ls-files", "-z", "--others", "--exclude-standard").split('\0')
+        if any(path and not path.startswith("knowledge/") and Path(path).suffix.lower() not in (".md", ".txt", ".log", ".jsonl") for path in untracked):
             return True
     return False
 

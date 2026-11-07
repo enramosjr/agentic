@@ -113,6 +113,72 @@ class ValidationTests(AutonomyTestCase):
             finally:
                 lock.unlink(missing_ok=True)
 
+    def test_source_observation_preserves_index_and_ignores_stat_only_changes(self):
+        source = self.repo / 'observed.py'
+        source.write_text('original\n')
+        document = self.repo / 'notes.md'
+        document.write_text('original documentation\n')
+        binary = self.repo / 'binary.bin'
+        binary.write_bytes(b'\0original')
+        unusual = self.repo / (' leading.py' if os.name == 'nt' else ' \todd\n.py')
+        unusual.write_text('original\n')
+        self.commit_all('source observation baseline')
+        registry = self.runtime / 'workers.json'
+        registry.write_text(json.dumps({str(self.repo): self.git_head()}))
+        index = self.repo / '.git/index'
+        observed = source.stat()
+        os.utime(source, ns=(observed.st_atime_ns, observed.st_mtime_ns + 2_000_000_000))
+        before = index.read_bytes()
+        self.assertFalse(autonomy_validation.source_work(registry))
+        self.assertEqual(index.read_bytes(), before, 'source observation refreshed the index')
+        document.write_text('changed documentation\n')
+        untracked = self.repo / ' untracked.py'
+        (self.repo / 'untracked.md').write_text('documentation only\n')
+        self.assertFalse(autonomy_validation.source_work(registry))
+        untracked.write_text('new source\n')
+        self.assertTrue(autonomy_validation.source_work(registry))
+        untracked.unlink()
+        source.write_text('changed\n')
+        lock = self.repo / '.git/index.lock'
+        try:
+            with lock.open('xb'):
+                self.assertTrue(autonomy_validation.source_work(registry))
+                self.assertEqual(index.read_bytes(), before)
+                writer = subprocess.run(['git', '-C', str(self.repo), 'add', 'observed.py'],
+                                        capture_output=True, text=True)
+                self.assertNotEqual(writer.returncode, 0)
+                self.assertIn('index.lock', writer.stderr)
+        finally:
+            lock.unlink(missing_ok=True)
+        source.write_text('original\n')
+        binary.write_bytes(b'\0changed')
+        self.assertTrue(autonomy_validation.source_work(registry))
+        binary.write_bytes(b'\0original')
+        self.assertFalse(autonomy_validation.source_work(registry))
+        source.unlink()
+        self.assertTrue(autonomy_validation.source_work(registry))
+        source.write_text('original\n')
+        renamed = source.with_name('renamed.py')
+        source.rename(renamed)
+        self.assertTrue(autonomy_validation.source_work(registry))
+        renamed.rename(source)
+        ignored_name = source.with_name('renamed.md')
+        source.rename(ignored_name)
+        self.assertTrue(autonomy_validation.source_work(registry))
+        ignored_name.rename(source)
+        unusual.write_text('changed\n')
+        self.assertTrue(autonomy_validation.source_work(registry))
+        unusual.write_text('original\n')
+        if os.name != 'nt':
+            source.chmod(source.stat().st_mode ^ 0o100)
+            self.assertTrue(autonomy_validation.source_work(registry))
+        self.assertEqual(index.read_bytes(), before)
+        failure = subprocess.CalledProcessError(128, ['git', 'diff'])
+        with mock.patch.object(autonomy_validation, 'git', side_effect=['observed.py\0', failure]):
+            with self.assertRaises(subprocess.CalledProcessError) as caught:
+                autonomy_validation.source_work(registry)
+        self.assertIs(caught.exception, failure)
+
     def test_plan_rejects_missing_coverage_duplicates_and_unbounded_time(self):
         for value in ([], {}, {"requirements": ["A"], "commands": []},
                       {"requirements": ["A", "B"], "commands": [self.command()]},
