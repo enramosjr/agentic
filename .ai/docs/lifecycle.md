@@ -118,6 +118,11 @@ commit; a local commit does not authorize a push or PR.
 
 ## Delivery authorization and denial recovery
 
+Local stage completion is not protected-branch merge authorization. See
+[trusted CI](trusted-ci.md) for independently controlled critical acceptance,
+separate App credentials and host-enforced approval. Installed integration remains
+unverified until effective controls and real hosted denial cases are qualified.
+
 Follow [Stage 5](../lifecycle.md#stage-5-ship) using the user's existing explicit
 delivery choice within its authorized scope. Offer PR, keep or discard only when
 the choice is missing; ask for approval when the payload, destination or side

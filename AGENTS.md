@@ -1,6 +1,6 @@
 # Agent Governance & OKF Synchronization Protocol
 
-This document defines governance, workflow gates, evidence rules and agent selection for agents and human-agent pairs.
+Governance, workflow gates, evidence and roles for agents and human-agent pairs; [trusted CI](.ai/docs/trusted-ci.md).
 
 The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", and "MAY" in this document are to be interpreted as described in BCP 14 ([RFC 2119](https://www.rfc-editor.org/rfc/rfc2119), [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174)) when, and only when, they appear in all capitals, as shown here. The same words in lowercase carry their ordinary English meaning and are not normative. The "Behavioral Guidelines" at the end of this document are written as plain-language guidance and are outside this convention.
 

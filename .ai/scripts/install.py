@@ -511,6 +511,7 @@ def install(target, template, check=False, force=False, no_knowledge=False):
     for name in conflicts:
         print(f"conflict: {name} (kept adopter copy)")
     print("installed" if changing else "up to date")
+    print("trusted CI: external authority provisioning required; installation does not activate merge enforcement")
     return 1 if conflicts else 0
 
 
