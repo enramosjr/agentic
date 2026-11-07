@@ -3,6 +3,7 @@ import json
 import hashlib
 import errno
 import io
+import contextlib
 import os
 from pathlib import Path
 import subprocess
@@ -10,6 +11,7 @@ import sys
 import time
 import unittest
 from unittest import mock
+from types import SimpleNamespace
 
 from test_autonomy import AutonomyTestCase, HAS_GIT, SCRIPTS
 import autonomy_validation
@@ -17,6 +19,55 @@ import process_runtime
 
 # Interpreter startup takes about a second on Windows, more under parallel load.
 SHORT = 2 if os.name != "nt" else 10
+
+
+class GitSnapshotTests(unittest.TestCase):
+    def failure(self, message='fatal: mmap failed: Invalid argument\n', code=128):
+        return subprocess.CalledProcessError(code, ['git', 'diff'], stderr=message)
+
+    def test_windows_diff_retries_a_transient_native_mapping_error(self):
+        error = self.failure()
+        result = subprocess.CompletedProcess(['git'], 0, 'investigated.py\n', '')
+        with mock.patch.object(autonomy_validation, 'os', SimpleNamespace(name='nt')), \
+                mock.patch.object(subprocess, 'check_output', side_effect=error), \
+                mock.patch.object(subprocess, 'run', side_effect=[error, result]) as read:
+            self.assertEqual(autonomy_validation.git(Path('.'), 'diff', '--name-only', 'HEAD'), 'investigated.py')
+        self.assertEqual(read.call_count, 2)
+
+    def test_persistent_mapping_and_other_git_failures_still_fail_closed(self):
+        for error, attempts in ((self.failure(), 3), (self.failure('fatal: bad revision\n'), 1),
+                                (self.failure(code=129), 1)):
+            with self.subTest(message=error.stderr, code=error.returncode), \
+                    mock.patch.object(autonomy_validation, 'os', SimpleNamespace(name='nt')), \
+                    mock.patch.object(subprocess, 'check_output', side_effect=error), \
+                    mock.patch.object(subprocess, 'run', side_effect=error) as read, \
+                    contextlib.redirect_stderr(io.StringIO()) as diagnostic:
+                with self.assertRaises(subprocess.CalledProcessError) as failure:
+                    autonomy_validation.git(Path('.'), 'diff', '--name-only', 'HEAD')
+                self.assertIs(failure.exception, error)
+                self.assertEqual(read.call_count, attempts)
+                self.assertEqual(diagnostic.getvalue(), error.stderr)
+
+    def test_other_platforms_and_mutations_do_not_retry(self):
+        for platform, command in (('posix', 'diff'), ('nt', 'commit')):
+            error = self.failure()
+            with self.subTest(platform=platform, command=command), \
+                    mock.patch.object(autonomy_validation, 'os', SimpleNamespace(name=platform)), \
+                    mock.patch.object(subprocess, 'check_output', side_effect=error) as original, \
+                    mock.patch.object(subprocess, 'run') as read:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    autonomy_validation.git(Path('.'), command)
+                self.assertEqual(original.call_count, 1)
+                read.assert_not_called()
+
+    def test_successful_diff_retains_git_warning_diagnostics(self):
+        result = subprocess.CompletedProcess(['git'], 0, 'observed.py\n', 'warning: diagnostic\n')
+        with mock.patch.object(autonomy_validation, 'os', SimpleNamespace(name='nt')), \
+                mock.patch.object(subprocess, 'check_output', return_value='observed.py\n'), \
+                mock.patch.object(subprocess, 'run', return_value=result), \
+                contextlib.redirect_stderr(io.StringIO()) as diagnostic:
+            self.assertEqual(autonomy_validation.git(Path('.'), 'diff'), 'observed.py')
+            self.assertEqual(diagnostic.getvalue(), result.stderr)
 
 
 @unittest.skipUnless(HAS_GIT, "git not installed")

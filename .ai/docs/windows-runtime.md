@@ -72,6 +72,13 @@ Detached-check fixtures observe the actual command before killing a live check,
 and retain supervisor birth identity for cleanup. Recovery fixtures wait for the
 registered wrapper and borrower receipt to finish, rather than treating command
 exit alone as permission to recover a still-live owner.
+Windows source snapshots retry only Git diff's observed `mmap failed: Invalid
+argument` exit 128, at most three reads. Each retry executes Git again; a failed
+snapshot never counts as progress. Persistent mapping failures, other errors and
+mutating commands still fail normally, retaining their diagnostics. Git for
+Windows' [mapping adapter](https://github.com/git-for-windows/git/blob/main/compat/win32mmap.c)
+reports native mapping failures as `EINVAL`; concurrent file publication is one
+possible trigger, rather than a proven diagnosis for every such error.
 
 The installer creates relative skill links with native separators and compares
 their normalized target spelling. Scratch checks resolve dangling junctions on

@@ -39,7 +39,25 @@ def command_environment(repo: Path, command: dict, validation_kind: str) -> dict
 
 
 def git(repo: Path, *args: str) -> str:
-    return subprocess.check_output(["git", "-C", str(repo), *args], text=True, encoding='utf-8').strip()
+    command = ["git", "-C", str(repo), *args]
+    if os.name != 'nt' or args[:1] != ('diff',):
+        return subprocess.check_output(command, text=True, encoding='utf-8').strip()
+    # A concurrent edit can race Windows Git's file mapping. Retry only this
+    # observed read failure; never retry mutations or accept a failed snapshot.
+    for attempt in range(3):
+        try:
+            result = subprocess.run(command, check=True, capture_output=True, text=True, encoding='utf-8')
+        except subprocess.CalledProcessError as error:
+            if (error.returncode == 128 and (error.stderr or '').strip() == 'fatal: mmap failed: Invalid argument'
+                    and attempt < 2):
+                time.sleep(.01)
+                continue
+            if error.stderr:
+                sys.stderr.write(error.stderr)
+            raise
+        if result.stderr:
+            sys.stderr.write(result.stderr)
+        return result.stdout.strip()
 
 
 def write_json(path: Path, value: dict) -> None:
