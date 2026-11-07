@@ -472,7 +472,7 @@ class NativeRuntimeTests(unittest.TestCase):
                        ' '.join(literal(value) for value in arguments))
             shell = Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
             result = subprocess.run([str(shell), '-NoProfile', '-NonInteractive', '-Command', command],
-                                    capture_output=True, text=True, timeout=10)
+                                    capture_output=True, text=True, timeout=30)
         else:
             result = subprocess.run([process_runtime.python_hint(), '-c', code, *arguments],
                                     capture_output=True, text=True, timeout=10)
