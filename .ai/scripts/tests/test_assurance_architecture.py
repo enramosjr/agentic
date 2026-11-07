@@ -236,7 +236,7 @@ class IntegrationTests(DeltaCase):  # R2, R4, R6
         spec = self.delta(kind)
         path = self.root / spec
         text = path.read_text().replace('  - Verify:', line + '  - Verify:')
-        path.write_text(text, newline='\n')
+        path.write_bytes(text.encode('utf-8'))
         return spec
 
     def test_add_and_modify_preserve_reference_and_execute_once(self):

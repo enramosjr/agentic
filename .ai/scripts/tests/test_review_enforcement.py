@@ -5,6 +5,7 @@ import shlex
 from pathlib import Path
 import subprocess
 import sys
+from types import SimpleNamespace
 import unittest
 
 from test_assurance import Case
@@ -35,13 +36,50 @@ REPORT = ('# Review Report\n\n## Verdict\n\nApproved\n\n## Scope\n\nTask.\n\n'
 
 
 class NativeRuntimeTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'nt', 'Windows file sharing semantics')
+    def test_review_document_waits_for_a_transient_sharing_lock(self):
+        import ctypes
+        from ctypes import wintypes
+        import tempfile
+        import threading
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'record.json'
+            path.write_text('{"phase":"done"}')
+            kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+            kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
+            kernel.CreateFileW.restype = wintypes.HANDLE
+            kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+            handle = kernel.CreateFileW(str(path), 0x80000000, 0, None, 3, 0x80, None)
+            if handle == ctypes.c_void_p(-1).value:
+                raise ctypes.WinError(ctypes.get_last_error())
+            closed = []
+            release = threading.Timer(.2, lambda: closed.append(kernel.CloseHandle(handle)))
+            release.start()
+            try:
+                self.assertEqual(guard.document(path), {'phase': 'done'})
+            finally:
+                release.join()
+                self.assertEqual(closed, [1])
+
+    def test_unreadable_review_document_stays_fail_closed(self):
+        from unittest import mock
+        import time
+        started = time.monotonic()
+        with mock.patch.object(Path, 'read_text', side_effect=PermissionError('still busy')):
+            with self.assertRaisesRegex(guard.ReviewError, 'invalid review record'):
+                guard.document(Path('unreadable.json'))
+        self.assertLess(time.monotonic() - started, 3)
+
     def test_native_short_name_tilde_is_literal_but_expansions_are_refused(self):
         from unittest import mock
         import pr_hook
         literals = (r'C:\Users\RUNNER~1\AppData\Local\Temp\repo',
                     r'C:\MY-DIR~1\repo', r'C:\CAFÉ~1\repo', r'C:\NAME!~1\repo',
                     r'C:\my-dir\repo', r'C:\café\repo')
-        with mock.patch.object(pr_hook.os, 'name', 'nt'):
+        # Change the parsers' platform view without changing pathlib's host OS.
+        with mock.patch.object(pr_hook, 'os', SimpleNamespace(name='nt')), \
+                mock.patch.object(guard, 'os', SimpleNamespace(name='nt')):
             for literal in literals:
                 with self.subTest(literal=literal):
                     self.assertFalse(pr_hook._dynamic(literal))
@@ -53,7 +91,7 @@ class NativeRuntimeTests(unittest.TestCase):
                           r'C:\path\`selected', r'C:\path\*', r'C:\path\?', r'C:\path\[abc]'):
                 with self.subTest(value=value):
                     self.assertTrue(pr_hook._dynamic(value))
-        with mock.patch.object(pr_hook.os, 'name', 'posix'):
+        with mock.patch.object(pr_hook, 'os', SimpleNamespace(name='posix')):
             self.assertTrue(pr_hook._dynamic(literals[0]))
 
     def test_native_location_alias_prefix_routes_pr_to_literal_directory(self):
@@ -188,6 +226,7 @@ class NativeRuntimeTests(unittest.TestCase):
             100: {'pid': 100, 'birth': '100', 'parent': 1, 'argv': ['C:/tools/codex.exe']},
         }
         with mock.patch.object(review_native.os, 'getppid', return_value=42), \
+                mock.patch.object(guard.process_runtime, 'identity', return_value={'pid': 43, 'birth': '250'}), \
                 mock.patch.object(guard.process_runtime, 'process_info', side_effect=processes.__getitem__, create=True):
             self.assertEqual(review_native.native_launcher('codex'), {'pid': 100, 'birth': '100'})
 
@@ -199,6 +238,7 @@ class NativeRuntimeTests(unittest.TestCase):
             100: {'pid': 100, 'birth': '300', 'parent': 1, 'argv': ['codex.exe']},
         }
         with mock.patch.object(review_native.os, 'getppid', return_value=42), \
+                mock.patch.object(guard.process_runtime, 'identity', return_value={'pid': 43, 'birth': '250'}), \
                 mock.patch.object(guard.process_runtime, 'process_info', side_effect=processes.__getitem__, create=True):
             with self.assertRaises(guard.ReviewError):
                 review_native.native_launcher('codex')
@@ -209,6 +249,7 @@ class NativeRuntimeTests(unittest.TestCase):
         for argv, birth in ((['python.exe', 'user.py'], 'birth'), (['codex.exe'], None)):
             with self.subTest(argv=argv, birth=birth), \
                     mock.patch.object(review_native.os, 'getppid', return_value=42), \
+                    mock.patch.object(guard.process_runtime, 'identity', return_value={'pid': 43, 'birth': '250'}), \
                     mock.patch.object(guard.process_runtime, 'process_info', return_value={
                         'pid': 42, 'birth': birth, 'parent': 1, 'argv': argv}, create=True):
                 with self.assertRaises(guard.ReviewError):
@@ -1249,6 +1290,19 @@ class RecoveryTests(NativeCase):  # R7
         import signal
         import time
         self.prepare_native('codex')
+        def recover_when_quiet():
+            # The command can be dead while its registered wrapper is still
+            # closing the Job and borrower receipt. Recovery must refuse until
+            # that actual lifetime has ended, rather than only until pids die.
+            deadline = time.monotonic() + 10
+            while True:
+                try:
+                    guard.recover_writers(self.root)
+                    return
+                except guard.ReviewError as error:
+                    if 'producer or borrower is still live' not in str(error) or time.monotonic() >= deadline:
+                        raise
+                    time.sleep(.01)
         for with_descendant in (False, True):
             marker = guard.directory(self.root) / f'plain-{with_descendant}.json'
             child_script = 'import time; time.sleep(60)'
@@ -1256,18 +1310,24 @@ class RecoveryTests(NativeCase):  # R7
                     'pids=[os.getpid()]\n' +
                     (f'pids.append(subprocess.Popen([sys.executable,"-c",{child_script!r}]).pid)\n'
                      if with_descendant else '') +
-                    f'pathlib.Path({str(marker)!r}).write_text(json.dumps(pids))\n'
+                    f'marker=pathlib.Path({str(marker)!r})\n'
+                    'pending=marker.with_suffix(".pending")\n'
+                    'pending.write_text(json.dumps(pids)); pending.replace(marker)\n'
                     'time.sleep(60)\n')
             owner = subprocess.Popen([sys.executable, str(self.scripts / 'lifecycle.py'), 'run',
                 'plain-child', '--', sys.executable, '-c', code], cwd=self.root, env=self.env,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             pids = []
+            identities = {}
+            leases = set()
             try:
                 deadline = time.monotonic() + 10
                 while not marker.exists() and time.monotonic() < deadline:
                     time.sleep(.01)
                 self.assertTrue(marker.exists())
                 pids = json.loads(marker.read_text())
+                identities = {pid: guard.identity(pid) for pid in pids}
+                leases.update(guard.read(self.root)['writers'])
                 owner.kill()
                 owner.wait(timeout=5)
                 with self.assertRaisesRegex(guard.ReviewError, 'producer|borrower'):
@@ -1278,10 +1338,10 @@ class RecoveryTests(NativeCase):  # R7
                         # A Windows Job owns descendants even after the product
                         # leader exits; wrapper completion reaps the whole job.
                         deadline = time.monotonic() + 5
-                        while any(guard.process_runtime.alive(pid) for pid in pids) and time.monotonic() < deadline:
+                        while any(not guard.stopped(identities[pid]) for pid in pids) and time.monotonic() < deadline:
                             time.sleep(.01)
-                        self.assertFalse(any(guard.process_runtime.alive(pid) for pid in pids))
-                        guard.recover_writers(self.root)
+                        self.assertFalse(any(not guard.stopped(identities[pid]) for pid in pids))
+                        recover_when_quiet()
                     else:
                         with self.assertRaisesRegex(guard.ReviewError, 'producer|borrower'):
                             guard.recover_writers(self.root)
@@ -1291,16 +1351,25 @@ class RecoveryTests(NativeCase):  # R7
                     owner.wait(timeout=5)
                 for pid in pids:
                     if os.name == 'nt':
-                        guard.process_runtime.terminate_tree(pid)
+                        guard.process_runtime.terminate_tree(pid, identities[pid]['birth'])
                     else:
                         try:
                             os.kill(pid, signal.SIGKILL)
                         except ProcessLookupError:
                             pass
+                if os.name == 'nt':
+                    # A wrapper owns its Job and cwd independently of the plain
+                    # command. Reap every registered, test-owned wrapper too,
+                    # including failure paths before the command marker is read.
+                    leases.update(guard.read(self.root)['writers'])
+                    for lease in leases:
+                        for registration in (guard.lease_path(self.root, lease) / 'borrowers').glob('*.json'):
+                            process = guard.document(registration)['process']
+                            guard.process_runtime.terminate_tree(process['pid'], process['birth'])
             deadline = time.monotonic() + 5
-            while any(not guard.stopped(guard.identity(pid)) for pid in pids) and time.monotonic() < deadline:
+            while any(not guard.stopped(identities[pid]) for pid in pids) and time.monotonic() < deadline:
                 time.sleep(.01)
-            guard.recover_writers(self.root)
+            recover_when_quiet()
         self.event('SubagentStart', agent_id='new-reviewer', agent_type='reviewer')
 
     def test_explicit_recovery_does_not_lease_itself(self):

@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import uuid
 
 sys.dont_write_bytecode = True
@@ -84,10 +85,16 @@ def atomic(path: Path, value: dict) -> None:
 
 
 def document(path: Path) -> dict:
-    try:
-        value = json.loads(path.read_text(encoding='utf-8'))
-    except (OSError, ValueError) as error:
-        raise ReviewError(f'invalid review record {path.name}: {error}') from error
+    deadline = time.monotonic() + 1
+    while True:
+        try:
+            value = json.loads(path.read_text(encoding='utf-8'))
+            break
+        except (OSError, ValueError) as error:
+            if isinstance(error, PermissionError) and os.name == 'nt' and time.monotonic() < deadline:
+                time.sleep(.01)  # Atomic replacement can briefly deny a Windows reader.
+                continue
+            raise ReviewError(f'invalid review record {path.name}: {error}') from error
     if not isinstance(value, dict):
         raise ReviewError(f'invalid review record {path.name}: expected object')
     return value

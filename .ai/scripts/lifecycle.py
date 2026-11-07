@@ -1300,7 +1300,7 @@ def cmd_converge(args: argparse.Namespace) -> int:
 
 
 def merge_bookkeeping(root: Path, model: dict, receipt: dict) -> str | None:
-    resource = Path(os.path.relpath(root / receipt['spec'], model['cap'].parent)).as_posix()
+    resource = Path(os.path.relpath((root / receipt['spec']).resolve(), model['cap'].parent)).as_posix()
     if not any(isinstance(s, dict) and s.get('resource') == resource for s in model['capmeta'].get('sources', [])):
         return 'missing spec source in ' + model['target']
     log = root / 'knowledge/log.md'

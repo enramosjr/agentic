@@ -66,7 +66,8 @@ class ProgressTests(unittest.TestCase):
                              capture_output=True, text=True, timeout=5)
         self.assertEqual(ack.returncode, 0, ack.stderr)
         self.progress.check()
-        for run, moment in (("unrelated-run", time.monotonic()), (self.progress.run_id, -1)):
+        for run, moment in (("unrelated-run", time.monotonic()),
+                            (self.progress.run_id, time.monotonic() - self.progress.timeout - 1)):
             self.ack.write_text(json.dumps({"run_id": run, "sequence": 2, "acknowledged_at": moment}))
             with self.assertRaises(autonomy_progress.MonitorLost):
                 self.progress.check()

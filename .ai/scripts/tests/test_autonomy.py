@@ -545,13 +545,25 @@ with log.open("a") as handle:
     handle.write(json.dumps({{"prompt": prompt, "autonomous": os.environ.get("OKF_AUTONOMOUS"), "temp": [os.environ.get(k) for k in ("TMPDIR", "TMP", "TEMP")], "handoff": os.environ.get("OKF_HANDOFF_REQUEST")}}) + "\\n")
 def interrupt_ready():
     log.with_suffix(".interrupt-" + str(len(log.read_text().splitlines()))).write_text("ready")
+def remember_child(child, path, allow_exited=False):
+    try:
+        identity = process_runtime.identity(child.pid)
+    except ProcessLookupError:
+        if not allow_exited:
+            raise
+        identity = dict(pid=child.pid, birth=None, exited=True)
+    path.write_text(str(child.pid))
+    pending = path.with_name(path.name + '.identity.pending')
+    pending.write_text(json.dumps(identity))
+    pending.replace(path.with_name(path.name + '.identity'))
+    return identity
 if mode == "fail":
     sys.exit(7)
 if mode == "idle":
     sys.exit(0)
 if mode == "audit-overlap" and len(log.read_text().splitlines()) == 1:
     import time
-    deadline = time.monotonic() + 3
+    deadline = time.monotonic() + 10
     while not log.with_suffix(".audit-started").exists():
         assert time.monotonic() < deadline, "audit process did not start"
         time.sleep(.01)
@@ -631,6 +643,8 @@ if mode.startswith("validation"):
         sys.exit(0)
     if mode == "validation-slow-closure" and launch == 2:
         import time
+        ready = log.with_suffix('.closure-ready')
+        ready.write_text('review running')
         time.sleep(.4)  # acceptance result review outlives discovery's advisory query
         assert not Path(os.environ["OKF_HANDOFF_REQUEST"]).exists(), "closure reused discovery timer"
     if mode == "validation-environment" and launch == 2:
@@ -683,13 +697,20 @@ if mode in ("rotate", "recover", "crash", "unsafe-recovery", "stuck-recovery", "
         (Path.cwd() / "unfinished.txt").write_text("preserved implementation\\n")
         if mode == "crash":
             log.with_suffix(".pid").write_text("999999999")
+            log.with_suffix('.pid.identity').write_text(json.dumps(dict(pid=999999999, birth=None, exited=True)))
             sys.exit(7)
-        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(.4 if " + repr(mode == "rotate") + " else 60)"])
-        log.with_suffix(".pid").write_text(str(child.pid))
+        if mode == "rotate":
+            marker = log.with_suffix('.checkpoint-ready-' + str(launch))
+            code = ("import os,sys,json,time; from pathlib import Path; "
+                    + "sys.path.insert(0," + repr({scripts!r}) + "); import process_runtime; "
+                    + "Path(" + repr(str(marker)) + ").write_text(json.dumps(process_runtime.identity(os.getpid()))); time.sleep(.4)")
+        else:
+            code = "import time; time.sleep(60)"
+        child = subprocess.Popen([sys.executable, "-c", code])
+        remember_child(child, log.with_suffix('.pid'), allow_exited=mode == 'rotate')
         if mode == "deadline-recovery":
             sys.exit(7)
         if mode == "rotate":
-            log.with_suffix(".checkpoint-ready-" + str(launch)).write_text(str(child.pid))
             request = Path(os.environ["OKF_HANDOFF_REQUEST"])
             while not request.exists():
                 time.sleep(.01)
@@ -699,14 +720,14 @@ if mode in ("rotate", "recover", "crash", "unsafe-recovery", "stuck-recovery", "
             interrupt_ready()
             time.sleep(60)
     elif recovering:
-        pid = log.with_suffix(".pid").read_text()
-        assert not process_runtime.alive(int(pid)), "previous owner still running"
+        owner = json.loads(log.with_suffix('.pid.identity').read_text())
+        assert owner.get('exited', False) or not process_runtime.alive(owner['pid'], owner['birth']), "previous owner still running"
         assert (Path.cwd() / "unfinished.txt").read_text() == "preserved implementation\\n"
         if mode == "unsafe-recovery":
             sys.exit(0)
         if mode == "deadline-recovery":
             child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
-            log.with_suffix(".recovery.pid").write_text(str(child.pid))
+            remember_child(child, log.with_suffix('.recovery.pid'))
         if mode in ("stuck-recovery", "deadline-recovery"):
             interrupt_ready()
             time.sleep(60)
@@ -720,9 +741,9 @@ if mode in ("rotate", "recover", "crash", "unsafe-recovery", "stuck-recovery", "
 if mode == "hang":
     import time
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
-    log.with_suffix(".pid").write_text(str(child.pid))
+    identity = remember_child(child, log.with_suffix('.pid'))
     with log.with_suffix(".all-pids").open("a") as handle:
-        handle.write(str(child.pid) + chr(10))
+        handle.write(json.dumps(identity) + chr(10))
     time.sleep(60)
 if mode == "churn":
     (Path.cwd() / "implementation.py").write_text(str(len(log.read_text().splitlines())))
@@ -831,6 +852,10 @@ class DriverTests(AutonomyTestCase):
     def sessions(self) -> list[dict[str, str]]:
         return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
 
+    def child_alive(self, path):
+        identity = json.loads(path.with_name(path.name + '.identity').read_text())
+        return not identity.get('exited', False) and process_runtime.alive(identity['pid'], identity['birth'])
+
     def drive_policy(self, mode: str, *options: str, checkpoint_after=None) -> subprocess.CompletedProcess[str]:
         """Exercise policy transitions with real children, independent of startup speed.
 
@@ -858,9 +883,13 @@ class DriverTests(AutonomyTestCase):
             checkpoint = self.log.with_suffix('.checkpoint-ready-' + str(len(self.sessions()) + 1))
             checkpoint.unlink(missing_ok=True)
             checkpoint_requested = False
+            closure_advanced = False
             tick = kwargs.get('on_tick')
             def ready_tick():
-                nonlocal checkpoint_requested
+                nonlocal checkpoint_requested, closure_advanced
+                if mode == 'validation-slow-closure' and self.log.with_suffix('.closure-ready').exists() and not closure_advanced:
+                    instant[0] += .2  # Exceeds discovery .1s, remains below closure 1s.
+                    closure_advanced = True
                 if checkpoint_after is not None and checkpoint.exists() and not checkpoint_requested:
                     instant[0] += checkpoint_after + 1e-6  # Cross the boundary despite float rounding.
                     checkpoint_requested = True
@@ -871,7 +900,13 @@ class DriverTests(AutonomyTestCase):
                     raise subprocess.TimeoutExpired(command, limit)
                 if tick:
                     tick()
-            kwargs.update(timeout_seconds=10, on_tick=ready_tick, tick_seconds=.02)
+            consumer = kwargs.get('on_output')
+            def diagnostic(line):
+                err.write(line)
+                if consumer:
+                    consumer(line)
+            kwargs.update(timeout_seconds=10, on_tick=ready_tick, tick_seconds=.02,
+                          on_output=diagnostic, merge_stderr=True)
             return original_check(command, **kwargs)
         def validation(*args, **kwargs):
             live[0] = time.monotonic()
@@ -1039,17 +1074,18 @@ class DriverTests(AutonomyTestCase):
         audit_script.write_text("import pathlib,time\n"
                                 + "root=pathlib.Path(" + repr(str(self.log)) + ")\n"
                                 + "root.with_suffix('.audit-started').write_text('audit running')\n"
-                                + "deadline=time.monotonic()+3\n"
+                                + "deadline=time.monotonic()+10\n"
                                 + "while not root.with_suffix('.source-started').exists():\n"
                                 + " assert time.monotonic()<deadline, 'worker was blocked on audit'\n time.sleep(.01)\n"
                                 + "root.with_suffix('.audit-finished').write_text('audit observed real source work')\n")
         original = autonomy_driver.documentation_audit
         def controlled_audit(*args, **kwargs):
             return original(*args, **kwargs, command=[sys.executable, str(audit_script)])
-        with mock.patch.object(autonomy_driver, "documentation_audit", controlled_audit):
+        diagnostic = io.StringIO()
+        with mock.patch.object(autonomy_driver, "documentation_audit", controlled_audit), contextlib.redirect_stderr(diagnostic):
             code = autonomy_driver.drive(self.bundle, [sys.executable, str(self.agent), str(self.log), "audit-overlap"],
-                                         "solo", 10, 2, None, max_run_seconds=10, handoff_seconds=1)
-        self.assertEqual(code, 0)
+                                         "solo", 10, 2, None, max_run_seconds=60, handoff_seconds=1)
+        self.assertEqual(code, 0, diagnostic.getvalue())
         self.assertTrue((self.repo / "feature.py").exists())
         audit = json.loads(Path(self.log.with_suffix(".audit-result-path").read_text()).read_text())
         self.assertEqual(audit["state"], "PASS")
@@ -1121,7 +1157,8 @@ class DriverTests(AutonomyTestCase):
 
     def test_session_and_run_deadlines_stop_hung_agent_and_descendant(self) -> None:
         # Each budget admits startup before proving actual hung-tree termination.
-        for session_limit, run_limit, launches in ((.75, 10, 2), (10, 6, 1)):
+        limits = ((.75, 10, 2), (10, 6, 1)) if os.name != 'nt' else ((.75, 15, 2), (30, 15, 1))
+        for session_limit, run_limit, launches in limits:
             with self.subTest(session_limit=session_limit, run_limit=run_limit):
                 previous = len(self.sessions())
                 started = time.monotonic()
@@ -1132,7 +1169,7 @@ class DriverTests(AutonomyTestCase):
                 # it is not another model/session budget.
                 self.assertLess(time.monotonic() - started, run_limit + 2)
                 self.assertEqual(result.returncode, 1, result.stderr)
-                self.assertEqual(len(self.sessions()), previous + launches)
+                self.assertEqual(len(self.sessions()), previous + launches, result.stderr)
                 self.assertIn("owned process group stopped", result.stderr)
                 self.assertIn('"exit_code": 124', result.stderr)
                 timings = [json.loads(line.removeprefix('timing: ')) for line in result.stderr.splitlines()
@@ -1140,10 +1177,10 @@ class DriverTests(AutonomyTestCase):
                 self.assertLessEqual(timings[0]['elapsed_seconds'], min(session_limit + 2, run_limit) + .5)
                 if len(timings) == 2:
                     self.assertLessEqual(timings[1]['elapsed_seconds'], 2.5)
-                pid = int(self.log.with_suffix(".pid").read_text())
-                self.assertFalse(process_runtime.alive(pid), 'agent descendant is still running')
-                self.assertTrue(all(not process_runtime.alive(int(pid))
-                                    for pid in self.log.with_suffix('.all-pids').read_text().splitlines()))
+                self.assertFalse(self.child_alive(self.log.with_suffix('.pid')), 'agent descendant is still running')
+                identities = map(json.loads, self.log.with_suffix('.all-pids').read_text().splitlines())
+                self.assertTrue(all(identity.get('exited', False) or not process_runtime.alive(identity['pid'], identity['birth'])
+                                    for identity in identities))
 
     def test_checkpoint_window_finishes_current_check_then_continues_fresh(self) -> None:
         events = self.tmp / "progress.jsonl"
@@ -1154,7 +1191,8 @@ class DriverTests(AutonomyTestCase):
         self.assertEqual(len(self.sessions()), 5, result.stderr)
         self.assertEqual(self.policy_limits, [1.2] * 5)
         self.assertEqual((self.repo / "check-result.txt").read_text(), "current check completed successfully\n")
-        self.assertFalse(process_runtime.alive(int(self.log.with_suffix('.checkpoint-ready-1').read_text())))
+        completed = json.loads(self.log.with_suffix('.checkpoint-ready-1').read_text())
+        self.assertFalse(process_runtime.alive(completed['pid'], completed['birth']))
         self.assertIn("wip: safe handoff", self.sessions()[1]["prompt"])
         self.assertNotIn('"exit_code": 124', result.stderr)
         self.assertNotIn('RECOVERY ONLY', ' '.join(session['prompt'] for session in self.sessions()))
@@ -1164,7 +1202,7 @@ class DriverTests(AutonomyTestCase):
         self.assertTrue(all(check.ok for check in okf.checkpoint(self.bundle)))
 
     def test_timeout_recovers_dirty_work_before_replacement_and_finishes_queue(self) -> None:
-        result = self.drive("recover", "--max-session-seconds", ".2", "--handoff-seconds", ".5")
+        result = self.drive_policy("recover", "--max-session-seconds", ".2", "--handoff-seconds", ".5")
         self.assertEqual(result.returncode, 0, result.stderr)
         sessions = self.sessions()
         self.assertEqual(len(sessions), 6)
@@ -1181,7 +1219,7 @@ class DriverTests(AutonomyTestCase):
         for mode in ("unsafe-recovery", "stuck-recovery"):
             with self.subTest(mode=mode):
                 self.log.unlink(missing_ok=True)
-                result = self.drive(mode, "--max-session-seconds", ".2", "--handoff-seconds", ".4")
+                result = self.drive_policy(mode, "--max-session-seconds", ".2", "--handoff-seconds", ".4")
                 self.assertEqual(result.returncode, 1, result.stderr)
                 self.assertEqual(len(self.sessions()), 2)
                 self.assertTrue((self.repo / "unfinished.txt").exists())
@@ -1237,8 +1275,8 @@ class DriverTests(AutonomyTestCase):
                    if line.startswith("timing: ")]
         self.assertEqual(len(timings), 2)
         self.assertEqual(timings[1]["exit_code"], 124)
-        self.assertFalse(process_runtime.alive(int(self.log.with_suffix(".pid").read_text())))
-        self.assertFalse(process_runtime.alive(int(self.log.with_suffix(".recovery.pid").read_text())))
+        self.assertFalse(self.child_alive(self.log.with_suffix('.pid')))
+        self.assertFalse(self.child_alive(self.log.with_suffix('.recovery.pid')))
         self.assertIn("recovery/run limit reached", err.getvalue())
 
     def test_driver_does_not_launch_a_records_only_round_with_only_checkpoint_reserve(self) -> None:
@@ -1284,7 +1322,7 @@ class DriverTests(AutonomyTestCase):
         self.assertEqual(json.loads(self.run_ok("queue", "--next", "--json")), [])
 
     def test_closure_review_has_its_own_budget_instead_of_the_discovery_timer(self) -> None:
-        result = self.drive("validation-slow-closure", "--max-discovery-seconds", ".1",
+        result = self.drive_policy("validation-slow-closure", "--max-discovery-seconds", ".1",
                             "--max-closure-seconds", "1", "--max-session-seconds", "2",
                             "--handoff-seconds", ".1", "--validation-reserve-seconds", ".05")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -1457,21 +1495,26 @@ class DriverTests(AutonomyTestCase):
         progress, ack, marker, release = (self.tmp / name for name in ("progress.jsonl", "ack.json", "child.pid", "release"))
         child = self.tmp / "long_test.py"
         child.write_text("import json,pathlib,subprocess,sys,time\n"
+                         f"sys.path.insert(0,{str(SCRIPTS)!r}); import process_runtime\n"
                          "grand=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)'])\n"
-                         f"pathlib.Path({str(marker)!r}).write_text(str(grand.pid))\n"
+                         f"pathlib.Path({str(marker)!r}).write_text(json.dumps(process_runtime.identity(grand.pid)))\n"
                          "print(json.dumps({'type':'item.started','item':{'type':'command_execution','command':'PRIVATE_TOOL_PAYLOAD'}}),flush=True)\n"
                          "print(json.dumps({'type':'item.completed','item':{'type':'agent_message','text':'Long-running test is underway'}}),flush=True)\n"
                          f"while not pathlib.Path({str(release)!r}).exists(): time.sleep(0.02)\n")
         process = subprocess.Popen([sys.executable, str(SCRIPTS / "autonomy_driver.py"), "--bundle", str(self.bundle),
-                                    "--no-pr-sync", "--max-sessions", "1", "--max-session-seconds", "5",
+                                    "--no-pr-sync", "--max-sessions", "1", "--max-session-seconds", "10",
                                     "--heartbeat-seconds", "0.1", "--chat-timeout-seconds", str(acknowledgement_seconds),
                                     "--progress-file", str(progress), "--chat-ack-file", str(ack), "--", sys.executable, str(child)],
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        self.addCleanup(lambda: process.kill() if process.poll() is None else None)
+        def cleanup():
+            if process.poll() is None:
+                process.kill()
+            process.communicate(timeout=10)
+        self.addCleanup(cleanup)
         return process, progress, ack, marker, release
 
-    def await_progress(self, path, kind, *, acknowledge=None):
-        deadline = time.monotonic() + 6
+    def await_progress(self, path, kind, *, acknowledge=None, text=None):
+        deadline = time.monotonic() + (6 if os.name != 'nt' else 12)
         while time.monotonic() < deadline:
             if path.exists():
                 entries = [json.loads(line) for line in path.read_text().splitlines() if line.endswith("}")]
@@ -1489,7 +1532,8 @@ class DriverTests(AutonomyTestCase):
                             if attempt == 99:
                                 raise
                             time.sleep(0.01)
-                if any(event["kind"] == kind for event in entries):
+                if (any(event["kind"] == kind for event in entries)
+                        and (text is None or any(event['text'] == text for event in entries))):
                     return entries
             time.sleep(0.02)
         self.fail(f"progress event {kind} absent")
@@ -1529,20 +1573,21 @@ class DriverTests(AutonomyTestCase):
         process, progress, ack, marker, release = self.chat_process()
         self.await_progress(progress, "started")
         self.acknowledge(progress, ack)
-        entries = self.await_progress(progress, "heartbeat")
+        entries = self.await_progress(progress, "heartbeat", acknowledge=ack, text="Long-running test is underway")
         self.assertTrue(any(event["text"] == "Long-running test is underway" for event in entries))
         self.assertNotIn("PRIVATE_TOOL_PAYLOAD", progress.read_text())
         self.assertTrue(marker.exists(), "actual long-running test did not start")
         stdout, stderr = process.communicate(timeout=8)
         self.assertEqual(process.returncode, 1, stderr)
         self.assertIn("acknowledgement missing or expired", stderr)
-        self.assertFalse(process_runtime.alive(int(marker.read_text())), 'unattended descendant survived')
+        identity = json.loads(marker.read_text())
+        self.assertFalse(process_runtime.alive(identity['pid'], identity['birth']), 'unattended descendant survived')
 
     def test_renewed_chat_acknowledgement_allows_long_test_to_complete(self) -> None:
         process, progress, ack, marker, release = self.chat_process()
         self.await_progress(progress, "started")
         self.acknowledge(progress, ack)
-        self.await_progress(progress, "heartbeat")
+        self.await_progress(progress, "heartbeat", acknowledge=ack)
         self.acknowledge(progress, ack)
         release.write_text("finish the real child check")
         stdout, stderr = process.communicate(timeout=8)

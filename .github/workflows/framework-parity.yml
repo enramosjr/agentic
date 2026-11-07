@@ -63,16 +63,16 @@ jobs:
       - name: Require every preflight to pass
         if: always() && (steps.brownfield.outcome != 'success' || steps.review.outcome != 'success' || steps.evaluation.outcome != 'success' || steps.onboarding.outcome != 'success' || steps.hooks.outcome != 'success' || steps.background.outcome != 'success' || steps.selection.outcome != 'success')
         run: exit 1
-  regressions:
-    needs: windows_preflight
-    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+  regression_segments:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }} / segment ${{ matrix.shard }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
         python: ['3.9', '3.15']
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     env:
       AGENTIC_TEST_PROGRESS: '1'
       PYTHONDONTWRITEBYTECODE: '1'
@@ -84,5 +84,17 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
-      - name: Complete framework regressions
-        run: python .ai/scripts/run_tests.py -j 4
+      - name: Framework regression segment
+        run: python .ai/scripts/run_tests.py -j 4 --shard ${{ matrix.shard }}/8
+  qualification:
+    name: Qualification
+    if: always()
+    needs: [windows_preflight, regression_segments]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every preflight and segment to pass
+        env:
+          PREFLIGHT_RESULT: ${{ needs.windows_preflight.result }}
+          SEGMENTS_RESULT: ${{ needs.regression_segments.result }}
+        run: '[[ "$PREFLIGHT_RESULT" == success && "$SEGMENTS_RESULT" == success ]]'

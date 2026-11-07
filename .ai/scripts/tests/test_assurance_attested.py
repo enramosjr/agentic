@@ -427,7 +427,7 @@ class PinTests(AttestedCase):  # R3
         self.reviewed(cited=f'- CALC-R2@{self.block_sha()[:12]} looked right.')
         self.capability(SCOPED + MANUAL_REQ)
         path = self.root / CAP
-        path.write_text(path.read_text().replace('Prose.', 'Different prose.'), newline='\n')
+        path.write_bytes(path.read_text().replace('Prose.', 'Different prose.').encode('utf-8'))
         self.assertTrue(self.status('CALC-R2')['attested']['pinned'])
 
     def test_unpinned_is_honored_but_labeled(self):

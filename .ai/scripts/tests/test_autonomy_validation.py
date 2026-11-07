@@ -3,6 +3,7 @@ import json
 import hashlib
 import errno
 import io
+import contextlib
 import os
 from pathlib import Path
 import subprocess
@@ -10,13 +11,64 @@ import sys
 import time
 import unittest
 from unittest import mock
+from types import SimpleNamespace
 
 from test_autonomy import AutonomyTestCase, HAS_GIT, SCRIPTS
 import autonomy_validation
 import process_runtime
+import okf
 
 # Interpreter startup takes about a second on Windows, more under parallel load.
 SHORT = 2 if os.name != "nt" else 10
+
+
+class GitSnapshotTests(unittest.TestCase):
+    def failure(self, message='fatal: mmap failed: Invalid argument\n', code=128):
+        return subprocess.CalledProcessError(code, ['git', 'diff'], stderr=message)
+
+    def test_windows_diff_retries_a_transient_native_mapping_error(self):
+        error = self.failure()
+        result = subprocess.CompletedProcess(['git'], 0, 'investigated.py\n', '')
+        with mock.patch.object(autonomy_validation, 'os', SimpleNamespace(name='nt')), \
+                mock.patch.object(subprocess, 'check_output', side_effect=error), \
+                mock.patch.object(subprocess, 'run', side_effect=[error, result]) as read:
+            self.assertEqual(autonomy_validation.git(Path('.'), 'diff', '--name-only', 'HEAD'), 'investigated.py')
+        self.assertEqual(read.call_count, 2)
+
+    def test_persistent_mapping_and_other_git_failures_still_fail_closed(self):
+        for error, attempts in ((self.failure(), 3), (self.failure('fatal: bad revision\n'), 1),
+                                (self.failure(code=129), 1)):
+            with self.subTest(message=error.stderr, code=error.returncode), \
+                    mock.patch.object(autonomy_validation, 'os', SimpleNamespace(name='nt')), \
+                    mock.patch.object(subprocess, 'check_output', side_effect=error), \
+                    mock.patch.object(subprocess, 'run', side_effect=error) as read, \
+                    contextlib.redirect_stderr(io.StringIO()) as diagnostic:
+                with self.assertRaises(subprocess.CalledProcessError) as failure:
+                    autonomy_validation.git(Path('.'), 'diff', '--name-only', 'HEAD')
+                self.assertIs(failure.exception, error)
+                self.assertEqual(read.call_count, attempts)
+                self.assertEqual(diagnostic.getvalue(), error.stderr)
+
+    def test_other_platforms_and_mutations_do_not_retry(self):
+        for platform, command in (('posix', 'diff'), ('nt', 'commit')):
+            error = self.failure()
+            with self.subTest(platform=platform, command=command), \
+                    mock.patch.object(autonomy_validation, 'os', SimpleNamespace(name=platform)), \
+                    mock.patch.object(subprocess, 'check_output', side_effect=error) as original, \
+                    mock.patch.object(subprocess, 'run') as read:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    autonomy_validation.git(Path('.'), command)
+                self.assertEqual(original.call_count, 1)
+                read.assert_not_called()
+
+    def test_successful_diff_retains_git_warning_diagnostics(self):
+        result = subprocess.CompletedProcess(['git'], 0, 'observed.py\n', 'warning: diagnostic\n')
+        with mock.patch.object(autonomy_validation, 'os', SimpleNamespace(name='nt')), \
+                mock.patch.object(subprocess, 'check_output', return_value='observed.py\n'), \
+                mock.patch.object(subprocess, 'run', return_value=result), \
+                contextlib.redirect_stderr(io.StringIO()) as diagnostic:
+            self.assertEqual(autonomy_validation.git(Path('.'), 'diff'), 'observed.py')
+            self.assertEqual(diagnostic.getvalue(), result.stderr)
 
 
 @unittest.skipUnless(HAS_GIT, "git not installed")
@@ -32,6 +84,100 @@ class ValidationTests(AutonomyTestCase):
         # Success contracts allow native process startup; deadline cases override.
         return {"label": "contract-" + hashlib.sha256(code.encode()).hexdigest()[:8], "argv": [sys.executable, "-c", code],
                 "timeout_seconds": 5, "coverage": ["A"]}
+
+    def test_background_snapshots_preserve_index_and_required_writer_locks(self):
+        source = self.repo / 'snapshot.py'
+        source.write_text('original\n')
+        self.commit_all('snapshot baseline')
+        index = self.repo / '.git/index'
+        readers = (('validation', lambda: autonomy_validation.git(self.repo, 'status', '--porcelain')),
+                   ('checkpoint', lambda: okf._run_git(self.repo, 'status', '--porcelain').stdout))
+        with mock.patch.dict(os.environ, {'GIT_OPTIONAL_LOCKS': '1'}):
+            for name, read in readers:
+                with self.subTest(reader=name):
+                    observed = source.stat()
+                    os.utime(source, ns=(observed.st_atime_ns, observed.st_mtime_ns + 2_000_000_000))
+                    before = index.read_bytes()
+                    self.assertEqual(read().strip(), '')
+                    self.assertEqual(index.read_bytes(), before, 'background read refreshed the index')
+            source.write_text('changed\n')
+            lock = self.repo / '.git/index.lock'
+            try:
+                with lock.open('xb'):
+                    for name, read in readers:
+                        self.assertIn('snapshot.py', read(), name)
+                    write = subprocess.run(['git', '--no-optional-locks', '-C', str(self.repo), 'add', 'snapshot.py'],
+                                           capture_output=True, text=True)
+                    self.assertNotEqual(write.returncode, 0)
+                    self.assertIn('index.lock', write.stderr)
+            finally:
+                lock.unlink(missing_ok=True)
+
+    def test_source_observation_preserves_index_and_ignores_stat_only_changes(self):
+        source = self.repo / 'observed.py'
+        source.write_text('original\n')
+        document = self.repo / 'notes.md'
+        document.write_text('original documentation\n')
+        binary = self.repo / 'binary.bin'
+        binary.write_bytes(b'\0original')
+        unusual = self.repo / (' leading.py' if os.name == 'nt' else ' \todd\n.py')
+        unusual.write_text('original\n')
+        self.commit_all('source observation baseline')
+        registry = self.runtime / 'workers.json'
+        registry.write_text(json.dumps({str(self.repo): self.git_head()}))
+        index = self.repo / '.git/index'
+        observed = source.stat()
+        os.utime(source, ns=(observed.st_atime_ns, observed.st_mtime_ns + 2_000_000_000))
+        before = index.read_bytes()
+        self.assertFalse(autonomy_validation.source_work(registry))
+        self.assertEqual(index.read_bytes(), before, 'source observation refreshed the index')
+        document.write_text('changed documentation\n')
+        untracked = self.repo / ' untracked.py'
+        (self.repo / 'untracked.md').write_text('documentation only\n')
+        self.assertFalse(autonomy_validation.source_work(registry))
+        untracked.write_text('new source\n')
+        self.assertTrue(autonomy_validation.source_work(registry))
+        untracked.unlink()
+        source.write_text('changed\n')
+        lock = self.repo / '.git/index.lock'
+        try:
+            with lock.open('xb'):
+                self.assertTrue(autonomy_validation.source_work(registry))
+                self.assertEqual(index.read_bytes(), before)
+                writer = subprocess.run(['git', '-C', str(self.repo), 'add', 'observed.py'],
+                                        capture_output=True, text=True)
+                self.assertNotEqual(writer.returncode, 0)
+                self.assertIn('index.lock', writer.stderr)
+        finally:
+            lock.unlink(missing_ok=True)
+        source.write_text('original\n')
+        binary.write_bytes(b'\0changed')
+        self.assertTrue(autonomy_validation.source_work(registry))
+        binary.write_bytes(b'\0original')
+        self.assertFalse(autonomy_validation.source_work(registry))
+        source.unlink()
+        self.assertTrue(autonomy_validation.source_work(registry))
+        source.write_text('original\n')
+        renamed = source.with_name('renamed.py')
+        source.rename(renamed)
+        self.assertTrue(autonomy_validation.source_work(registry))
+        renamed.rename(source)
+        ignored_name = source.with_name('renamed.md')
+        source.rename(ignored_name)
+        self.assertTrue(autonomy_validation.source_work(registry))
+        ignored_name.rename(source)
+        unusual.write_text('changed\n')
+        self.assertTrue(autonomy_validation.source_work(registry))
+        unusual.write_text('original\n')
+        if os.name != 'nt':
+            source.chmod(source.stat().st_mode ^ 0o100)
+            self.assertTrue(autonomy_validation.source_work(registry))
+        self.assertEqual(index.read_bytes(), before)
+        failure = subprocess.CalledProcessError(128, ['git', 'diff'])
+        with mock.patch.object(autonomy_validation, 'git', side_effect=['observed.py\0', failure]):
+            with self.assertRaises(subprocess.CalledProcessError) as caught:
+                autonomy_validation.source_work(registry)
+        self.assertIs(caught.exception, failure)
 
     def test_plan_rejects_missing_coverage_duplicates_and_unbounded_time(self):
         for value in ([], {}, {"requirements": ["A"], "commands": []},
@@ -540,15 +686,16 @@ class ValidationTests(AutonomyTestCase):
     def test_failure_cancels_and_reaps_running_peer_without_launching_dependents(self):
         pid = self.runtime / "peer-pid"
         marker = self.runtime / "must-not-finish"
+        failed_at = self.runtime / 'failed-at'
         peer = {**self.command(f"from pathlib import Path; import os,time; Path({str(pid)!r}).write_text(str(os.getpid())); time.sleep(10); Path({str(marker)!r}).touch()"),
                 "label": "peer", "resources": ["peer"], "timeout_seconds": 20}
-        fail = {**self.command(f"from pathlib import Path; import time; p=Path({str(pid)!r})\nwhile not p.exists(): time.sleep(.01)\nraise SystemExit(7)"),
+        fail = {**self.command(f"from pathlib import Path; import time; p=Path({str(pid)!r})\nwhile not p.exists(): time.sleep(.01)\nPath({str(failed_at)!r}).write_text(str(time.monotonic()))\nraise SystemExit(7)"),
                 "label": "fail", "resources": ["fail"], "timeout_seconds": SHORT}
         dependent = {**self.command(f"from pathlib import Path; Path({str(marker)!r}).touch()"),
                      "label": "dependent", "resources": [], "after": ["peer"]}
-        started = time.monotonic()
         result = self.run_commands([peer, fail, dependent], max_parallel=2)
-        self.assertLess(time.monotonic() - started, 3)
+        # Measure cancellation from the actual failure, excluding child startup.
+        self.assertLess(time.monotonic() - float(failed_at.read_text()), 3)
         self.assertEqual(result["state"], "FAIL")
         self.assertEqual({row["label"]: row["state"] for row in result["commands"]}, {"peer": "CANCELLED", "fail": "FAIL"})
         self.assertFalse(marker.exists())
@@ -595,7 +742,10 @@ class ValidationTests(AutonomyTestCase):
                     "with file_lock(mutex):\n"
                     " value=json.loads(p.read_text()); value['active']+=1; "
                     "value['maximum']=max(value['maximum'],value['active']); p.write_text(json.dumps(value))\n"
-                    "time.sleep(.1)\n"
+                    f"p.with_name('started-{number}').touch()\n"
+                    f"deadline=time.monotonic()+{SHORT}\n"
+                    f"while len(list(p.parent.glob('started-*'))) < {(number // 2 + 1) * 2}:\n"
+                    " assert time.monotonic()<deadline, 'parallel peer did not start'\n time.sleep(.01)\n"
                     "with file_lock(mutex):\n"
                     " value=json.loads(p.read_text()); value['active']-=1; "
                     f"p.write_text(json.dumps(value)); print({number})")

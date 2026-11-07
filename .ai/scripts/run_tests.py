@@ -35,21 +35,42 @@ def leaves(suite: unittest.TestSuite):
             yield item
 
 
-def groups(start: Path) -> dict[str, int]:
+def shard_value(value: str) -> tuple[int, int]:
+    try:
+        index, count = map(int, value.split('/'))
+        if not 1 <= index <= count:
+            raise ValueError
+        return index, count
+    except ValueError:
+        raise argparse.ArgumentTypeError('shard must be I/N with 1 <= I <= N')
+
+
+def selected(test_id: str, shard: tuple[int, int] | None) -> bool:
+    if shard is None:
+        return True
+    index, count = shard
+    slot = int.from_bytes(hashlib.sha256(test_id.encode('utf-8')).digest()[:8], 'big') % count
+    return slot == index - 1
+
+
+def groups(start: Path, shard: tuple[int, int] | None = None) -> dict[str, int]:
     """Test count per `module.Class`; a module that fails to import or load is its own group, named by the module."""
     sys.path.insert(0, str(start))
     counts: dict[str, int] = {}
     suite = unittest.TestLoader().discover(str(start), top_level_dir=str(start))
     for test in leaves(suite):
         test_id = test.id()
+        if not selected(test_id, shard):
+            continue
         key = test_id.rsplit(".", 1)[1] if test_id.startswith("unittest.loader.") else test_id.rsplit(".", 1)[0]
         counts[key] = counts.get(key, 0) + 1
     return counts
 
 
-def worker(start: Path, name: str, result_path: Path) -> int:
+def worker(start: Path, name: str, result_path: Path, shard: tuple[int, int] | None = None) -> int:
     sys.path.insert(0, str(start))
     suite = unittest.TestLoader().loadTestsFromName(name)
+    suite = unittest.TestSuite(test for test in leaves(suite) if selected(test.id(), shard))
     result = unittest.TextTestRunner(stream=io.StringIO(), verbosity=0).run(suite)
     result_path.write_text(json.dumps({
         "run": result.testsRun,
@@ -76,13 +97,15 @@ class Resume:
     """Opt-in AGENTIC_TEST_RESUME=FILE: skip classes that already passed on exactly this tree, so an
     interrupted run restarts at the class in flight. Without the variable nothing is read or written."""
 
-    def __init__(self, start: Path):
+    def __init__(self, start: Path, shard: tuple[int, int] | None = None):
         value = os.environ.get('AGENTIC_TEST_RESUME')
         self.path = Path(value) if value else None
         self.lock = threading.Lock()
         self.passed: dict[str, dict] = {}
         if self.path:
             self.fingerprint = tree_fingerprint(start)
+            if shard is not None:
+                self.fingerprint += f':{shard[0]}/{shard[1]}'
             try:
                 saved = json.loads(self.path.read_text(encoding='utf-8'))
                 if saved.get("fingerprint") == self.fingerprint:
@@ -98,21 +121,32 @@ class Resume:
                                      encoding='utf-8')
 
 
-def run_group(start: Path, name: str, expected: int, resume: Resume | None = None) -> dict:
+def run_group(start: Path, name: str, expected: int, resume: Resume | None = None,
+              shard: tuple[int, int] | None = None) -> dict:
     progress = os.environ.get('AGENTIC_TEST_PROGRESS') == '1'
     if resume and name in resume.passed:
-        if progress:
-            print(f'RESUMED {name}', flush=True)
-        return resume.passed[name]
+        saved = resume.passed[name]
+        if (isinstance(saved, dict) and saved.get('run') == expected
+                and all(not saved.get(key, True) for key in ('failures', 'errors', 'unexpected'))):
+            if progress:
+                print(f'RESUMED {name}', flush=True)
+            return saved
     if progress:
         print(f'START {name}', flush=True)
     with tempfile.TemporaryDirectory() as tmp:
         result_path = Path(tmp) / "result.json"
-        process = subprocess.run(
-            [sys.executable, str(Path(__file__).resolve()), "-s", str(start), "--worker", name, "--result", str(result_path)],
+        command = [sys.executable, str(Path(__file__).resolve()), "-s", str(start),
+                   "--worker", name, "--result", str(result_path)]
+        if shard is not None:
+            command += ['--shard', f'{shard[0]}/{shard[1]}']
+        process = subprocess.run(command,
             capture_output=True, text=True, encoding='utf-8', errors="replace")
         if result_path.is_file():
             result = json.loads(result_path.read_text(encoding='utf-8'))
+            if process.returncode:
+                result['errors'].append([name, f'worker exited {process.returncode}'])
+            if result['run'] != expected:
+                result['errors'].append([name, f'worker ran {result["run"]} tests; expected {expected}'])
         else:
             output = (process.stdout + process.stderr)[-4000:]
             result = {"run": expected, "failures": [], "errors": [[name, f"worker exited {process.returncode}\n{output}"]],
@@ -132,19 +166,22 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("-s", "--start", type=Path, default=DEFAULT_START, help="test directory (default: .ai/scripts/tests)")
     parser.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 1, help="worker processes (default: CPU count)")
+    parser.add_argument('--shard', type=shard_value, help='run deterministic test-method segment I/N (1-based)')
     parser.add_argument("--worker", help=argparse.SUPPRESS)
     parser.add_argument("--result", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     start = args.start.resolve()
     if args.worker:
-        return worker(start, args.worker, args.result)
+        return worker(start, args.worker, args.result, args.shard)
 
     began = time.monotonic()
-    counts = groups(start)
+    counts = groups(start, args.shard)
+    if args.shard is not None and not counts:
+        parser.error('shard contains no tests')
     names = sorted(counts, key=lambda n: -counts[n])  # Larger classes first shortens the tail.
-    resume = Resume(start)
+    resume = Resume(start, args.shard)
     with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
-        results = list(pool.map(lambda n: run_group(start, n, counts[n], resume), names))
+        results = list(pool.map(lambda n: run_group(start, n, counts[n], resume, args.shard), names))
 
     run = sum(r["run"] for r in results)
     failures = [f for r in results for f in r["failures"]]

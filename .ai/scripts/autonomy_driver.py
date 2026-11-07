@@ -156,7 +156,7 @@ def documentation_audit(bundle: Path, directory: Path, report, *, command: list[
             try:
                 process = tree.start(command or [sys.executable, str(Path(__file__).with_name("okf.py")), "--bundle", str(bundle),
                                                         "validate", "--strict", "--json"], stdout=log, stderr=subprocess.STDOUT,
-                                     cwd=bundle.parent)
+                                     cwd=bundle.parent, env={**os.environ, 'GIT_OPTIONAL_LOCKS': '0'})
             except OSError:
                 result["state"] = "UNAVAILABLE"
             report("audit", "Read-only document audit runs alongside the worker; findings are deferred to handoff and cannot certify delivery."

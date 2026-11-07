@@ -205,7 +205,7 @@ class BootstrapCase(InstallerCase):
         self.addCleanup(environment.stop)
 
     def assert_bootstrapped(self):
-        self.assertEqual(Path(self.git("rev-parse", "--show-toplevel").strip()).resolve(), self.target)
+        self.assertEqual(Path(self.git("rev-parse", "--show-toplevel").strip()).resolve(), self.target.resolve())
         head = subprocess.run(["git", "-C", str(self.target), "rev-parse", "--verify", "HEAD"], capture_output=True)
         self.assertNotEqual(head.returncode, 0, "bootstrap must not create a commit")
         self.assertEqual(self.git("remote"), "")
@@ -407,7 +407,7 @@ class CopyTests(InstallerCase):
         link = self.target / ".agents/skills"
         if self.manifest()['skills_link'] == 'symlink':
             self.assertTrue(link.is_symlink())
-            self.assertEqual(link.resolve(), self.target / ".claude/skills")
+            self.assertEqual(link.resolve(), (self.target / ".claude/skills").resolve())
         else:
             self.assertFalse(link.is_symlink())
             for path in (self.target / '.claude/skills').rglob('*'):

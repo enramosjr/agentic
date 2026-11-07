@@ -1,12 +1,111 @@
 """The suite runner's no-bytecode policy applies to fixture subprocesses too."""
 import os
+import json
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import disk_tmp  # noqa: F401
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import run_tests
+
+
+class ShardTests(unittest.TestCase):
+    def fixture(self, root, marker, fail=False, count=128):
+        body = 'import unittest\nclass Cases(unittest.TestCase):\n'
+        for index in range(count):
+            body += (f'    def test_{index:03}(self):\n'
+                     f'        with open({str(marker)!r}, "a") as stream: stream.write(self.id()+"\\n")\n')
+            if fail and index == 0:
+                body += '        self.fail("deliberate segment failure")\n'
+        (root / 'test_fixture.py').write_text(body)
+
+    def invoke(self, root, shard, env=None):
+        return subprocess.run([sys.executable, str(Path(run_tests.__file__)), '-s', str(root),
+                               '-j', '1', '--shard', shard], cwd=root, capture_output=True,
+                              text=True, timeout=30, env=env)
+
+    def test_partition_is_complete_disjoint_and_stable(self):
+        names = [f'test_fixture.Cases.test_{i:03}' for i in range(128)]
+        partitions = [{name for name in names if run_tests.selected(name, (i, 8))}
+                      for i in range(1, 9)]
+        self.assertEqual(set.union(*partitions), set(names))
+        self.assertEqual(sum(map(len, partitions)), len(names))
+        self.assertTrue(all(partitions), 'a large class must be split across all segments')
+        for index, expected in enumerate(partitions, 1):
+            self.assertEqual({name for name in reversed(names) if run_tests.selected(name, (index, 8))}, expected)
+
+    def test_cli_runs_every_method_exactly_once_across_eight_segments(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root, marker = Path(directory), Path(outside) / 'runs'
+            self.fixture(root, marker)
+            for index in range(1, 9):
+                result = self.invoke(root, f'{index}/8')
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            actual = marker.read_text().splitlines()
+            self.assertEqual(len(actual), 128)
+            self.assertEqual(set(actual), {f'test_fixture.Cases.test_{i:03}' for i in range(128)})
+
+    def test_failed_segment_returns_nonzero(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root, marker = Path(directory), Path(outside) / 'runs'
+            self.fixture(root, marker, fail=True)
+            results = [self.invoke(root, f'{index}/8') for index in range(1, 9)]
+            self.assertEqual(sorted(result.returncode for result in results), [0] * 7 + [1])
+            self.assertTrue(any('deliberate segment failure' in result.stdout for result in results))
+
+    def test_invalid_and_empty_segments_do_not_pass(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            self.fixture(root, Path(outside) / 'runs', count=1)
+            for value in ('0/2', '3/2', '1/0', '-1/2', 'abc', '1', '1/2/3'):
+                with self.subTest(value=value):
+                    self.assertEqual(self.invoke(root, value).returncode, 2)
+            results = [self.invoke(root, f'{index}/2') for index in (1, 2)]
+            self.assertEqual(sorted(result.returncode for result in results), [0, 2])
+
+    def test_resume_cannot_substitute_one_segment_for_another(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root, marker = Path(directory), Path(outside) / 'runs'
+            self.fixture(root, marker)
+            env = {**os.environ, 'AGENTIC_TEST_RESUME': str(Path(outside) / 'resume.json')}
+            self.assertEqual(self.invoke(root, '1/8', env).returncode, 0)
+            first = marker.read_text().splitlines()
+            self.assertEqual(self.invoke(root, '2/8', env).returncode, 0)
+            second = marker.read_text().splitlines()[len(first):]
+            self.assertTrue(second)
+            self.assertFalse(set(first) & set(second))
+            self.assertEqual(self.invoke(root, '2/8', env).returncode, 0)
+            self.assertEqual(marker.read_text().splitlines(), first + second)
+
+    def test_worker_crash_and_count_mismatch_do_not_pass(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for count, code in ((0, 0), (2, 7)):
+                def fake(command, **kwargs):
+                    path = Path(command[command.index('--result') + 1])
+                    path.write_text(json.dumps({'run': count, 'failures': [], 'errors': [],
+                                                'unexpected': [], 'skipped': 0}))
+                    return subprocess.CompletedProcess(command, code, '', '')
+                with self.subTest(count=count, code=code), mock.patch.object(run_tests.subprocess, 'run', side_effect=fake):
+                    result = run_tests.run_group(Path(directory), 'test_fixture.Cases', 2)
+                    self.assertTrue(result['errors'])
+
+    def test_resume_count_mismatch_runs_the_missing_work(self):
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            value = {'run': 0, 'failures': [], 'errors': [], 'unexpected': [], 'skipped': 0}
+            resume = SimpleNamespace(passed={'test_fixture.Cases': value}, record=lambda *args: None)
+            def fake(command, **kwargs):
+                path = Path(command[command.index('--result') + 1])
+                path.write_text(json.dumps({**value, 'run': 2}))
+                return subprocess.CompletedProcess(command, 0, '', '')
+            with mock.patch.object(run_tests.subprocess, 'run', side_effect=fake) as worker:
+                result = run_tests.run_group(Path(directory), 'test_fixture.Cases', 2, resume)
+            self.assertEqual(worker.call_count, 1)
+            self.assertEqual(result['run'], 2)
 
 
 class RunnerTests(unittest.TestCase):

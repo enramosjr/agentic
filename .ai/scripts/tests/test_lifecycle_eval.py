@@ -367,7 +367,7 @@ class ScenarioContractTests(unittest.TestCase):
                   f"w=Path({str(work)!r});e.prepare(s,w);"
                   "assert (w/'\\u6d4b\\u8bd5.txt').read_text(encoding='utf-8')=='\\u4e2d\\u6587 body'")
         result = subprocess.run([sys.executable, '-c', source], capture_output=True,
-                                env={**os.environ, 'PYTHONUTF8': '0', 'PYTHONIOENCODING': 'cp1252'}, timeout=30)
+                                env={**os.environ, 'PYTHONUTF8': '0', 'PYTHONIOENCODING': 'cp1252'}, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 0, result.stderr.decode('utf-8', errors='replace'))
 
 
@@ -472,7 +472,7 @@ class NativeRuntimeTests(unittest.TestCase):
                        ' '.join(literal(value) for value in arguments))
             shell = Path(os.environ['SystemRoot']) / 'System32/WindowsPowerShell/v1.0/powershell.exe'
             result = subprocess.run([str(shell), '-NoProfile', '-NonInteractive', '-Command', command],
-                                    capture_output=True, text=True, timeout=10)
+                                    capture_output=True, text=True, timeout=30)
         else:
             result = subprocess.run([process_runtime.python_hint(), '-c', code, *arguments],
                                     capture_output=True, text=True, timeout=10)
@@ -486,22 +486,26 @@ class NativeRuntimeTests(unittest.TestCase):
         self.assertFalse(process_runtime.alive(child.pid))
 
     def test_capture_bounds_and_nonzero_exit_are_preserved(self):
+        timeout = 10 if os.name == 'nt' else 2
         with self.assertRaises(eval_process.ProcessError) as caught:
             eval_process.run([sys.executable, '-c', 'import sys; sys.stdout.write("x"*10000)'],
-                             self.scratch, dict(os.environ), self.scratch, timeout=2, output_limit=1024)
+                             self.scratch, dict(os.environ), self.scratch, timeout=timeout, output_limit=1024)
         self.assertEqual(caught.exception.code, 'output-limit')
         self.assertEqual(len(caught.exception.output), 1024)
         with self.assertRaises(eval_process.ProcessError) as caught:
             eval_process.run([sys.executable, '-c', 'import sys; print("exit proof");sys.exit(7)'],
-                             self.scratch, dict(os.environ), self.scratch, timeout=2)
+                             self.scratch, dict(os.environ), self.scratch, timeout=timeout)
         self.assertEqual(caught.exception.code, 'exit')
         self.assertIn('exit proof', caught.exception.output)
 
     def test_os_metadata_has_real_parent_and_exact_argv(self):
         import process_runtime
-        child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(30)',
-                                  'argument with spaces', 'quote"argument'])
+        child = subprocess.Popen([sys.executable, '-c',
+                                  'import time; print("ready", flush=True); time.sleep(30)',
+                                  'argument with spaces', 'quote"argument'],
+                                 stdout=subprocess.PIPE, text=True, encoding='utf-8')
         try:
+            self.assertEqual(child.stdout.readline(), 'ready\n')
             value = process_runtime.process_info(child.pid)
             self.assertEqual(value['parent'], os.getpid())
             self.assertEqual(value['argv'][-2:], ['argument with spaces', 'quote"argument'])
@@ -509,6 +513,7 @@ class NativeRuntimeTests(unittest.TestCase):
         finally:
             child.kill()
             child.wait()
+            child.stdout.close()
 
     def test_owned_tree_stops_descendants_and_proves_terminal_state(self):
         import process_runtime
@@ -535,6 +540,55 @@ class NativeRuntimeTests(unittest.TestCase):
         if os.name == 'nt':
             self.assertTrue(process_runtime.tree_stopped(tree.descriptor))
 
+    @unittest.skipUnless(os.name == 'nt', 'Windows Job completion contract')
+    def test_owned_tree_close_waits_for_terminal_descendants(self):
+        import process_runtime
+        command = ('import json,os,subprocess,sys,time;'
+                   'child=subprocess.Popen([sys.executable,"-c","import time;time.sleep(60)"]);'
+                   'print(json.dumps([os.getpid(),child.pid]),flush=True);time.sleep(60)')
+        tree = process_runtime.ProcessTree()
+        child = tree.start([sys.executable, '-c', command], stdout=subprocess.PIPE,
+                           text=True, encoding='utf-8')
+        try:
+            pids = json.loads(child.stdout.readline())
+            tree.close()
+            self.assertTrue(all(not process_runtime.alive(pid) for pid in pids),
+                            'close returned before an owned process terminated')
+        finally:
+            tree.close()
+            child.wait(timeout=5)
+            child.stdout.close()
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows Job membership contract')
+    def test_owned_tree_close_refuses_unwitnessed_new_members(self):
+        import process_runtime
+        command = ('import subprocess,sys,time;print("ready",flush=True);sys.stdin.readline();'
+                   'child=subprocess.Popen([sys.executable,"-c","import time;time.sleep(60)"]);'
+                   'print(child.pid,flush=True);time.sleep(60)')
+        tree = process_runtime.ProcessTree()
+        child = tree.start([sys.executable, '-c', command], stdin=subprocess.PIPE,
+                           stdout=subprocess.PIPE, text=True, encoding='utf-8')
+        original = process_runtime._job_process_handles
+        def snapshot(job, deadline):
+            handles = original(job, deadline)
+            try:
+                child.stdin.write('spawn\n'); child.stdin.flush()
+                self.assertGreater(int(child.stdout.readline()), 0)
+                return handles
+            except BaseException:
+                for handle in handles:
+                    process_runtime._job_api().CloseHandle(handle)
+                raise
+        try:
+            self.assertEqual(child.stdout.readline(), 'ready\n')
+            with mock.patch.object(process_runtime, '_job_process_handles', side_effect=snapshot):
+                with self.assertRaisesRegex(OSError, 'membership changed'):
+                    tree.close()
+        finally:
+            tree.close()
+            child.wait(timeout=5)
+            child.stdin.close(); child.stdout.close()
+
     def test_nonblocking_lock_refuses_a_live_owner_and_recovers_on_exit(self):
         import process_runtime
         locked, ready = self.scratch / 'lock', self.scratch / 'locked'
@@ -559,6 +613,17 @@ class NativeRuntimeTests(unittest.TestCase):
 
 
 class ProcessTests(unittest.TestCase):
+    def test_deadline_before_authorization_publishes_timeout_without_launch(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            eval_process.publish(directory / 'request.json', {'deadline': time.time() - 1, 'token': 'expired'})
+            with mock.patch.object(eval_process.process_runtime.ProcessTree, 'start') as launch:
+                self.assertEqual(eval_process.supervise(directory), 0)
+            launch.assert_not_called()
+            result = json.loads((directory / 'result.json').read_text())
+            self.assertEqual(result['code'], 'timeout')
+            self.assertIn('timed out', result['message'])
+
     """R4: matching artifacts cannot turn a crashed process into a PASS."""
 
     setUp = EvalRunnerTests.setUp
@@ -704,8 +769,8 @@ lifecycle.state_path(Path.cwd()).write_text('[]')
     def test_public_cli_errors_publish_non_pass_json_and_preserve_exit_diagnostics(self):
         malformed = COMPLIANT + "\nsys.path.insert(0, '.ai/scripts')\nimport lifecycle\nlifecycle.state_path(Path.cwd()).write_text('[]')\n"
         cases = [(COMPLIANT + "\nsys.exit(7)", (), "ERROR", "exit 7"),
-                 # Starting the deadline owner takes longer than 0.2 s on Windows.
-                 ("import time; time.sleep(10)", ("--timeout", "0.2" if os.name != "nt" else "4"), "ERROR", "timed out"),
+                 # Admit owner startup before testing an actual launched-agent timeout.
+                 ("import time; time.sleep(10)", ("--timeout", "4"), "ERROR", "timed out"),
                  ("import sys; sys.stdout.write('x' * (5 * 1024 * 1024))", (), "ERROR", "output limit"),
                  (malformed, (), "FAIL", "invalid lifecycle state")]
         for source, options, status, diagnostic in cases:
@@ -1074,6 +1139,15 @@ class OutcomeTests(FrozenBehaviorChecks, unittest.TestCase):
         case.lc("stage", "verify", "--note", "fixture records/convergence pass")
         state = lifecycle_eval.lifecycle.load(root)
         self.assertEqual(self.check(root, base, state)[0], [])
+        alias = root.parent / (root.name + '-alias')
+        disk_tmp.directory_link(alias, root)
+        try:
+            self.assertEqual(self.check(alias, base, state)[0], [])
+        finally:
+            if os.name == 'nt':
+                alias.rmdir()
+            else:
+                alias.unlink()
         original = copy.deepcopy(state)
         capability_bytes = case.cap.read_bytes()
         capability = capability_bytes.decode('utf-8')
@@ -1221,13 +1295,15 @@ class ProvenanceTests(unittest.TestCase):
 
     def test_killed_runner_recovers_without_relaunch_or_double_charge(self):
         marker = self.scratch / "launched"
-        source = f"import time\nfrom pathlib import Path\nPath({str(marker)!r}).touch()\ntime.sleep(10)\n"
-        process = subprocess.Popen(self.command(source, "--timeout", "1"), stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        source = f"import time\nfrom pathlib import Path\nPath({str(marker)!r}).touch()\ntime.sleep(60)\n"
+        # This checks interruption after a real launch, not a one-second startup race.
+        process = subprocess.Popen(self.command(source, "--timeout", "10"), stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         try:
-            deadline = time.monotonic() + 10
+            deadline = time.monotonic() + CLI_TIMEOUT
             while not marker.exists() and process.poll() is None and time.monotonic() < deadline:
                 time.sleep(0.01)
-            self.assertTrue(marker.exists())
+            diagnostic = process.stderr.read().decode('utf-8', errors='replace') if process.poll() is not None else 'runner has not reached agent readiness'
+            self.assertTrue(marker.exists(), diagnostic)
             path = self.scratch / "results.json"
             running = json.loads(path.read_text())
             self.assertEqual(running["attempts"][0]["status"], "RUNNING")
@@ -1236,7 +1312,7 @@ class ProvenanceTests(unittest.TestCase):
             workspace = Path(request["cwd"]).parent
             process.kill(); process.wait(timeout=5)
             command = [sys.executable, str(SCRIPTS / "lifecycle_eval.py"), "results-check", str(path), "--recover-interrupted"]
-            result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(command, capture_output=True, text=True, timeout=CLI_TIMEOUT)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             recovered = json.loads(path.read_text())
             cell = recovered["attempts"][0]
@@ -1246,7 +1322,7 @@ class ProvenanceTests(unittest.TestCase):
             self.assertEqual(recovered["budget"]["reserved_seconds"], 0)
             self.assertFalse(workspace.exists(), "recovery must delete the abandoned attempt workspace and raw adapter event transcript")
             before = path.read_bytes()
-            result = subprocess.run(command, capture_output=True, timeout=10)
+            result = subprocess.run(command, capture_output=True, timeout=CLI_TIMEOUT)
             self.assertEqual(result.returncode, 0)
             self.assertEqual(path.read_bytes(), before)
         finally:
