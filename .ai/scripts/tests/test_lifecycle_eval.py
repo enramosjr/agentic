@@ -1295,13 +1295,15 @@ class ProvenanceTests(unittest.TestCase):
 
     def test_killed_runner_recovers_without_relaunch_or_double_charge(self):
         marker = self.scratch / "launched"
-        source = f"import time\nfrom pathlib import Path\nPath({str(marker)!r}).touch()\ntime.sleep(10)\n"
-        process = subprocess.Popen(self.command(source, "--timeout", "1"), stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        source = f"import time\nfrom pathlib import Path\nPath({str(marker)!r}).touch()\ntime.sleep(60)\n"
+        # This checks interruption after a real launch, not a one-second startup race.
+        process = subprocess.Popen(self.command(source, "--timeout", "10"), stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         try:
-            deadline = time.monotonic() + 10
+            deadline = time.monotonic() + CLI_TIMEOUT
             while not marker.exists() and process.poll() is None and time.monotonic() < deadline:
                 time.sleep(0.01)
-            self.assertTrue(marker.exists())
+            diagnostic = process.stderr.read().decode('utf-8', errors='replace') if process.poll() is not None else 'runner has not reached agent readiness'
+            self.assertTrue(marker.exists(), diagnostic)
             path = self.scratch / "results.json"
             running = json.loads(path.read_text())
             self.assertEqual(running["attempts"][0]["status"], "RUNNING")
@@ -1310,7 +1312,7 @@ class ProvenanceTests(unittest.TestCase):
             workspace = Path(request["cwd"]).parent
             process.kill(); process.wait(timeout=5)
             command = [sys.executable, str(SCRIPTS / "lifecycle_eval.py"), "results-check", str(path), "--recover-interrupted"]
-            result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(command, capture_output=True, text=True, timeout=CLI_TIMEOUT)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             recovered = json.loads(path.read_text())
             cell = recovered["attempts"][0]
@@ -1320,7 +1322,7 @@ class ProvenanceTests(unittest.TestCase):
             self.assertEqual(recovered["budget"]["reserved_seconds"], 0)
             self.assertFalse(workspace.exists(), "recovery must delete the abandoned attempt workspace and raw adapter event transcript")
             before = path.read_bytes()
-            result = subprocess.run(command, capture_output=True, timeout=10)
+            result = subprocess.run(command, capture_output=True, timeout=CLI_TIMEOUT)
             self.assertEqual(result.returncode, 0)
             self.assertEqual(path.read_bytes(), before)
         finally:

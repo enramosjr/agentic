@@ -923,7 +923,8 @@ def validate(bundle: Path) -> list[Issue]:
 def _run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
     try:
         runner = review_guard.run_owned if args[:1] == ('config',) and '--get' not in args else subprocess.run
-        return runner(["git", "-C", str(repo), *args], capture_output=True, text=True, encoding='utf-8', check=False)
+        options = ['--no-optional-locks'] if args[:1] in (('diff',), ('status',)) else []
+        return runner(["git", *options, "-C", str(repo), *args], capture_output=True, text=True, encoding='utf-8', check=False)
     except FileNotFoundError as error:
         raise OkfError("git is not installed; pass changed paths explicitly: okf.py affected PATH...") from error
 

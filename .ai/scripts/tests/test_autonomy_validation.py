@@ -16,6 +16,7 @@ from types import SimpleNamespace
 from test_autonomy import AutonomyTestCase, HAS_GIT, SCRIPTS
 import autonomy_validation
 import process_runtime
+import okf
 
 # Interpreter startup takes about a second on Windows, more under parallel load.
 SHORT = 2 if os.name != "nt" else 10
@@ -83,6 +84,34 @@ class ValidationTests(AutonomyTestCase):
         # Success contracts allow native process startup; deadline cases override.
         return {"label": "contract-" + hashlib.sha256(code.encode()).hexdigest()[:8], "argv": [sys.executable, "-c", code],
                 "timeout_seconds": 5, "coverage": ["A"]}
+
+    def test_background_snapshots_preserve_index_and_required_writer_locks(self):
+        source = self.repo / 'snapshot.py'
+        source.write_text('original\n')
+        self.commit_all('snapshot baseline')
+        index = self.repo / '.git/index'
+        readers = (('validation', lambda: autonomy_validation.git(self.repo, 'status', '--porcelain')),
+                   ('checkpoint', lambda: okf._run_git(self.repo, 'status', '--porcelain').stdout))
+        with mock.patch.dict(os.environ, {'GIT_OPTIONAL_LOCKS': '1'}):
+            for name, read in readers:
+                with self.subTest(reader=name):
+                    observed = source.stat()
+                    os.utime(source, ns=(observed.st_atime_ns, observed.st_mtime_ns + 2_000_000_000))
+                    before = index.read_bytes()
+                    self.assertEqual(read().strip(), '')
+                    self.assertEqual(index.read_bytes(), before, 'background read refreshed the index')
+            source.write_text('changed\n')
+            lock = self.repo / '.git/index.lock'
+            try:
+                with lock.open('xb'):
+                    for name, read in readers:
+                        self.assertIn('snapshot.py', read(), name)
+                    write = subprocess.run(['git', '--no-optional-locks', '-C', str(self.repo), 'add', 'snapshot.py'],
+                                           capture_output=True, text=True)
+                    self.assertNotEqual(write.returncode, 0)
+                    self.assertIn('index.lock', write.stderr)
+            finally:
+                lock.unlink(missing_ok=True)
 
     def test_plan_rejects_missing_coverage_duplicates_and_unbounded_time(self):
         for value in ([], {}, {"requirements": ["A"], "commands": []},

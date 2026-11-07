@@ -39,7 +39,8 @@ def command_environment(repo: Path, command: dict, validation_kind: str) -> dict
 
 
 def git(repo: Path, *args: str) -> str:
-    command = ["git", "-C", str(repo), *args]
+    options = ['--no-optional-locks'] if args[:1] in (('diff',), ('status',)) else []
+    command = ["git", *options, "-C", str(repo), *args]
     if os.name != 'nt' or args[:1] != ('diff',):
         return subprocess.check_output(command, text=True, encoding='utf-8').strip()
     # A concurrent edit can race Windows Git's file mapping. Retry only this

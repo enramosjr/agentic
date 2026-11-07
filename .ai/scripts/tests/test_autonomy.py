@@ -545,6 +545,18 @@ with log.open("a") as handle:
     handle.write(json.dumps({{"prompt": prompt, "autonomous": os.environ.get("OKF_AUTONOMOUS"), "temp": [os.environ.get(k) for k in ("TMPDIR", "TMP", "TEMP")], "handoff": os.environ.get("OKF_HANDOFF_REQUEST")}}) + "\\n")
 def interrupt_ready():
     log.with_suffix(".interrupt-" + str(len(log.read_text().splitlines()))).write_text("ready")
+def remember_child(child, path, allow_exited=False):
+    try:
+        identity = process_runtime.identity(child.pid)
+    except ProcessLookupError:
+        if not allow_exited:
+            raise
+        identity = dict(pid=child.pid, birth=None, exited=True)
+    path.write_text(str(child.pid))
+    pending = path.with_name(path.name + '.identity.pending')
+    pending.write_text(json.dumps(identity))
+    pending.replace(path.with_name(path.name + '.identity'))
+    return identity
 if mode == "fail":
     sys.exit(7)
 if mode == "idle":
@@ -685,6 +697,7 @@ if mode in ("rotate", "recover", "crash", "unsafe-recovery", "stuck-recovery", "
         (Path.cwd() / "unfinished.txt").write_text("preserved implementation\\n")
         if mode == "crash":
             log.with_suffix(".pid").write_text("999999999")
+            log.with_suffix('.pid.identity').write_text(json.dumps(dict(pid=999999999, birth=None, exited=True)))
             sys.exit(7)
         if mode == "rotate":
             marker = log.with_suffix('.checkpoint-ready-' + str(launch))
@@ -694,7 +707,7 @@ if mode in ("rotate", "recover", "crash", "unsafe-recovery", "stuck-recovery", "
         else:
             code = "import time; time.sleep(60)"
         child = subprocess.Popen([sys.executable, "-c", code])
-        log.with_suffix(".pid").write_text(str(child.pid))
+        remember_child(child, log.with_suffix('.pid'), allow_exited=mode == 'rotate')
         if mode == "deadline-recovery":
             sys.exit(7)
         if mode == "rotate":
@@ -707,14 +720,14 @@ if mode in ("rotate", "recover", "crash", "unsafe-recovery", "stuck-recovery", "
             interrupt_ready()
             time.sleep(60)
     elif recovering:
-        pid = log.with_suffix(".pid").read_text()
-        assert not process_runtime.alive(int(pid)), "previous owner still running"
+        owner = json.loads(log.with_suffix('.pid.identity').read_text())
+        assert owner.get('exited', False) or not process_runtime.alive(owner['pid'], owner['birth']), "previous owner still running"
         assert (Path.cwd() / "unfinished.txt").read_text() == "preserved implementation\\n"
         if mode == "unsafe-recovery":
             sys.exit(0)
         if mode == "deadline-recovery":
             child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
-            log.with_suffix(".recovery.pid").write_text(str(child.pid))
+            remember_child(child, log.with_suffix('.recovery.pid'))
         if mode in ("stuck-recovery", "deadline-recovery"):
             interrupt_ready()
             time.sleep(60)
@@ -728,9 +741,9 @@ if mode in ("rotate", "recover", "crash", "unsafe-recovery", "stuck-recovery", "
 if mode == "hang":
     import time
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
-    log.with_suffix(".pid").write_text(str(child.pid))
+    identity = remember_child(child, log.with_suffix('.pid'))
     with log.with_suffix(".all-pids").open("a") as handle:
-        handle.write(str(child.pid) + chr(10))
+        handle.write(json.dumps(identity) + chr(10))
     time.sleep(60)
 if mode == "churn":
     (Path.cwd() / "implementation.py").write_text(str(len(log.read_text().splitlines())))
@@ -839,6 +852,10 @@ class DriverTests(AutonomyTestCase):
     def sessions(self) -> list[dict[str, str]]:
         return [json.loads(line) for line in self.log.read_text().splitlines()] if self.log.exists() else []
 
+    def child_alive(self, path):
+        identity = json.loads(path.with_name(path.name + '.identity').read_text())
+        return not identity.get('exited', False) and process_runtime.alive(identity['pid'], identity['birth'])
+
     def drive_policy(self, mode: str, *options: str, checkpoint_after=None) -> subprocess.CompletedProcess[str]:
         """Exercise policy transitions with real children, independent of startup speed.
 
@@ -883,7 +900,13 @@ class DriverTests(AutonomyTestCase):
                     raise subprocess.TimeoutExpired(command, limit)
                 if tick:
                     tick()
-            kwargs.update(timeout_seconds=10, on_tick=ready_tick, tick_seconds=.02)
+            consumer = kwargs.get('on_output')
+            def diagnostic(line):
+                err.write(line)
+                if consumer:
+                    consumer(line)
+            kwargs.update(timeout_seconds=10, on_tick=ready_tick, tick_seconds=.02,
+                          on_output=diagnostic, merge_stderr=True)
             return original_check(command, **kwargs)
         def validation(*args, **kwargs):
             live[0] = time.monotonic()
@@ -1134,7 +1157,8 @@ class DriverTests(AutonomyTestCase):
 
     def test_session_and_run_deadlines_stop_hung_agent_and_descendant(self) -> None:
         # Each budget admits startup before proving actual hung-tree termination.
-        for session_limit, run_limit, launches in ((.75, 10, 2), (10, 6, 1)):
+        limits = ((.75, 10, 2), (10, 6, 1)) if os.name != 'nt' else ((.75, 15, 2), (30, 15, 1))
+        for session_limit, run_limit, launches in limits:
             with self.subTest(session_limit=session_limit, run_limit=run_limit):
                 previous = len(self.sessions())
                 started = time.monotonic()
@@ -1145,7 +1169,7 @@ class DriverTests(AutonomyTestCase):
                 # it is not another model/session budget.
                 self.assertLess(time.monotonic() - started, run_limit + 2)
                 self.assertEqual(result.returncode, 1, result.stderr)
-                self.assertEqual(len(self.sessions()), previous + launches)
+                self.assertEqual(len(self.sessions()), previous + launches, result.stderr)
                 self.assertIn("owned process group stopped", result.stderr)
                 self.assertIn('"exit_code": 124', result.stderr)
                 timings = [json.loads(line.removeprefix('timing: ')) for line in result.stderr.splitlines()
@@ -1153,10 +1177,10 @@ class DriverTests(AutonomyTestCase):
                 self.assertLessEqual(timings[0]['elapsed_seconds'], min(session_limit + 2, run_limit) + .5)
                 if len(timings) == 2:
                     self.assertLessEqual(timings[1]['elapsed_seconds'], 2.5)
-                pid = int(self.log.with_suffix(".pid").read_text())
-                self.assertFalse(process_runtime.alive(pid), 'agent descendant is still running')
-                self.assertTrue(all(not process_runtime.alive(int(pid))
-                                    for pid in self.log.with_suffix('.all-pids').read_text().splitlines()))
+                self.assertFalse(self.child_alive(self.log.with_suffix('.pid')), 'agent descendant is still running')
+                identities = map(json.loads, self.log.with_suffix('.all-pids').read_text().splitlines())
+                self.assertTrue(all(identity.get('exited', False) or not process_runtime.alive(identity['pid'], identity['birth'])
+                                    for identity in identities))
 
     def test_checkpoint_window_finishes_current_check_then_continues_fresh(self) -> None:
         events = self.tmp / "progress.jsonl"
@@ -1251,8 +1275,8 @@ class DriverTests(AutonomyTestCase):
                    if line.startswith("timing: ")]
         self.assertEqual(len(timings), 2)
         self.assertEqual(timings[1]["exit_code"], 124)
-        self.assertFalse(process_runtime.alive(int(self.log.with_suffix(".pid").read_text())))
-        self.assertFalse(process_runtime.alive(int(self.log.with_suffix(".recovery.pid").read_text())))
+        self.assertFalse(self.child_alive(self.log.with_suffix('.pid')))
+        self.assertFalse(self.child_alive(self.log.with_suffix('.recovery.pid')))
         self.assertIn("recovery/run limit reached", err.getvalue())
 
     def test_driver_does_not_launch_a_records_only_round_with_only_checkpoint_reserve(self) -> None:

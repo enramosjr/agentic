@@ -72,6 +72,10 @@ Detached-check fixtures observe the actual command before killing a live check,
 and retain supervisor birth identity for cleanup. Recovery fixtures wait for the
 registered wrapper and borrower receipt to finish, rather than treating command
 exit alone as permission to recover a still-live owner.
+Autonomy recovery fixtures publish child birth identities atomically; a recycled
+PID does not count as the previous child surviving. Interruption/charge tests
+wait for actual agent readiness before killing the campaign owner, with separate
+startup allowance and unchanged no-relaunch/full-reservation charge assertions.
 Windows source snapshots retry only Git diff's observed `mmap failed: Invalid
 argument` exit 128, at most three reads. Each retry executes Git again; a failed
 snapshot never counts as progress. Persistent mapping failures, other errors and
@@ -79,6 +83,10 @@ mutating commands still fail normally, retaining their diagnostics. Git for
 Windows' [mapping adapter](https://github.com/git-for-windows/git/blob/main/compat/win32mmap.c)
 reports native mapping failures as `EINVAL`; concurrent file publication is one
 possible trigger, rather than a proven diagnosis for every such error.
+Background diff/status snapshots and advisory audits disable Git's optional index
+refresh, preventing readers from contending with a worker's `git add`. Mandatory
+writer locks remain required. This follows Git's documented
+[background-operation locking guidance](https://git-scm.com/docs/git).
 
 The installer creates relative skill links with native separators and compares
 their normalized target spelling. Scratch checks resolve dangling junctions on
