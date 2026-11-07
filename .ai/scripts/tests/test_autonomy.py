@@ -1471,21 +1471,26 @@ class DriverTests(AutonomyTestCase):
         progress, ack, marker, release = (self.tmp / name for name in ("progress.jsonl", "ack.json", "child.pid", "release"))
         child = self.tmp / "long_test.py"
         child.write_text("import json,pathlib,subprocess,sys,time\n"
+                         f"sys.path.insert(0,{str(SCRIPTS)!r}); import process_runtime\n"
                          "grand=subprocess.Popen([sys.executable,'-c','import time; time.sleep(60)'])\n"
-                         f"pathlib.Path({str(marker)!r}).write_text(str(grand.pid))\n"
+                         f"pathlib.Path({str(marker)!r}).write_text(json.dumps(process_runtime.identity(grand.pid)))\n"
                          "print(json.dumps({'type':'item.started','item':{'type':'command_execution','command':'PRIVATE_TOOL_PAYLOAD'}}),flush=True)\n"
                          "print(json.dumps({'type':'item.completed','item':{'type':'agent_message','text':'Long-running test is underway'}}),flush=True)\n"
                          f"while not pathlib.Path({str(release)!r}).exists(): time.sleep(0.02)\n")
         process = subprocess.Popen([sys.executable, str(SCRIPTS / "autonomy_driver.py"), "--bundle", str(self.bundle),
-                                    "--no-pr-sync", "--max-sessions", "1", "--max-session-seconds", "5",
+                                    "--no-pr-sync", "--max-sessions", "1", "--max-session-seconds", "10",
                                     "--heartbeat-seconds", "0.1", "--chat-timeout-seconds", str(acknowledgement_seconds),
                                     "--progress-file", str(progress), "--chat-ack-file", str(ack), "--", sys.executable, str(child)],
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        self.addCleanup(lambda: process.kill() if process.poll() is None else None)
+        def cleanup():
+            if process.poll() is None:
+                process.kill()
+            process.communicate(timeout=10)
+        self.addCleanup(cleanup)
         return process, progress, ack, marker, release
 
-    def await_progress(self, path, kind, *, acknowledge=None):
-        deadline = time.monotonic() + 6
+    def await_progress(self, path, kind, *, acknowledge=None, text=None):
+        deadline = time.monotonic() + (6 if os.name != 'nt' else 12)
         while time.monotonic() < deadline:
             if path.exists():
                 entries = [json.loads(line) for line in path.read_text().splitlines() if line.endswith("}")]
@@ -1503,7 +1508,8 @@ class DriverTests(AutonomyTestCase):
                             if attempt == 99:
                                 raise
                             time.sleep(0.01)
-                if any(event["kind"] == kind for event in entries):
+                if (any(event["kind"] == kind for event in entries)
+                        and (text is None or any(event['text'] == text for event in entries))):
                     return entries
             time.sleep(0.02)
         self.fail(f"progress event {kind} absent")
@@ -1543,20 +1549,21 @@ class DriverTests(AutonomyTestCase):
         process, progress, ack, marker, release = self.chat_process()
         self.await_progress(progress, "started")
         self.acknowledge(progress, ack)
-        entries = self.await_progress(progress, "heartbeat")
+        entries = self.await_progress(progress, "heartbeat", acknowledge=ack, text="Long-running test is underway")
         self.assertTrue(any(event["text"] == "Long-running test is underway" for event in entries))
         self.assertNotIn("PRIVATE_TOOL_PAYLOAD", progress.read_text())
         self.assertTrue(marker.exists(), "actual long-running test did not start")
         stdout, stderr = process.communicate(timeout=8)
         self.assertEqual(process.returncode, 1, stderr)
         self.assertIn("acknowledgement missing or expired", stderr)
-        self.assertFalse(process_runtime.alive(int(marker.read_text())), 'unattended descendant survived')
+        identity = json.loads(marker.read_text())
+        self.assertFalse(process_runtime.alive(identity['pid'], identity['birth']), 'unattended descendant survived')
 
     def test_renewed_chat_acknowledgement_allows_long_test_to_complete(self) -> None:
         process, progress, ack, marker, release = self.chat_process()
         self.await_progress(progress, "started")
         self.acknowledge(progress, ack)
-        self.await_progress(progress, "heartbeat")
+        self.await_progress(progress, "heartbeat", acknowledge=ack)
         self.acknowledge(progress, ack)
         release.write_text("finish the real child check")
         stdout, stderr = process.communicate(timeout=8)

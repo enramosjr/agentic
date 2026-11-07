@@ -65,6 +65,9 @@ readiness; separate CLI tests retain actual deadline and process-tree assertions
 Concurrency tests use peer readiness rather than assuming startup overlaps a short
 sleep. Child completion checks include birth identity, so a reused PID cannot
 falsely report a surviving owned child.
+Cancellation timing starts at the observed child failure, excluding interpreter
+startup. Chat fixtures renew acknowledgements until a heartbeat and real child
+output are observed, then test acknowledgement loss with the actual lease unchanged.
 
 The installer creates relative skill links with native separators and compares
 their normalized target spelling. Scratch checks resolve dangling junctions on

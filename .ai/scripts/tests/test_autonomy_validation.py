@@ -540,15 +540,16 @@ class ValidationTests(AutonomyTestCase):
     def test_failure_cancels_and_reaps_running_peer_without_launching_dependents(self):
         pid = self.runtime / "peer-pid"
         marker = self.runtime / "must-not-finish"
+        failed_at = self.runtime / 'failed-at'
         peer = {**self.command(f"from pathlib import Path; import os,time; Path({str(pid)!r}).write_text(str(os.getpid())); time.sleep(10); Path({str(marker)!r}).touch()"),
                 "label": "peer", "resources": ["peer"], "timeout_seconds": 20}
-        fail = {**self.command(f"from pathlib import Path; import time; p=Path({str(pid)!r})\nwhile not p.exists(): time.sleep(.01)\nraise SystemExit(7)"),
+        fail = {**self.command(f"from pathlib import Path; import time; p=Path({str(pid)!r})\nwhile not p.exists(): time.sleep(.01)\nPath({str(failed_at)!r}).write_text(str(time.monotonic()))\nraise SystemExit(7)"),
                 "label": "fail", "resources": ["fail"], "timeout_seconds": SHORT}
         dependent = {**self.command(f"from pathlib import Path; Path({str(marker)!r}).touch()"),
                      "label": "dependent", "resources": [], "after": ["peer"]}
-        started = time.monotonic()
         result = self.run_commands([peer, fail, dependent], max_parallel=2)
-        self.assertLess(time.monotonic() - started, 3)
+        # Measure cancellation from the actual failure, excluding child startup.
+        self.assertLess(time.monotonic() - float(failed_at.read_text()), 3)
         self.assertEqual(result["state"], "FAIL")
         self.assertEqual({row["label"]: row["state"] for row in result["commands"]}, {"peer": "CANCELLED", "fail": "FAIL"})
         self.assertFalse(marker.exists())
