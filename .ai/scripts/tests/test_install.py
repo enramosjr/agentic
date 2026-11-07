@@ -407,7 +407,7 @@ class CopyTests(InstallerCase):
         link = self.target / ".agents/skills"
         if self.manifest()['skills_link'] == 'symlink':
             self.assertTrue(link.is_symlink())
-            self.assertEqual(link.resolve(), self.target / ".claude/skills")
+            self.assertEqual(link.resolve(), (self.target / ".claude/skills").resolve())
         else:
             self.assertFalse(link.is_symlink())
             for path in (self.target / '.claude/skills').rglob('*'):

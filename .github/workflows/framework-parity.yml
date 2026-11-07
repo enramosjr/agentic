@@ -64,7 +64,6 @@ jobs:
         if: always() && (steps.brownfield.outcome != 'success' || steps.review.outcome != 'success' || steps.evaluation.outcome != 'success' || steps.onboarding.outcome != 'success' || steps.hooks.outcome != 'success' || steps.background.outcome != 'success' || steps.selection.outcome != 'success')
         run: exit 1
   regression_segments:
-    needs: windows_preflight
     name: ${{ matrix.os }} / Python ${{ matrix.python }} / segment ${{ matrix.shard }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15

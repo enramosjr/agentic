@@ -85,6 +85,7 @@ start and completion during a long run. The inventory and final verdict are unch
 `--shard I/N` selects test methods deterministically, so large classes are divided
 too. The union of shards 1 through N is the full inventory, with each test assigned
 once. Invalid or empty shards, worker crashes and executed-count mismatches fail.
+Preflights and segments run independently; the final summary waits for both.
 Set `AGENTIC_TEST_RESUME` to a file path to make an interrupted run resumable: classes
 that already passed on the same tree and shard are skipped; changed inputs or a
 different shard invalidate that evidence.
