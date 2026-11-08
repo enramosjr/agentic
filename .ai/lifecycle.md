@@ -1,7 +1,15 @@
 # Agent Lifecycle (AIDLC)
 
-The adopter knowledge mandate remains binding below; framework-source identity in
-`AGENTS.md` substitutes source documentation and Git-scratch receipts for a bundle:
+**Select repository identity before this workflow.** For explicit
+`repository_kind: framework`, intent, planning, review and verification stay in
+chat. Do not create self-task documents, OKF, lifecycle records or lesson records,
+even in Git scratch; do not run artifact-producing lifecycle stages. Run checks
+directly and `python3 .ai/scripts/framework_policy.py` for source hygiene.
+Maintain only intentional product documentation and reusable source assets in
+`.agentic.json` `source_documents`. Operational logs/caches/process locks remain
+allowed. The artifact workflow below is for adopter projects, not AGENTIC itself.
+
+The adopter knowledge mandate remains binding:
 
 All AI agents working on this project MUST ensure that the Open Knowledge Format corpus (`knowledge/`) remains synchronized with any code, specification, architecture, or workflow changes introduced during execution.
 
@@ -69,7 +77,7 @@ python3 .ai/scripts/lifecycle.py review status
 
 Use `--adapter codex` for Codex. SessionStart registers an observed parent; it does not establish reviewer capability or approval. The request remains pending until matching native reviewer start and completion arrive. The callbacks bind the native session/runtime, reviewer child identity, hook configuration, source (including Markdown, file modes, symlinks and deletions), approved spec/plan, exact convergence and reviewed evidence. The callback CLI currently requires an identifiable Linux native launcher through `/proc`; unavailable identity, missing handlers or conflicting/untrusted execution evidence refuse qualification. Configuration discovery alone is not native execution proof. Callback execution is trusted within this ordinary-workflow boundary; it does not claim that project trust was granted, or report configured model/effort as execution telemetry.
 
-Enable prepares a fresh pending Review scaffold, indexes, a preparation log and lifecycle record administration before review starts. Adopters use a new path inside `knowledge/`; framework source uses an ignored working path and creates no bundle. A pending scaffold cannot approve anything. Complete current convergence before starting the native `reviewer` subagent. During its active interval, recognized edits, Markdown/deletions and supported protected workflow producers from every actor refuse before effects, even with `LIFECYCLE_GUARD=off` or `OKF_AUTONOMOUS=1`. Read-only inspection and native capture remain available. Capture writes only Git scratch, so bookkeeping is not a workspace edit.
+Enable prepares a fresh pending Review scaffold, indexes, a preparation log and lifecycle record administration before review starts. Adopters use a new path inside `knowledge/`; framework source does not create self-review reports or captures. A pending scaffold cannot approve anything. Complete current convergence before starting the native `reviewer` subagent. During its active interval, recognized edits, Markdown/deletions and supported protected workflow producers from every actor refuse before effects, even with `LIFECYCLE_GUARD=off` or `OKF_AUTONOMOUS=1`. Read-only inspection and native capture remain available for adopters. Capture writes only Git scratch, so bookkeeping is not a workspace edit.
 
 Protected producers include lifecycle mutations/check execution, OKF creation/metadata/log/index/queue writes, installation into the target worktree, PR sync (including trial dry-runs), artifact producers and validation registration/execution/publication. Driver protection covers its write transactions and releases before agent launch/wait; only an actual supported driver invocation receives that exception. Supported direct CLI and public workflow-function paths acquire producer leases before state locking. Synchronous child producers borrow ownership without guard/state lock acquisition. Raw check/producer commands register their process and group before exec, so supervisor exit alone cannot release surviving commands or descendants; original argv, OS launch errors and evidence hashing remain intact. Release/recovery requires all granted producers to stop. Recognized native tools retain invocation ownership until a matching post event; hook-process exit cannot clear it. Literal Git mutations use metadata-only Git probes with the original ordered global options, preserving cumulative `-C` and relative selector semantics separately for each command segment. Unsupported target syntax refuses. Arbitrary shell/Python writes and deliberate local forgery are outside this boundary; changed candidate pins still refuse completion. This is not an OS sandbox.
 

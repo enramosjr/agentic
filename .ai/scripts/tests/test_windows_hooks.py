@@ -24,7 +24,8 @@ class HookConfigurationTests(unittest.TestCase):
                 for hook in group['hooks']:
                     self.assertIn('commandWindows', hook, hook['command'])
                     self.assertIn('codex_hook.ps1', hook['commandWindows'])
-                    self.assertTrue(hook['command'].startswith('python3 '))
+                    self.assertIn('posix_hook.sh', hook['command'])
+                    self.assertIn('exec sh "$b"', hook['command'])
 
     def test_windows_setup_is_documented(self):  # R4
         body = (ROOT / '.ai/docs/install-and-upgrade.md').read_text()
@@ -42,7 +43,7 @@ class NativeWindowsHookTests(unittest.TestCase):
         self.root.mkdir()
         shutil.copytree(SCRIPTS, self.root / '.ai/scripts',
                         ignore=shutil.ignore_patterns('tests', '__pycache__'))
-        (self.root / '.agentic.json').write_text('{"repository_kind":"framework"}')
+        (self.root / '.agentic.json').write_text('{"repository_kind":"adopter"}')
         (self.root / 'source.py').write_text('print("fixture")\n')
         self.env = dict(os.environ)
         for key in list(self.env):

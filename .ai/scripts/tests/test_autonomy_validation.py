@@ -500,9 +500,13 @@ class ValidationTests(AutonomyTestCase):
             self.assertTrue(all("reused_from" not in entry for entry in value["commands"]))
 
     def test_invalidated_job_cannot_supply_pass_receipts_after_tree_is_restored(self):
-        command = self.command("from pathlib import Path; Path('drift.py').write_text('changed'); print('exit zero with changed inputs')")
+        command = self.command("print('contract asserted before inputs change')")
         request = self.request(self.runtime / "first", [command])
-        result = autonomy_validation.run(request, self.repo, time.monotonic() + 5, .02, lambda *args: None, lambda: None)
+        def invalidate_after_pass(kind, message):
+            if ' PASS in ' in message:
+                (self.repo / 'drift.py').write_text('changed')
+        result = autonomy_validation.run(request, self.repo, time.monotonic() + 5, .02,
+                                         invalidate_after_pass, lambda: None)
         self.assertEqual(json.loads(result.read_text())["state"], "INVALIDATED")
         self.assertEqual(json.loads(result.read_text())["commands"][0]["state"], "PASS")
         (self.repo / "drift.py").unlink()

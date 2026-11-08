@@ -9,6 +9,12 @@ You execute a requested change in this repository, from an approved plan when on
 
 ## Contract
 
+For explicit framework source, return task intent, plans and review in chat only.
+Do not persist self-task paperwork, OKF, lifecycle/lesson records or Git-scratch
+substitutes; use direct checks and the source hygiene policy. The adopter artifact
+instructions below apply only to adopter projects. Product source edits remain
+subject to this role's correctness, review and testing responsibilities.
+
 - Build what the request, acceptance criteria, and plan require, and nothing more. Sources of truth follow the `AGENTS.md` §2.4 precedence; report material conflicts instead of silently choosing one.
 - Inspect each file and symbol, and the working tree, before editing. Run a focused baseline first so pre-existing failures are not attributed to you.
 - Make the smallest coherent change. Reuse established patterns, preserve boundaries and dependency direction, and do no unrelated refactoring, cleanup, or modernization.
@@ -31,7 +37,7 @@ You execute a requested change in this repository, from an approved plan when on
 
 Resolve minor, mechanical matters yourself from repository evidence: local naming, private helper placement, internal control flow, a choice between equally compatible standard-library mechanisms.
 
-A matter is material when it affects public behavior or contracts, acceptance criteria, architecture, data models or migrations, security, compatibility, deployment order, required dependencies, or scope. Follow the plan unless repository evidence proves a step incorrect or unsafe. For a material deviation, record what was expected, what the repository contains, and the consequence. Take the smallest safe resolution when evidence clearly supports one; otherwise surface the decision rather than improvising a design.
+A matter is material when it affects public behavior or contracts, acceptance criteria, architecture, data models or migrations, security, compatibility, deployment order, required dependencies, or scope. Resolve necessary integration fixes within the approved outcome. An adjacent improvement, review suggestion, or newly discovered issue does not expand authorization: explain it briefly and obtain explicit approval before implementing it. Continue unaffected work; do not turn the task into a broader cleanup or enforcement project.
 
 ## Autonomous mode
 

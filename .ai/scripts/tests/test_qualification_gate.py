@@ -1,10 +1,10 @@
 """Fail-closed qualification summary over the actual workflow command."""
 import os
+import itertools
 from pathlib import Path
 import re
 import subprocess
 import unittest
-from itertools import product
 
 
 class QualificationGateTests(unittest.TestCase):
@@ -14,7 +14,7 @@ class QualificationGateTests(unittest.TestCase):
     def test_summary_runs_after_unsuccessful_dependencies(self):
         summary = self.workflow().split('\n  qualification:\n', 1)[1]
         self.assertIn('if: always()', summary)
-        self.assertIn('needs: [windows_preflight, regression_segments, authority_backend]', summary)
+        self.assertIn('needs: [source_hygiene, windows_preflight, regression_segments, authority_backend]', summary)
 
     def test_backend_contracts_are_required_without_optional_skip_or_resume(self):
         backend = self.workflow().split('\n  authority_backend:\n', 1)[1].split('\n  qualification:\n', 1)[0]
@@ -39,12 +39,18 @@ class QualificationGateTests(unittest.TestCase):
     def test_actual_summary_command_rejects_every_unsuccessful_state(self):
         command = re.search(r"^\s+run: '(\[\[.+\]\])'\s*$", self.workflow(), re.MULTILINE).group(1)
         def check(value):
-            for preflight, segments, backend in product(('success', 'failure', 'cancelled', 'skipped', '', 'unknown'), repeat=3):
+            states = ('success', 'failure', 'cancelled', 'skipped', '', 'unknown')
+            for hygiene, preflight, segments, backend in itertools.product(states, repeat=4):
                 result = subprocess.run(['bash', '-c', value],
-                    env={**os.environ, 'PREFLIGHT_RESULT': preflight, 'SEGMENTS_RESULT': segments,
-                         'BACKEND_RESULT': backend}, capture_output=True, text=True, timeout=5)
-                self.assertEqual(result.returncode == 0, preflight == segments == backend == 'success',
-                                 (preflight, segments, backend, result.stderr))
+                    env={**os.environ, 'HYGIENE_RESULT': hygiene,
+                         'PREFLIGHT_RESULT': preflight, 'SEGMENTS_RESULT': segments,
+                         'BACKEND_RESULT': backend},
+                    capture_output=True, text=True, timeout=5)
+                self.assertEqual(result.returncode == 0, hygiene == preflight == segments == backend == 'success',
+                                 (hygiene, preflight, segments, backend, result.stderr))
         check(command)
-        with self.assertRaises(AssertionError):
-            check('[[ "$PREFLIGHT_RESULT" == success ]]')
+        for omitted in ('HYGIENE_RESULT', 'PREFLIGHT_RESULT', 'SEGMENTS_RESULT', 'BACKEND_RESULT'):
+            remaining = [name for name in ('HYGIENE_RESULT', 'PREFLIGHT_RESULT', 'SEGMENTS_RESULT', 'BACKEND_RESULT')
+                         if name != omitted]
+            with self.subTest(omitted=omitted), self.assertRaises(AssertionError):
+                check('[[ ' + ' && '.join('"$' + name + '" == success' for name in remaining) + ' ]]')

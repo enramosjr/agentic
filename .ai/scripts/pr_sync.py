@@ -36,6 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import okf  # noqa: E402
 import scratch  # noqa: E402
 import review_guard  # noqa: E402
+import framework_policy  # noqa: E402
 
 
 class SyncError(Exception):
@@ -105,7 +106,7 @@ def _merge_base_into(worktree: Path, remote: str, base: str, branch: str, number
     return conflicted
 
 
-@review_guard.protected(lambda repo, *args, **kwargs: repo)
+@review_guard.protected(lambda repo, *args, **kwargs: framework_policy.adopter_task(repo))
 def sync_pr(repo: Path, remote: str, pr: dict[str, object], current: str, dry_run: bool) -> Result:
     number, branch, base = int(pr["number"]), str(pr["headRefName"]), str(pr["baseRefName"])
     if _git(repo, "merge-base", "--is-ancestor", f"{remote}/{base}", f"{remote}/{branch}", check=False).returncode == 0:
@@ -143,7 +144,7 @@ def sync_pr(repo: Path, remote: str, pr: dict[str, object], current: str, dry_ru
             shutil.rmtree(cleanup, ignore_errors=True)
 
 
-@review_guard.protected(lambda bundle, *args, **kwargs: bundle.parent)
+@review_guard.protected(lambda bundle, *args, **kwargs: framework_policy.adopter_task(bundle.parent))
 def sync(bundle: Path, remote: str = "origin", *, dry_run: bool = False,
          only_branch: str | None = None) -> list[Result]:
     repo = bundle.parent
@@ -171,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         results = sync(okf.find_bundle(args.bundle), args.remote, dry_run=args.dry_run)
-    except (SyncError, okf.OkfError, review_guard.ReviewError) as error:
+    except (SyncError, okf.OkfError, review_guard.ReviewError, framework_policy.PolicyError) as error:
         print(f"pr_sync: error: {error}", file=sys.stderr)
         return 2
     for result in results:

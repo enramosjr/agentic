@@ -29,6 +29,7 @@ import stat
 sys.dont_write_bytecode = True  # Importing the shared helper must not dirty adopter worktrees.
 import learning
 import review_guard
+import framework_policy
 import process_runtime
 
 OKF_VERSION = "0.2"
@@ -664,7 +665,7 @@ def _render_index(existing: str | None, block: str, directory: Path, is_root: bo
     return existing.rstrip("\n") + "\n\n" + block + "\n"
 
 
-@review_guard.protected(lambda bundle, **kwargs: bundle.parent,
+@review_guard.protected(lambda bundle, **kwargs: framework_policy.adopter_task(bundle.parent),
                         when=lambda bundle, **kwargs: not kwargs.get('check', False))
 def reindex(bundle: Path, *, check: bool = False) -> list[Path]:
     """Regenerate the marked listing block in every index.md; return changed files."""
@@ -690,6 +691,7 @@ def reindex(bundle: Path, *, check: bool = False) -> list[Path]:
 
 def append_log(bundle: Path, message: str, day: date, *, once: str | None = None) -> Path:
     """Add a bullet under ``## day`` in log.md, keeping headings newest-first."""
+    framework_policy.adopter_task(bundle.parent)
     path = bundle / "log.md"
     text = read_text(path) if path.is_file() else LOG_TITLE + "\n"
     if once is not None:
@@ -1296,7 +1298,7 @@ def session_gate(bundle: Path) -> str | None:
             "separately gated tasks that start at zero, or close it. Raising --max-* flags does not reset this count (§9.2)")
 
 
-@review_guard.protected(lambda bundle: bundle.parent)
+@review_guard.protected(lambda bundle: framework_policy.adopter_task(bundle.parent))
 def record_session(bundle: Path) -> tuple[str, int] | None:
     """Count one implementation session on the active task. The count lives in the queue, so it survives relaunches."""
     task = _anchor_task(bundle)
@@ -1689,7 +1691,7 @@ def _init_autonomy(bundle: Path) -> list[Path]:
     return [_create_autonomy_doc(bundle, rel) for rel in (QUEUE_DOC, STATUS_DOC) if not (bundle / rel).exists()]
 
 
-@review_guard.protected(lambda bundle: bundle.parent)
+@review_guard.protected(lambda bundle: framework_policy.adopter_task(bundle.parent))
 def archive_closed(bundle: Path) -> list[str]:
     """Move DONE and CANCELLED tasks from the queue to the archive; return their IDs.
 
@@ -1898,6 +1900,7 @@ def _gitattributes_lines(bundle: Path, repo: Path) -> list[str]:
 
 def git_setup(bundle: Path) -> list[str]:
     """Register the merge driver in the repository's git config and .gitattributes; return what changed."""
+    framework_policy.adopter_task(bundle.parent)
     repo = bundle.parent
     if _git_text(repo, "rev-parse", "--is-inside-work-tree") != "true":
         raise OkfError(f"{repo} is not a git work tree")
@@ -2013,6 +2016,7 @@ def onboard_document(path: Path, inventory: dict, title: str, kind: str) -> str:
 
 def preflight_bundle_writes(bundle: Path, extra: list[Path] | None = None) -> None:
     """Reject deterministic path/log failures before a multi-file OKF operation writes."""
+    framework_policy.adopter_task(bundle.parent)
     directories = [bundle, *(bundle / name for name in STANDARD_SECTIONS)]
     if bundle.exists():
         directories.extend(p for p in bundle.rglob('*') if p.is_dir())
@@ -2066,10 +2070,10 @@ def cmd_onboard(bundle: Path, args: argparse.Namespace) -> int:
 
 
 def cmd_init(bundle: Path, args: argparse.Namespace) -> int:
-    if (bundle.parent / '.agentic.json').is_file():
-        import project_context
-        if project_context.kind(bundle.parent) == 'framework':
-            raise OkfError('framework source does not own a knowledge bundle; use repo.py context --json')
+    try:
+        framework_policy.adopter_task(bundle.parent)
+    except framework_policy.PolicyError as error:
+        raise OkfError(str(error)) from error
     bundle.mkdir(parents=True, exist_ok=True)
     for name in STANDARD_SECTIONS:
         (bundle / name).mkdir(exist_ok=True)
@@ -2169,7 +2173,7 @@ def cmd_git_setup(bundle: Path, args: argparse.Namespace) -> int:
     return 0
 
 
-@review_guard.protected(lambda bundle, args: bundle.parent)
+@review_guard.protected(lambda bundle, args: framework_policy.adopter_task(bundle.parent))
 def cmd_merge_driver(bundle: Path, args: argparse.Namespace) -> int:
     return run_merge_driver(args.base, args.ours, args.theirs, args.path)
 
@@ -2399,6 +2403,7 @@ def _parse_sources(bundle: Path, doc_path: Path, raw_sources: list[str]) -> list
 
 
 def cmd_new(bundle: Path, args: argparse.Namespace) -> int:
+    framework_policy.adopter_task(bundle.parent)
     require_bundle(bundle)
     path = bundle_path(bundle, args.path)
     if path.suffix != ".md" or path.name in ("index.md", "log.md"):
@@ -2436,6 +2441,7 @@ def _edit_frontmatter(bundle: Path, raw_path: str, updates: dict[str, object]) -
 
 
 def cmd_set(bundle: Path, args: argparse.Namespace) -> int:
+    framework_policy.adopter_task(bundle.parent)
     require_bundle(bundle)
     updates: dict[str, object] = {}
     for assignment in args.assignments:
@@ -2448,7 +2454,7 @@ def cmd_set(bundle: Path, args: argparse.Namespace) -> int:
     return 0
 
 
-@review_guard.protected(lambda bundle, args: bundle.parent)
+@review_guard.protected(lambda bundle, args: framework_policy.adopter_task(bundle.parent))
 def cmd_stamp(bundle: Path, args: argparse.Namespace) -> int:
     require_bundle(bundle)
     at = args.at or utc_now()
@@ -2811,10 +2817,10 @@ def main(argv: list[str] | None = None) -> int:
         mutating = mutating or (args.handler.__name__ == 'cmd_queue' and
                                 (getattr(args, 'archive', False) or getattr(args, 'record_session', False)))
         if mutating:
-            with review_guard.target_producer(bundle.parent):
+            with review_guard.target_producer(framework_policy.adopter_task(bundle.parent)):
                 return args.handler(bundle, args)
         return args.handler(bundle, args)
-    except (OkfError, review_guard.ReviewError) as error:
+    except (OkfError, review_guard.ReviewError, framework_policy.PolicyError) as error:
         print(f"okf: error: {error}", file=sys.stderr)
         return 1
 

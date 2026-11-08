@@ -124,10 +124,12 @@ class CompatibilityTests(GateCase):  # R5
         self.prepare()
         self.verify()
         shutil.rmtree(self.root / 'knowledge')
+        state_path = lifecycle.state_path(self.root, write=False)
+        before = state_path.read_bytes()
         self.write('.agentic.json', '{"repository_kind":"framework"}\n')
-        self.start()
-        self.prepare()
-        self.verify()
+        result = self.lc('tier', 'L2', '--new', '--reason', 'framework refusal', code=1)
+        self.assertIn('framework source', result.stderr)
+        self.assertEqual(state_path.read_bytes(), before)
         self.assertFalse((self.root / 'knowledge').exists())
 
     def test_existing_prerequisites_remain_required(self):

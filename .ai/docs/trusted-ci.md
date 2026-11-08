@@ -211,5 +211,5 @@ requires independently approved policy activation on a new protected target comm
 
 Adopters synchronize their relevant OKF capability/spec/playbook and log with exact
 commands and outcomes, distinguishing installed tooling from deployed enforcement.
-Framework source keeps documentation here and receipts in Git scratch. Do not
+Framework source keeps maintained documentation here and task evidence in chat. Do not
 record a PASS for unavailable isolation or hosted qualification.

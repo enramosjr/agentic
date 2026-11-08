@@ -1,6 +1,6 @@
 # Credential-free cloud infrastructure rendering
 
-Status: Local rendering is implemented and scoped-reviewed. The adopter-owned
+Local rendering is available. The adopter-owned
 authority feature and hosted AWS/Azure execution remain unfinished and unqualified.
 
 AGENTIC maintains the templates and adapter code. Adopters select their own AWS
@@ -48,30 +48,11 @@ qualification before the adapter is advertised as enforced. The current partial
 provider primitives and offline checks do not complete that flow. No manual key
 copying or hand-assembled cloud configuration is an accepted onboarding fallback.
 
-## Executed checks
+## Validation
 
-- Real subprocess CLI tests for both providers, payload integrity, overwrite
-  refusal and invalid-input rejection: `python3 .ai/scripts/tests/test_authority_render.py`
-  → PASS, 3 tests. These are local rendering checks, not hosted acceptance groups.
-- [AWS cfn-lint](https://github.com/aws-cloudformation/cfn-lint), pinned at 1.60.0:
-  ledger `adopter-aws-template-lint` → PASS after fixing W3011. Shared OIDC
-  retention now covers both deletion and replacement. The focused regression
-  recorded RED followed by GREEN.
-- [Azure Bicep](https://github.com/Azure/bicep/releases/tag/v0.49.2), version 0.49.2:
-  ARM decompilation and Bicep compilation → PASS, ledger labels
-  `adopter-azure-template-decompile` and `adopter-azure-template-build`.
-- The Bicep binary's SHA-256 matched the official release asset metadata before
-  execution: `acfff0453c9bcf442aa97103acbcd845ef366634e6ea2a2ba5734514409ce9c3`.
-
-Exact executable paths, arguments and source snapshots are recorded in Git scratch.
-The Windows validator environment lacked a required binary dependency; validation
-used an isolated Python 3.14 environment in the dedicated Podman WSL2 backend.
-This changed no backend OS packages and used no cloud credentials.
-
-## Current blockers
-
-The user has no trusted setup context and no AWS/Azure test accounts available.
-Privileged GitHub setup, hosted execution, effective IAM/RBAC checks and complete
-qualification cannot be performed here. The remaining implementation and final
-feature gate are not complete. Local hooks continue to provide feedback; they do
-not replace the independent authority.
+`python3 .ai/scripts/tests/test_authority_render.py` checks both provider CLIs,
+payload integrity, overwrite refusal and invalid-input rejection locally.
+Template validation uses AWS cfn-lint and Azure Bicep. These checks do not prove
+effective IAM/RBAC, hosted execution or complete qualification. Those require
+separately authorized trusted setup and adopter-owned test accounts. Local hooks
+continue to provide feedback; they do not replace the independent authority.

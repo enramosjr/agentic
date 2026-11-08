@@ -1,4 +1,4 @@
-# Adopter-owned authority: local development checkpoint
+# Adopter-owned authority: local tooling
 
 The adopter-owned source remains unfinished and unqualified. Its deployment,
 qualification, publication, activation, protected-run and brokered merge commands are deliberately
@@ -142,10 +142,9 @@ envelope. Readback requires a unique exact issuer App/context/intent/merge SHA
 success within the pending operation's interval. These helpers do not authenticate
 the parent artifacts by themselves and never publish a check.
 
-The local contracts, actual clean installed client, extracted runtime refusal,
-unprivileged Linux permission check, offline real-SDK signatures and infrastructure
-compiler checks are recorded in [implementation status](trusted-ci-implementation-status.md).
-They do not prove live API semantics, IAM/RBAC, hosted containers or real cleanup.
+Local contracts, clean installed-client checks, extracted-runtime checks and
+offline SDK tests do not prove live API semantics, IAM/RBAC, hosted containers
+or real cleanup.
 
 Remaining integration includes resumable registration recovery; connecting the
 independent policy/release registry, separated Actions jobs and all adapter

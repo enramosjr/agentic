@@ -18,6 +18,7 @@ sys.dont_write_bytecode = True
 import timed_check
 import scratch
 import review_guard
+import framework_policy
 import process_runtime
 
 
@@ -170,8 +171,8 @@ def repair_candidate(job: dict, previous: Path | None, previous_digest: str | No
     return True
 
 
-@review_guard.protected(lambda registry, repo, worktree: repo)
-@review_guard.protected(lambda registry, repo, worktree: worktree)
+@review_guard.protected(lambda registry, repo, worktree: framework_policy.adopter_task(repo))
+@review_guard.protected(lambda registry, repo, worktree: framework_policy.adopter_task(worktree))
 def register(registry: Path, repo: Path, worktree: Path) -> None:
     worktree = worktree.resolve()
     if Path(git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir")) != Path(git(worktree, "rev-parse", "--path-format=absolute", "--git-common-dir")):
@@ -246,7 +247,7 @@ class Cancelled(Exception):
     """A peer failed or the owning supervisor stopped validation."""
 
 
-@review_guard.protected(lambda command, number, log_path, repo, *args, **kwargs: repo)
+@review_guard.protected(lambda command, number, log_path, repo, *args, **kwargs: framework_policy.adopter_task(repo))
 def execute(command: dict, number: int, log_path: Path, repo: Path, environment: dict,
             available: float, cancel: threading.Event) -> dict:
     started = time.monotonic()
@@ -278,7 +279,7 @@ def execute(command: dict, number: int, log_path: Path, repo: Path, environment:
     return value
 
 
-@review_guard.protected(lambda request, repo, *args, **kwargs: repo)
+@review_guard.protected(lambda request, repo, *args, **kwargs: framework_policy.adopter_task(repo))
 def run(request: Path, repo: Path, deadline: float, reserve: float, report, tick, tick_seconds: float = 1) -> Path:
     job = plan(json.loads(request.read_text(encoding='utf-8')))
     candidate = job.get("candidate")
@@ -430,16 +431,16 @@ def main() -> int:
     track.add_argument("--worktree", type=Path, required=True)
     args = parser.parse_args()
     try:
-        with review_guard.target_producer(Path.cwd()):
+        with review_guard.target_producer(framework_policy.adopter_task(Path.cwd())):
             return submit_request(args)
-    except review_guard.ReviewError as error:
+    except (review_guard.ReviewError, framework_policy.PolicyError) as error:
         print(f'validation: {error}', file=sys.stderr)
         return 1
 
 
 def submit_request(args) -> int:
     try:
-        repo = Path.cwd()
+        repo = framework_policy.adopter_task(Path.cwd())
         if args.action == "track-worker":
             register(Path(os.environ["OKF_WORK_REGISTRY"]), repo, args.worktree)
         else:

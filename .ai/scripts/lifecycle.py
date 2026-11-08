@@ -147,6 +147,8 @@ def slug(text: str) -> str:
 
 
 def state_path(root: Path, write: bool = True) -> Path:
+    if write and project_context.kind(root) == 'framework':
+        raise LifecycleError('framework source does not create lifecycle state; keep task work in chat')
     base = scratch.directory(root) if write else scratch.location(root)  # Reads must work in a read-only sandbox.
     return base / f"lifecycle-{slug(branch_name(root))}.json"
 
@@ -163,7 +165,7 @@ def new_task_id(root: Path) -> str:
 
 def record_path(root: Path, state: dict) -> Path:
     if project_context.kind(root) == 'framework':
-        return scratch.location(root) / 'history/lifecycle' / f"{state['task']}.json"
+        raise LifecycleError('framework source does not create lifecycle task records')
     return root / RECORD_DIR / f"{state['task']}.json"
 
 
@@ -250,6 +252,8 @@ def write_atomic(path: Path, data: dict) -> None:
 
 def save(root: Path, state: dict, publish: bool = True) -> None:
     """Write the working state and, above L0, the committed audit record."""
+    if project_context.kind(root) == 'framework':
+        raise LifecycleError('framework source does not persist self-task lifecycle records')
     review_guard.assert_owned(root)
     if state["tier"] != "L0" and publish:
         if not state.get("task"):
@@ -1479,6 +1483,9 @@ def cmd_queue_from_spec(args: argparse.Namespace) -> int:
 
 
 def router_text(root: Path) -> str:
+    if project_context.kind(root) == 'framework':
+        import framework_policy
+        return framework_policy.GUIDANCE
     lines: list[str] = []
     capture = False
     source = root / ".ai/lifecycle.md"
@@ -1633,6 +1640,8 @@ def unmerged_paths(root: Path) -> set[str]:
 
 
 def hook_problem(data: dict, root: Path, directory: Path | None = None) -> str | None:
+    if project_context.kind(root) == 'framework':
+        return framework_hook_problem(data, root, directory)
     state = load(root)
     active = is_active(state, root)
     tool = data.get("tool_name")
@@ -1661,6 +1670,66 @@ def hook_problem(data: dict, root: Path, directory: Path | None = None) -> str |
             if problem is None and committing and state["tier"] != "L0":
                 problem = record_problem(root, state, command)
             return problem
+    return None
+
+
+def framework_hook_problem(data: dict, root: Path, directory: Path | None = None) -> str | None:
+    """Framework hygiene is independent of adopter tiers, Markdown and WIP exemptions."""
+    import framework_policy
+    tool_input = data.get('tool_input') or {}
+    if data.get('tool_name') in EDIT_TOOLS:
+        raw = [tool_input[key] for key in ('file_path', 'path', 'target_file', 'notebook_path')
+               if isinstance(tool_input.get(key), str)]
+        removed: set[Path] = set()
+        written = {Path(os.path.abspath((directory or root) / name)) for name in raw}
+        if data.get('tool_name') == 'apply_patch':
+            patch = tool_input.get('command') or tool_input.get('input') or ''
+            if isinstance(patch, str):
+                for action, name, move in re.findall(
+                        r'^\*\*\* (Add|Update|Delete) File: (.+)$|^\*\*\* Move to: (.+)$', patch, re.M):
+                    raw.append(name or move)
+                    if action == 'Delete':
+                        removed.add(Path(os.path.abspath((directory or root) / name)))
+                    else:
+                        written.add(Path(os.path.abspath((directory or root) / (name or move))))
+        removed.difference_update(written)
+        targets = [(directory or root) / Path(name).expanduser() for name in raw]
+        problem = framework_policy.edit_problem(root, targets, removed)
+        if problem:
+            return problem
+        for target in targets:
+            if Path(os.path.abspath(target)) in removed:
+                continue
+            target = target.resolve()
+            parent = target.parent
+            while not parent.exists() and parent != parent.parent:
+                parent = parent.parent
+            try:
+                foreign = repo_root(parent)
+            except LifecycleError:
+                if framework_policy.document(target.name) or framework_policy.forbidden(target.as_posix()):
+                    return 'framework task documents require an adopter worktree, not an external scratch destination'
+                continue  # Ordinary external operational files are not framework source.
+            if foreign.resolve() == root.resolve():
+                continue
+            if project_context.kind(foreign) == 'framework':
+                problem = framework_policy.edit_problem(foreign, [target], removed)
+            else:
+                problem = hook_problem(data, foreign, parent)
+            if problem:
+                return f'target worktree {foreign}: {problem}'
+        return None
+    command = tool_input.get('command')
+    if isinstance(command, str) and (is_git_commit(command) or pr_hook.recognize(command)):
+        environment = {**os.environ, **(tool_input.get('env') or {})}
+        if is_git_commit(command):
+            for value in review_guard.git_invocations(command, directory or root, environment):
+                if value['verb'] == 'commit':
+                    framework_policy.ordinary_git(value)
+        else:
+            framework_policy.pr_head(root, pr_hook.recognize(command).argv)
+        framework_policy.validate(root)
+        framework_policy.validate(root, 'index' if is_git_commit(command) else 'head')
     return None
 
 
@@ -1712,7 +1781,7 @@ def commits_all(command: str) -> bool:
 def record_problem(root: Path, state: dict, command: str) -> str | None:
     """Why a commit would leave the task's audit record out, or None."""
     if project_context.kind(root) == 'framework':
-        return None  # Source receipts live in Git scratch; adopter commit gates are unchanged.
+        return None  # Framework source has no self-task audit record to commit.
     if not state.get("task"):
         return None  # A state from before the audit trail; verify assigns its id.
     relative = record_path(root, state).relative_to(root).as_posix()
@@ -1784,6 +1853,51 @@ def cmd_hook(args: argparse.Namespace) -> int:
         data = {**data, 'tool_name': 'Shell', 'tool_input': {
             **(data.get('tool_input') or {}), 'command': data.get('command')}}
     command = (data.get('tool_input') or {}).get('command')
+    # Source identity is authoritative before legacy bypasses and Markdown exceptions.
+    try:
+        if data.get('tool_name') in {'Bash', 'Shell'} and isinstance(command, str) and 'push' in command:
+            environment = {**os.environ, **((data.get('tool_input') or {}).get('env') or {})}
+            base = session_directory(data) / Path((data.get('tool_input') or {}).get('workdir') or '.')
+            for value in review_guard.git_invocations(command, base, environment):
+                if value['verb'] != 'push':
+                    continue
+                selected = Path(review_guard.git_probe(value, ['rev-parse', '--show-toplevel'])[0]).resolve()
+                if project_context.kind(selected) == 'framework':
+                    import framework_policy
+                    framework_policy.ordinary_git(value)
+                    framework_policy.push_refs(selected, value['arguments'])
+                    framework_policy.validate(selected)
+                    framework_policy.validate(selected, 'head')
+        if event.lower() == 'sessionstart':
+            framework_root = repo_root(session_directory(data))
+            if project_context.kind(framework_root) == 'framework':
+                emit(data, 'SessionStart', None, router_text(framework_root))
+                return 0
+        elif (data.get('tool_name') in EDIT_TOOLS or (data.get('tool_name') in {'Bash', 'Shell'}
+                and isinstance(command, str) and (is_git_commit(command) or pr_hook.recognize(command)))):
+            value = git_commit_directory(command) if isinstance(command, str) and is_git_commit(command) else None
+            directory, framework_root = operation_directory(data, value[0] if value else [])
+            if project_context.kind(framework_root) == 'framework':
+                import framework_policy
+                problem = framework_hook_problem(data, framework_root, directory)
+                if problem:
+                    emit(data, 'PreToolUse', problem)
+                    return 0
+                # Existing read-only review freezes still apply; adopter tier gates do not.
+                for protected_root in review_guard.operation_roots(data):
+                    issue = review_guard.active_problem(review_guard.read(protected_root))
+                    if issue:
+                        emit(data, 'PreToolUse', issue)
+                        return 0
+                return 0
+    except (ValueError, OSError, subprocess.SubprocessError, LifecycleError,
+            review_guard.ReviewError, pr_hook.RoutingError) as error:
+        if event.lower() == 'sessionstart':
+            if not isinstance(error, LifecycleError):
+                emit(data, 'SessionStart', None, f'Repository identity unavailable: {error}')
+        else:
+            emit(data, 'PreToolUse', f'framework/source routing refused: {error}')
+        return 0
     try:
         invocation = (pr_hook.recognize(command) if data.get('tool_name') in ('Bash', 'Shell')
                       and isinstance(command, str) else None)
@@ -2010,6 +2124,9 @@ def main(argv: list[str] | None = None) -> int:
         args.run_command = command
     try:
         verb = args.func.__name__.removeprefix('cmd_')
+        if verb in MUTATING_COMMANDS | {'review', 'observations', 'status', 'gate', 'reuse', 'audit'} and project_context.kind(repo_root()) == 'framework':
+            raise LifecycleError('framework source does not run the adopter artifact lifecycle; '
+                                 'keep intent, plans, and review in chat and run checks directly')
         if verb == 'assure' and args.run is not None and (args.changed or args.base or args.strict or args.json):
             return args.func(args)  # Pure option refusal; no execution or publication is admitted.
         if verb in MUTATING_COMMANDS and not ((verb == 'merge' and args.dry_run) or (verb == 'finish' and not args.apply)

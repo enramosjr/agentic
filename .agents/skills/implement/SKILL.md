@@ -3,6 +3,12 @@ name: implement
 description: Use when executing an approved plan or making a bounded code change. Enforces test-first work, minimal edits, focused checks, and OKF sync.
 ---
 
+**Repository identity first:** for explicit `repository_kind: framework`, keep
+intent, plans and review in chat; do not persist self-task documents, OKF,
+lifecycle or lesson records, including in Git scratch. Run tests directly and
+`framework_policy.py` for source hygiene. Skip the adopter artifact steps below.
+For adopters, follow the workflow below unchanged.
+
 Run lifecycle Stage 2 (Implement) and Stage 4 (Verify and sync).
 
 1. Confirm the gate: `python3 .ai/scripts/lifecycle.py gate implement`. Hooks deny source edits until it passes.

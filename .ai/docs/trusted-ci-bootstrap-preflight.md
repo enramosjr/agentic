@@ -3,8 +3,7 @@
 This is an unfinished implementation candidate, not a production installer or
 qualified enforcement service. The current build deliberately blocks both
 `bootstrap_stage.py preview` and `apply` before authentication or side effects.
-The user authorized continued source implementation and local tests while holding
-privileged setup and live qualification. No trusted setup context is available.
+Privileged setup and live qualification are unavailable in this build.
 The maintainer does not provide a hosted service or fund adopter infrastructure.
 
 ## Trust boundary
@@ -73,6 +72,6 @@ environment. A successful registration result still says `state: setup` and
 Real GitHub consent is pending. Local HTTP tests use a simulated GitHub exchange;
 they verify callback handling, not GitHub's registration support. The dedicated
 Podman WSL2 disk/OCI probe passed, but GitHub-hosted execution remains unqualified.
-The user has no AWS/Azure test accounts, so both cloud paths remain unqualified.
+Both cloud paths remain unqualified.
 The complete adopted spec, installed launcher, protection/recovery flow and final
 frozen-candidate gate are not complete.
