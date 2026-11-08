@@ -54,6 +54,7 @@ import autonomy_progress  # noqa: E402
 import autonomy_validation  # noqa: E402
 import scratch  # noqa: E402
 import process_runtime  # noqa: E402
+import framework_policy  # noqa: E402
 
 MAX_STALLED_CAP = 4  # Raising the stall limit does not make a batch converge; split it instead (§9.2).
 
@@ -189,6 +190,7 @@ def drive(bundle: Path, command: list[str], role: str, max_sessions: int, max_id
           heartbeat_seconds: float = 30, handoff_seconds: float = 180,
           max_discovery_seconds: float = 120, validation_reserve_seconds: float = 60,
           max_closure_seconds: float = 600) -> int:
+    framework_policy.adopter_task(bundle.parent)
     idle = 0
     stalled = 0
     recovering = False
@@ -525,6 +527,8 @@ def main(argv: list[str] | None = None) -> int:
     progress = None
     outcome = 1
     try:
+        bundle = okf.find_bundle(args.bundle)
+        framework_policy.adopter_task(bundle.parent)
         if args.progress_file:
             scratch.require_disk(args.progress_file)
             if args.chat_ack_file:
@@ -533,7 +537,7 @@ def main(argv: list[str] | None = None) -> int:
                                                   args.chat_timeout_seconds)
             progress.wait_for_chat()
         remote = None if args.no_pr_sync else args.remote
-        outcome = drive(okf.find_bundle(args.bundle), command, args.role, args.max_sessions, args.max_idle, remote,
+        outcome = drive(bundle, command, args.role, args.max_sessions, args.max_idle, remote,
                         args.max_session_seconds, args.max_run_seconds, args.max_stalled, progress, args.heartbeat_seconds,
                         args.handoff_seconds, args.max_discovery_seconds, args.validation_reserve_seconds,
                         args.max_closure_seconds)

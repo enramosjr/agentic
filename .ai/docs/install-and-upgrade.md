@@ -28,6 +28,22 @@ All scripts, roles, skills and hook settings are project-local. Codex requires
 trusting the project's .codex layer and reviewing hooks with `/hooks`; copying
 files does not activate trust. Global agent settings remain unchanged.
 
+## Framework source hygiene
+
+Framework maintainers validate source with `python .ai/scripts/framework_policy.py`
+before distribution. An explicit framework source must contain only its maintained
+document inventory from `.agentic.json`; unregistered task paperwork or a self
+knowledge bundle refuses installation before creating or changing the target.
+This inventory is source metadata and is not exported to adopters. Reusable roles,
+skills and test fixtures remain source assets; adopter lifecycle/OKF creation is
+unchanged. AGENTIC's own planning and review stay in chat, not task files.
+Use `--snapshot index` to inspect staged source and `--snapshot head` to inspect
+the committed tree, each against its own document inventory. Framework publication
+uses an ordinary checkout/index and the checked-out HEAD/current branch; pushes
+must name an explicit remote and refspec. Unchecked refs and alternate Git
+namespaces refuse rather than validating different content. Check out the branch
+you intend to publish first. These restrictions do not change adopter governance.
+
 ## Native Windows and Codex
 
 Install Python 3.9+ and Git for Windows. The Codex hooks use `commandWindows`

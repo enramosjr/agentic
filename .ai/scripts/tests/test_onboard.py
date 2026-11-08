@@ -24,7 +24,7 @@ class OnboardE2ETests(unittest.TestCase):
         scripts.mkdir(parents=True)
         shutil.copy2(SCRIPTS / 'okf.py', scripts / 'okf.py')
         shutil.copy2(SCRIPTS / 'learning.py', scripts / 'learning.py')
-        for name in ('review_guard.py', 'scratch.py', 'ledger.py', 'process_runtime.py'):
+        for name in ('review_guard.py', 'scratch.py', 'ledger.py', 'process_runtime.py', 'framework_policy.py', 'project_context.py'):
             shutil.copy2(SCRIPTS / name, scripts / name)
         self.command = [sys.executable, str(scripts / 'okf.py')]
         self.git('init', '-q')

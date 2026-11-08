@@ -4,7 +4,9 @@ This document defines governance, workflow gates, evidence rules and agent selec
 
 The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", and "MAY" in this document are to be interpreted as described in BCP 14 ([RFC 2119](https://www.rfc-editor.org/rfc/rfc2119), [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174)) when, and only when, they appear in all capitals, as shown here. The same words in lowercase carry their ordinary English meaning and are not normative. The "Behavioral Guidelines" at the end of this document are written as plain-language guidance and are outside this convention.
 
-**Start here:** pick the lifecycle tier (§2.5), then follow `.ai/lifecycle.md` for the stages that tier requires: Intent, Plan, Implement, Review, Verify & Sync, Ship.
+**Framework source:** explicit `repository_kind: framework` MUST follow [chat-only development](.ai/agents-reference.md#framework-source), never its own task artifacts or OKF.
+
+**Adopter start:** pick the lifecycle tier (§2.5), then follow `.ai/lifecycle.md` for the stages that tier requires: Intent, Plan, Implement, Review, Verify & Sync, Ship.
 
 **Reference material** lives verbatim in [`.ai/agents-reference.md`](.ai/agents-reference.md) and is as binding as this file. Load a section a rule names with `python3 .ai/scripts/okf.py show .ai/agents-reference.md --section HEADING`.
 
@@ -19,7 +21,7 @@ The OKF corpus (`knowledge/`) is the repository's persistent knowledge graph. Ke
 
 - **Requirement**: Any agent change that alters functionality, contracts, specifications, dependencies, or architectural patterns MUST update the corresponding OKF document(s) and append a log entry to `knowledge/log.md`.
 - **Scope**: Code changes are not considered complete until OKF synchronization is verified and updated where relevant.
-- **Bootstrap**: Adopters missing `knowledge/index.md` run `python3 .ai/scripts/okf.py init`. Source `.agentic.json` with `repository_kind: framework` uses `python3 .ai/scripts/repo.py context --json`, MUST NOT create `knowledge/`, and keeps docs in existing locations and receipts in Git scratch.
+- **Bootstrap**: Adopters missing `knowledge/index.md` run `python3 .ai/scripts/okf.py init`. Framework source follows the exclusion above.
 
 ---
 
@@ -313,7 +315,7 @@ When your changes create orphans:
 - Remove imports/variables/functions that YOUR changes made unused.
 - Don't remove pre-existing dead code unless asked.
 
-The test: Every changed line should trace directly to the user's request.
+Every edit and check must serve the request. Adjacent improvements require explicit approval; discovery is not authorization.
 
 ## 4. Goal-Driven Execution
 

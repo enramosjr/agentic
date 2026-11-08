@@ -3,6 +3,12 @@ name: review
 description: Use after implementing and before shipping or marking work done. Runs the independent two-pass review (spec compliance, then quality) with the completeness audit and knowledge-sync check.
 ---
 
+**Repository identity first:** for explicit `repository_kind: framework`, keep
+intent, plans and review in chat; do not persist self-task documents, OKF,
+lifecycle or lesson records, including in Git scratch. Run tests directly and
+`framework_policy.py` for source hygiene. Skip the adopter artifact steps below.
+For adopters, follow the workflow below unchanged.
+
 Run lifecycle Stage 3 (Review).
 
 For an explicitly opted-in mechanically bound task, load `.ai/lifecycle.md` section `Mechanically bound review (opt-in)`. The parent prepares native capture before spawning the reviewer; during the interval all protected writers are frozen. The reviewer returns the full canonical report. The parent uses `lifecycle.py review save-report` and records Review from the reserved path; it must not reconstruct the report, rerun convergence or treat pending capture as approval.

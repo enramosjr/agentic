@@ -1629,7 +1629,7 @@ class DriverTests(AutonomyTestCase):
         # Copied into a repository that does not ignore __pycache__, as when the toolkit is adopted elsewhere.
         scripts = self.repo / ".ai" / "scripts"
         scripts.mkdir(parents=True)
-        for name in ("okf.py", "learning.py", "autonomy_driver.py", "autonomy_hook.py", "pr_sync.py", "timed_check.py", "autonomy_progress.py", "autonomy_validation.py", "scratch.py", "review_guard.py", "ledger.py", "process_runtime.py"):
+        for name in ("okf.py", "learning.py", "autonomy_driver.py", "autonomy_hook.py", "pr_sync.py", "timed_check.py", "autonomy_progress.py", "autonomy_validation.py", "scratch.py", "review_guard.py", "ledger.py", "process_runtime.py", "framework_policy.py", "project_context.py"):
             shutil.copy(SCRIPTS / name, scripts / name)
         self.commit_all("add toolkit")
         environment = {k: v for k, v in os.environ.items() if not k.startswith(("OKF_", "PYTHONDONTWRITEBYTECODE"))}

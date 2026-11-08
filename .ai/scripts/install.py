@@ -289,9 +289,18 @@ def validate_manifest(data):
 
 
 def install(target, template, check=False, force=False, no_knowledge=False):
+    import framework_policy
+    try:
+        framework_policy.validate_source(template)
+    except (ValueError, OSError, subprocess.SubprocessError) as error:
+        raise Refusal(f'framework source refused before installation: {error}') from error
     target, template = target.resolve(), template.resolve()
     if target == template:
         raise Refusal("TARGET is the template root: choose a different repository")
+    try:
+        framework_policy.adopter_task(target, exact_target=True)
+    except framework_policy.PolicyError as error:
+        raise Refusal(f'framework target refused before installation: {error}') from error
     initialize_git = needs_git_init(target)
     if check and initialize_git:
         print("not installed (Git initialization required)")

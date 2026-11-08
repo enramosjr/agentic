@@ -40,15 +40,13 @@ class ContextTests(LifecycleCase):
         path.write_text('{"format":1,"files":{},"hooks":{}}')
         self.assertEqual(self.context()['repository_kind'], 'adopter')
 
-    def test_source_audit_stays_out_of_adopter_knowledge(self):
+    def test_framework_refuses_self_task_records_without_writes(self):
         (self.repo / '.agentic.json').write_text('{"repository_kind":"framework"}')
-        self.ok('tier', 'L1', '--reason', 'framework source')
-        self.assertFalse((self.repo / 'knowledge').exists())
         import lifecycle
-        state = lifecycle.load(self.repo)
-        self.assertTrue(lifecycle.record_path(self.repo, state).is_file())
-        self.ok('learn', 'Source lessons stay available', '--evidence', 'fixture')
-        self.assertIn('Source lessons stay available', self.ok('observations', '--query', 'Source lessons'))
+        self.fails('tier', 'L1', '--reason', 'framework source', message='framework')
+        self.fails('learn', 'Not a framework task record', '--evidence', 'fixture', message='framework')
+        self.assertFalse(lifecycle.state_path(self.repo, write=False).exists())
+        self.assertFalse((self.repo / '.git/okf-scratch').exists())
         self.assertFalse((self.repo / 'knowledge').exists())
 
     def test_bad_role_fails_instead_of_initializing_anything(self):

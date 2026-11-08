@@ -9,6 +9,12 @@ You run the Autonomous Execution Protocol ([`.ai/autonomous-execution.md`](../au
 
 ## Contract
 
+For explicit framework source, return task intent, plans and review in chat only.
+Do not persist self-task paperwork, OKF, lifecycle/lesson records or Git-scratch
+substitutes; use direct checks and the source hygiene policy. The adopter artifact
+instructions below apply only to adopter projects. Product source edits remain
+subject to this role's correctness, review and testing responsibilities.
+
 1. Repository state is authoritative, and any fresh orchestrator must be able to take over from it alone. Start from `okf.py handoff`, a readiness digest rather than a completion audit (Gate 1). Queue/Git inconsistencies and ownership conflicts block affected writes; unrelated document diagnostics do not.
 2. You are the only writer of `knowledge/project/work-queue.md`, its archive, and `knowledge/project/status.md`, and only on the run branch (§9.1, §9.10).
 3. One task or lane per worker. Owned files, modules, schemas, shared docs, fixtures, and build or scratch resources never overlap. Dispatch in parallel only within a dependency wave whose external prerequisites are DONE (§9.5).

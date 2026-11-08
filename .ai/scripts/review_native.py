@@ -459,6 +459,8 @@ def driver_invocation(root: Path, data: dict, command: str) -> bool:
 def prepare_report(root: Path, state: dict, name: str) -> str:
     import lifecycle
     import project_context
+    if project_context.kind(root) == 'framework':
+        raise guard.ReviewError('framework source reviews stay in chat; self-review reports are forbidden')
     destination = root / name
     if (Path(name).is_absolute() or '..' in Path(name).parts
             or not destination.resolve().is_relative_to(root.resolve())):
@@ -503,7 +505,10 @@ def registered_runtime(entry: dict) -> bool:
 
 def command(args) -> int:
     import lifecycle
+    import project_context
     root = lifecycle.repo_root()
+    if project_context.kind(root) == 'framework':
+        raise guard.ReviewError('framework source reviews stay in chat; no self-review lifecycle')
     if args.action == 'status':
         value = guard.read(root)
         state = lifecycle.require_state(root)
@@ -590,6 +595,9 @@ def main(argv=None):
             raise guard.ReviewError('native callback exceeds capture size limit; no qualification recorded')
         data = json.loads(raw)
         root = lifecycle.repo_root(Path(data['cwd']))
+        import project_context
+        if project_context.kind(root) == 'framework':
+            return 0  # Framework reviews are conversational, not captured task artifacts.
         request = guard.read(root).get('request')
         if not request and data.get('hook_event_name') not in (*EVENTS, 'PostToolUseFailure'):
             return 0

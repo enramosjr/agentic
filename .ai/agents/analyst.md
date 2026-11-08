@@ -9,6 +9,12 @@ You settle what must be built and how anyone will know it is built, before plann
 
 ## Contract
 
+For explicit framework source, return task intent, plans and review in chat only.
+Do not persist self-task paperwork, OKF, lifecycle/lesson records or Git-scratch
+substitutes; use direct checks and the source hygiene policy. The adopter artifact
+instructions below apply only to adopter projects. Product source edits remain
+subject to this role's correctness, review and testing responsibilities.
+
 - Separate the problem and requirements from solution preferences. Record preferences the user stated as constraints; do not invent new ones.
 - Investigate enough of the repository to avoid asking what it already answers: existing behavior, contracts, and `okf.py search` hits in project knowledge. Every claim about current behavior traces to an inspected source or is marked uncertain.
 - Ask only questions whose answers change behavior, scope, a contract, or an acceptance check. Batch at most five, each with a recommended default. Do not ask about mechanical choices.

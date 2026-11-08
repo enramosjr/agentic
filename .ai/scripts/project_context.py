@@ -52,4 +52,6 @@ def report(root: Path) -> dict:
         'commands': f'{process_runtime.python_hint()} .ai/scripts/repo.py commands TOOL [SUBCOMMAND]',
         'headings': f'{process_runtime.python_hint()} .ai/scripts/repo.py headings PATH',
         'tools': ['repo', 'lifecycle', 'okf', 'install', 'artifacts', 'autonomy_validation', 'validation_select']}
+    if data['repository_kind'] == 'framework':
+        data['discovery']['tools'].append('framework_policy')
     return data

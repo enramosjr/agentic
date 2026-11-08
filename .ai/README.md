@@ -33,6 +33,9 @@ model's qualification. A real-model baseline remains on hold until the project's
 explicit qualification and supervision requirements are met. Installation does
 not launch that qualification or authorize autonomous execution.
 
-Run framework regression tests with disk-backed scratch via
-`python3 .ai/scripts/lifecycle.py run governance-suite -- python3 .ai/scripts/run_tests.py -j 4`.
+Framework development keeps intent, plans and reviews in chat, not self-task
+documents or lifecycle/lesson records. Run framework regression tests directly:
+`python3 .ai/scripts/run_tests.py -j 4`. Run
+`python3 .ai/scripts/framework_policy.py` to reject source contamination; CI and
+the installer also enforce the maintained-source inventory in `.agentic.json`.
 Application validation remains the adopting project's responsibility.
