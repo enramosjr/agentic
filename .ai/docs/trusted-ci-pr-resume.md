@@ -31,6 +31,20 @@ These agent-written notes are not additional human approvals.
 
 ## Evidence and next work
 
+Implementation checkpoint commit: `9164aca`. The fetched default branch was
+`76b48ab` (PR #30). An attempted base merge found conflicts in `AGENTS.md`,
+`.ai/docs/install-and-upgrade.md`, `.ai/scripts/tests/test_autonomy.py`,
+`.ai/scripts/tests/test_qualification_gate.py` and
+`.github/workflows/framework-parity.yml`. The uncommitted merge was aborted;
+the implementation checkpoint and unrelated files were preserved.
+
+Base integration is unfinished. The newer base also introduces a framework
+source-document inventory and chat-only task-artifact policy, which this historical
+checkpoint predates. Resolve that migration without losing the approved spec,
+plan, review and continuation context. Do not register task paperwork as maintained
+product docs merely to bypass the newer hygiene policy. The draft PR may show merge
+conflicts and must remain a draft until base integration and verification finish.
+
 The local backend aggregate and optional-crypto service checks passed at source
 tree fingerprint `9281b9e` before this checkpoint's base integration. Installed
 client, extracted-runtime and fresh task-controls regressions have RED/GREEN

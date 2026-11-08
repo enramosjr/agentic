@@ -7,6 +7,11 @@ adopter-owned implementation. The user approved the adopter-owned spec and plan.
 
 ## Latest bounded continuation — 2026-11-08
 
+The user requested a committed draft PR checkpoint for later resumption.
+Implementation is preserved in `9164aca`; the [PR resume note](trusted-ci-pr-resume.md)
+records publication scope and the unfinished integration with newer `main`.
+Earlier statements that the current work is uncommitted are historical.
+
 The [local task-controls checkpoint](trusted-ci-task-controls-local.md) supersedes
 the handoff's missing-module/task-authorization status. It adds cleanup readiness,
 separate complete administrative observation, exact artifact/nonce/request/export
