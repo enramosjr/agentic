@@ -24,7 +24,8 @@ class LearningLoopTests(LifecycleCase):
         shutil.copytree(SCRIPTS, self.repo / '.ai/scripts', ignore=shutil.ignore_patterns('tests', '__pycache__'))
         result = self.command('okf.py', 'init')
         self.assertEqual(result.returncode, 0, result.stderr)
-        (self.repo / 'knowledge/project/sync-ignore').write_text('*.py\n*.md\n.ai/scripts/codex_hook.ps1\n')
+        (self.repo / 'knowledge/project/sync-ignore').write_text(
+            '*.py\n*.md\n.ai/scripts/codex_hook.ps1\n.ai/scripts/posix_hook.sh\n')
 
     def command(self, script, *args, input=None, env=None):
         return subprocess.run([sys.executable, str(self.repo / '.ai/scripts' / script), *args],

@@ -3,24 +3,24 @@
   "hooks": {
     "beforeShellExecution": [
       {
-        "command": "python3 .ai/scripts/shell_guard.py",
+        "command": "b=\".ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \".ai/scripts/shell_guard.py\"",
         "timeout": 10
       },
       {
-        "command": "python3 .ai/scripts/lifecycle.py hook",
+        "command": "b=\".ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \".ai/scripts/lifecycle.py\" hook",
         "timeout": 10
       }
     ],
     "preToolUse": [
       {
-        "command": "python3 .ai/scripts/lifecycle.py hook",
+        "command": "b=\".ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \".ai/scripts/lifecycle.py\" hook",
         "matcher": "Write|Delete",
         "timeout": 10
       }
     ],
     "sessionStart": [
       {
-        "command": "python3 .ai/scripts/lifecycle.py hook",
+        "command": "b=\".ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \".ai/scripts/lifecycle.py\" hook",
         "timeout": 10
       }
     ]

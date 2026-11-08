@@ -116,11 +116,73 @@ def expand_managed_matcher(groups, desired, previous):
             group["matcher"] = matcher
 
 
+def posix_hook_replacement(command):
+    """Recognize exact pre-bootstrap kit commands, never arbitrary shell text."""
+    missing = ("{ printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; "
+               "reinstall the project-local kit.' >&2; exit 2; }")
+    layouts = (
+        ('$(git rev-parse --show-toplevel)', '$r',
+         "r=$(git rev-parse --show-toplevel) || { printf '%s\\n' "
+         "'AGENTIC POSIX hook: Git root unavailable; install Git and open a trusted Git worktree.' "
+         ">&2; exit 2; }; ",
+         ('shell_guard.py', 'lifecycle.py" hook', 'review_native.py" hook --adapter codex')),
+        ('$CLAUDE_PROJECT_DIR', '$CLAUDE_PROJECT_DIR', '',
+         ('shell_guard.py" --skip-in-cursor', 'lifecycle.py" hook --skip-in-cursor',
+          'review_native.py" hook --adapter claude', 'autonomy_hook.py')),
+        ('', '', '', ('shell_guard.py', 'lifecycle.py" hook')),
+    )
+    for old_root, new_root, prelude, handlers in layouts:
+        for handler in handlers:
+            script, _, arguments = handler.partition('"')
+            old_path = old_root + '/.ai/scripts/' if old_root else '.ai/scripts/'
+            new_path = new_root + '/.ai/scripts/' if new_root else '.ai/scripts/'
+            old = 'python3 ' + ('"' + old_path + script + '"' if old_root else old_path + script) + arguments
+            if command == old:
+                return (prelude + 'b="' + new_path + 'posix_hook.sh"; [ -f "$b" ] || ' + missing
+                        + '; exec sh "$b" "' + new_path + script + '"' + arguments)
+    return None
+
+
+def migrate_posix_hooks(hooks, kit, previous, flat):
+    """Retain adopter options while changing a manifest-owned command identity."""
+    migrated = set()
+    for event, groups in kit.get('hooks', {}).items():
+        for desired in groups:
+            wanted = [desired] if flat else desired.get('hooks', [])
+            for group in list(hooks.get(event, [])):
+                if group.get('matcher') != desired.get('matcher'):
+                    continue
+                for hook in [group] if flat else list(group.get('hooks', [])):
+                    old = hook.get('command')
+                    if old not in previous:
+                        continue
+                    replacement = posix_hook_replacement(old)
+                    if replacement and any(h.get('command') == replacement for h in wanted):
+                        hook['command'] = replacement
+                        migrated.add(replacement)
+                        # A partial upgrade may already contain the replacement.
+                        # Owned legacy options win; retain replacement-only fields.
+                        for peer_group in list(hooks[event]):
+                            if peer_group.get('matcher') != desired.get('matcher'):
+                                continue
+                            for peer in [peer_group] if flat else list(peer_group.get('hooks', [])):
+                                if peer is hook or peer.get('command') != replacement:
+                                    continue
+                                for key, value in peer.items():
+                                    hook.setdefault(key, value)
+                                if flat:
+                                    hooks[event].remove(peer_group)
+                                else:
+                                    peer_group['hooks'].remove(peer)
+    return migrated
+
+
 def merge_hooks(adopter, kit, previous=(), flat=False):
     result = copy.deepcopy(adopter)
     for key, value in kit.items():
         result.setdefault(key, copy.deepcopy(value) if key != "hooks" else {})
     hooks = result.setdefault("hooks", {})
+    previous = set(previous) | migrate_posix_hooks(hooks, kit, set(previous), flat)
     obsolete = set(previous) - set(commands(kit, flat, require_commands=True))
     for groups in hooks.values():
         if flat:

@@ -6,14 +6,14 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/.ai/scripts/shell_guard.py\"",
+            "command": "r=$(git rev-parse --show-toplevel) || { printf '%s\\n' 'AGENTIC POSIX hook: Git root unavailable; install Git and open a trusted Git worktree.' >&2; exit 2; }; b=\"$r/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$r/.ai/scripts/shell_guard.py\"",
             "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='Stop'; try { $r=Get-Item -LiteralPath .; while ($r -and -not (Test-Path -LiteralPath (Join-Path $r.FullName '.git'))) { $r=$r.Parent }; if (-not $r) { [Console]::Error.WriteLine('AGENTIC Windows hook: open a Git worktree.'); exit 2 }; & (Join-Path $r.FullName '.ai/scripts/codex_hook.ps1') shell_guard.py; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine('AGENTIC Windows hook: reinstall the project-local kit. ' + $_.Exception.Message); exit 2 }\"",
             "statusMessage": "Checking shell command",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/.ai/scripts/lifecycle.py\" hook",
+            "command": "r=$(git rev-parse --show-toplevel) || { printf '%s\\n' 'AGENTIC POSIX hook: Git root unavailable; install Git and open a trusted Git worktree.' >&2; exit 2; }; b=\"$r/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$r/.ai/scripts/lifecycle.py\" hook",
             "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='Stop'; try { $r=Get-Item -LiteralPath .; while ($r -and -not (Test-Path -LiteralPath (Join-Path $r.FullName '.git'))) { $r=$r.Parent }; if (-not $r) { [Console]::Error.WriteLine('AGENTIC Windows hook: open a Git worktree.'); exit 2 }; & (Join-Path $r.FullName '.ai/scripts/codex_hook.ps1') lifecycle.py hook; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine('AGENTIC Windows hook: reinstall the project-local kit. ' + $_.Exception.Message); exit 2 }\"",
             "statusMessage": "Checking lifecycle stage",
             "timeout": 10
@@ -25,7 +25,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/.ai/scripts/lifecycle.py\" hook",
+            "command": "r=$(git rev-parse --show-toplevel) || { printf '%s\\n' 'AGENTIC POSIX hook: Git root unavailable; install Git and open a trusted Git worktree.' >&2; exit 2; }; b=\"$r/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$r/.ai/scripts/lifecycle.py\" hook",
             "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='Stop'; try { $r=Get-Item -LiteralPath .; while ($r -and -not (Test-Path -LiteralPath (Join-Path $r.FullName '.git'))) { $r=$r.Parent }; if (-not $r) { [Console]::Error.WriteLine('AGENTIC Windows hook: open a Git worktree.'); exit 2 }; & (Join-Path $r.FullName '.ai/scripts/codex_hook.ps1') lifecycle.py hook; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine('AGENTIC Windows hook: reinstall the project-local kit. ' + $_.Exception.Message); exit 2 }\"",
             "statusMessage": "Checking lifecycle stage",
             "timeout": 10
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/.ai/scripts/review_native.py\" hook --adapter codex",
+            "command": "r=$(git rev-parse --show-toplevel) || { printf '%s\\n' 'AGENTIC POSIX hook: Git root unavailable; install Git and open a trusted Git worktree.' >&2; exit 2; }; b=\"$r/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$r/.ai/scripts/review_native.py\" hook --adapter codex",
             "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='Stop'; try { $r=Get-Item -LiteralPath .; while ($r -and -not (Test-Path -LiteralPath (Join-Path $r.FullName '.git'))) { $r=$r.Parent }; if (-not $r) { [Console]::Error.WriteLine('AGENTIC Windows hook: open a Git worktree.'); exit 2 }; & (Join-Path $r.FullName '.ai/scripts/codex_hook.ps1') review_native.py hook --adapter codex; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine('AGENTIC Windows hook: reinstall the project-local kit. ' + $_.Exception.Message); exit 2 }\"",
             "timeout": 10
           }
@@ -48,14 +48,14 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/.ai/scripts/lifecycle.py\" hook",
+            "command": "r=$(git rev-parse --show-toplevel) || { printf '%s\\n' 'AGENTIC POSIX hook: Git root unavailable; install Git and open a trusted Git worktree.' >&2; exit 2; }; b=\"$r/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$r/.ai/scripts/lifecycle.py\" hook",
             "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='Stop'; try { $r=Get-Item -LiteralPath .; while ($r -and -not (Test-Path -LiteralPath (Join-Path $r.FullName '.git'))) { $r=$r.Parent }; if (-not $r) { [Console]::Error.WriteLine('AGENTIC Windows hook: open a Git worktree.'); exit 2 }; & (Join-Path $r.FullName '.ai/scripts/codex_hook.ps1') lifecycle.py hook; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine('AGENTIC Windows hook: reinstall the project-local kit. ' + $_.Exception.Message); exit 2 }\"",
             "statusMessage": "Loading lifecycle router",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/.ai/scripts/review_native.py\" hook --adapter codex",
+            "command": "r=$(git rev-parse --show-toplevel) || { printf '%s\\n' 'AGENTIC POSIX hook: Git root unavailable; install Git and open a trusted Git worktree.' >&2; exit 2; }; b=\"$r/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$r/.ai/scripts/review_native.py\" hook --adapter codex",
             "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='Stop'; try { $r=Get-Item -LiteralPath .; while ($r -and -not (Test-Path -LiteralPath (Join-Path $r.FullName '.git'))) { $r=$r.Parent }; if (-not $r) { [Console]::Error.WriteLine('AGENTIC Windows hook: open a Git worktree.'); exit 2 }; & (Join-Path $r.FullName '.ai/scripts/codex_hook.ps1') review_native.py hook --adapter codex; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine('AGENTIC Windows hook: reinstall the project-local kit. ' + $_.Exception.Message); exit 2 }\"",
             "timeout": 10
           }
@@ -67,7 +67,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/.ai/scripts/review_native.py\" hook --adapter codex",
+            "command": "r=$(git rev-parse --show-toplevel) || { printf '%s\\n' 'AGENTIC POSIX hook: Git root unavailable; install Git and open a trusted Git worktree.' >&2; exit 2; }; b=\"$r/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$r/.ai/scripts/review_native.py\" hook --adapter codex",
             "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='Stop'; try { $r=Get-Item -LiteralPath .; while ($r -and -not (Test-Path -LiteralPath (Join-Path $r.FullName '.git'))) { $r=$r.Parent }; if (-not $r) { [Console]::Error.WriteLine('AGENTIC Windows hook: open a Git worktree.'); exit 2 }; & (Join-Path $r.FullName '.ai/scripts/codex_hook.ps1') review_native.py hook --adapter codex; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine('AGENTIC Windows hook: reinstall the project-local kit. ' + $_.Exception.Message); exit 2 }\"",
             "timeout": 10
           }
@@ -79,7 +79,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/.ai/scripts/review_native.py\" hook --adapter codex",
+            "command": "r=$(git rev-parse --show-toplevel) || { printf '%s\\n' 'AGENTIC POSIX hook: Git root unavailable; install Git and open a trusted Git worktree.' >&2; exit 2; }; b=\"$r/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$r/.ai/scripts/review_native.py\" hook --adapter codex",
             "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='Stop'; try { $r=Get-Item -LiteralPath .; while ($r -and -not (Test-Path -LiteralPath (Join-Path $r.FullName '.git'))) { $r=$r.Parent }; if (-not $r) { [Console]::Error.WriteLine('AGENTIC Windows hook: open a Git worktree.'); exit 2 }; & (Join-Path $r.FullName '.ai/scripts/codex_hook.ps1') review_native.py hook --adapter codex; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine('AGENTIC Windows hook: reinstall the project-local kit. ' + $_.Exception.Message); exit 2 }\"",
             "timeout": 10
           }
@@ -91,7 +91,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/.ai/scripts/review_native.py\" hook --adapter codex",
+            "command": "r=$(git rev-parse --show-toplevel) || { printf '%s\\n' 'AGENTIC POSIX hook: Git root unavailable; install Git and open a trusted Git worktree.' >&2; exit 2; }; b=\"$r/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$r/.ai/scripts/review_native.py\" hook --adapter codex",
             "commandWindows": "powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='Stop'; try { $r=Get-Item -LiteralPath .; while ($r -and -not (Test-Path -LiteralPath (Join-Path $r.FullName '.git'))) { $r=$r.Parent }; if (-not $r) { [Console]::Error.WriteLine('AGENTIC Windows hook: open a Git worktree.'); exit 2 }; & (Join-Path $r.FullName '.ai/scripts/codex_hook.ps1') review_native.py hook --adapter codex; exit $LASTEXITCODE } catch { [Console]::Error.WriteLine('AGENTIC Windows hook: reinstall the project-local kit. ' + $_.Exception.Message); exit 2 }\"",
             "timeout": 10
           }
