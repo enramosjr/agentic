@@ -29,6 +29,14 @@ def denial_category(status, body):
         message = loads(body).get('message', '').strip().lower()
     except (Refusal, AttributeError):
         return 'unknown'
+    if status == 422:
+        scope_denials = {
+            'the permissions requested are not granted to this installation': 'permission_scope',
+            'there is at least one repository that does not exist or is not accessible to the parent installation': 'repository_scope',
+        }
+        category = scope_denials.get(message.rstrip('.'))
+        if category:
+            return category
     if status in (403, 405, 422) and re.search(r'required status check "[^"\r\n]+"', message):
         return 'required_check'
     if status in (403, 405, 422) and ('required approving review' in message or

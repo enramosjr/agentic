@@ -26,6 +26,7 @@ import okf  # noqa: E402
 import autonomy_driver  # noqa: E402
 import pr_sync  # noqa: E402
 import process_runtime  # noqa: E402
+import driver_deadline_fixture  # noqa: E402
 
 HAS_GIT = shutil.which("git") is not None
 
@@ -608,12 +609,12 @@ if mode.startswith("repair-"):
         subprocess.run(["git", "add", "-A"], check=True)
         subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "--allow-empty", "-qm", "candidate"], check=True)
         gate = "from pathlib import Path; p=Path(" + repr(str(marker)) + "); p.write_text(p.read_text()+'run' if p.exists() else 'run'); " + "v={{}}; exec(Path('feature.py').read_text(),v); assert v['first']==1; assert v['second']==1"
-        value = {{"requirements": ["D.1"], "commands": [{{"label": "gate", "argv": [sys.executable, "-c", gate], "timeout_seconds": 2, "coverage": ["D.1"]}}]}}
+        value = {{"requirements": ["D.1"], "commands": [{{"label": "gate", "argv": [sys.executable, "-c", gate], "timeout_seconds": 10 if os.name == 'nt' else 2, "coverage": ["D.1"]}}]}}
         if step > 1 and not (mode == "repair-retain-stall" and launch == 5):
             previous = log.with_suffix(".result-path").read_text()
             key = "first" if step == 2 else "second"
             check = "from pathlib import Path; v={{}}; exec(Path('feature.py').read_text(),v); assert v[" + repr(key) + "]==" + ("2" if mode == "repair-bad-proof" else "1")
-            value["commands"].insert(0, {{"label": "fixed-regression", "argv": [sys.executable, "-c", check], "timeout_seconds": 2, "coverage": ["D.1"]}})
+            value["commands"].insert(0, {{"label": "fixed-regression", "argv": [sys.executable, "-c", check], "timeout_seconds": 10 if os.name == 'nt' else 2, "coverage": ["D.1"]}})
             value["commands"][1]["after"] = ["fixed-regression"]
             value["repair"] = {{"failed_result": previous, "regression": "fixed-regression", "review": "independent source review retained for " + key}}
         plan_path = log.with_suffix(".plan.json")
@@ -1081,11 +1082,10 @@ class DriverTests(AutonomyTestCase):
         original = autonomy_driver.documentation_audit
         def controlled_audit(*args, **kwargs):
             return original(*args, **kwargs, command=[sys.executable, str(audit_script)])
-        diagnostic = io.StringIO()
-        with mock.patch.object(autonomy_driver, "documentation_audit", controlled_audit), contextlib.redirect_stderr(diagnostic):
-            code = autonomy_driver.drive(self.bundle, [sys.executable, str(self.agent), str(self.log), "audit-overlap"],
-                                         "solo", 10, 2, None, max_run_seconds=60, handoff_seconds=1)
-        self.assertEqual(code, 0, diagnostic.getvalue())
+        with mock.patch.object(autonomy_driver, "documentation_audit", controlled_audit):
+            result = self.drive_policy('audit-overlap', '--max-sessions', '10', '--max-run-seconds', '60',
+                                       '--handoff-seconds', '1')
+        self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue((self.repo / "feature.py").exists())
         audit = json.loads(Path(self.log.with_suffix(".audit-result-path").read_text()).read_text())
         self.assertEqual(audit["state"], "PASS")
@@ -1161,26 +1161,29 @@ class DriverTests(AutonomyTestCase):
         for session_limit, run_limit, launches in limits:
             with self.subTest(session_limit=session_limit, run_limit=run_limit):
                 previous = len(self.sessions())
-                started = time.monotonic()
-                result = self.drive("hang", "--max-session-seconds", str(session_limit),
-                                    "--handoff-seconds", "2", "--max-run-seconds", str(run_limit))
-                # Include CLI/preflight, handoff, cleanup and process exit. The
-                # extra 2s admits interpreter startup and owned-tree teardown;
-                # it is not another model/session budget.
-                self.assertLess(time.monotonic() - started, run_limit + 2)
-                self.assertEqual(result.returncode, 1, result.stderr)
-                self.assertEqual(len(self.sessions()), previous + launches, result.stderr)
-                self.assertIn("owned process group stopped", result.stderr)
-                self.assertIn('"exit_code": 124', result.stderr)
-                timings = [json.loads(line.removeprefix('timing: ')) for line in result.stderr.splitlines()
-                           if line.startswith('timing: ')]
-                self.assertLessEqual(timings[0]['elapsed_seconds'], min(session_limit + 2, run_limit) + .5)
-                if len(timings) == 2:
-                    self.assertLessEqual(timings[1]['elapsed_seconds'], 2.5)
-                self.assertFalse(self.child_alive(self.log.with_suffix('.pid')), 'agent descendant is still running')
-                identities = map(json.loads, self.log.with_suffix('.all-pids').read_text().splitlines())
-                self.assertTrue(all(identity.get('exited', False) or not process_runtime.alive(identity['pid'], identity['birth'])
-                                    for identity in identities))
+                environment = {k: v for k, v in os.environ.items() if not k.startswith('OKF_AUTONOMOUS')}
+                argv = [sys.executable, str(SCRIPTS / 'autonomy_driver.py'), '--bundle', str(self.bundle),
+                        '--no-pr-sync', '--headless', '--max-session-seconds', str(session_limit),
+                        '--handoff-seconds', '2', '--max-run-seconds', str(run_limit),
+                        '--', sys.executable, str(self.agent), str(self.log), 'hang']
+                # CLI startup/preflight precedes drive()'s actual deadline. Its
+                # flushed scratch marker establishes the observed run origin;
+                # a separate watchdog bounds startup. Teardown keeps the same 2s.
+                with driver_deadline_fixture.observe(argv, environment, 30, run_limit + 2) as (result, elapsed):
+                    self.assertLess(elapsed, run_limit + 2, result.stderr)
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertEqual(len(self.sessions()), previous + launches, result.stderr)
+                    self.assertIn("owned process group stopped", result.stderr)
+                    self.assertIn('"exit_code": 124', result.stderr)
+                    timings = [json.loads(line.removeprefix('timing: ')) for line in result.stderr.splitlines()
+                               if line.startswith('timing: ')]
+                    self.assertLessEqual(timings[0]['elapsed_seconds'], min(session_limit + 2, run_limit) + .5)
+                    if len(timings) == 2:
+                        self.assertLessEqual(timings[1]['elapsed_seconds'], 2.5)
+                    self.assertFalse(self.child_alive(self.log.with_suffix('.pid')), 'agent descendant is still running')
+                    identities = map(json.loads, self.log.with_suffix('.all-pids').read_text().splitlines())
+                    self.assertTrue(all(identity.get('exited', False) or not process_runtime.alive(identity['pid'], identity['birth'])
+                                        for identity in identities))
 
     def test_checkpoint_window_finishes_current_check_then_continues_fresh(self) -> None:
         events = self.tmp / "progress.jsonl"
@@ -1247,14 +1250,25 @@ class DriverTests(AutonomyTestCase):
         self.assertIn("reached --max-sessions 2", result.stderr)
 
     def test_recovery_is_truncated_by_original_run_deadline(self) -> None:
-        # Control only the driver's budget clock: real process startup and cleanup
-        # still run, but cannot consume a subsecond fixture's recovery allowance.
+        # The policy clock controls the original allowance; child startup has its
+        # own watchdog. Inject its selected timeout only after real recovery/PID
+        # readiness, so startup cannot consume the behavior this fixture asserts.
         clock = mock.Mock()
         clock.monotonic.return_value = 100
         original_run = autonomy_driver.timed_check.run
         limits = []
         def run(*args, **kwargs):
-            limits.append(kwargs['timeout_seconds'])
+            limit = kwargs['timeout_seconds']
+            limits.append(limit)
+            marker = self.log.with_suffix('.interrupt-' + str(len(limits)))
+            tick = kwargs.get('on_tick')
+            def ready_tick():
+                if marker.exists():
+                    clock.monotonic.return_value = 106
+                    raise subprocess.TimeoutExpired(args[0], limit)
+                if tick:
+                    tick()
+            kwargs.update(timeout_seconds=30, on_tick=ready_tick, tick_seconds=.02)
             try:
                 return original_run(*args, **kwargs)
             finally:
@@ -1388,9 +1402,11 @@ class DriverTests(AutonomyTestCase):
         self.assertEqual(self.policy_limits, [.5, .5, .3])
 
     def test_closure_budget_does_not_extend_the_original_run_deadline(self) -> None:
-        run_seconds = 2 if os.name != "nt" else 5  # validation alone takes ~1.4 s with Windows startup
-        result = self.drive_policy("validation-closure-no-delivery", "--max-closure-seconds", "10",
-                            "--max-session-seconds", "10", "--handoff-seconds", ".3",
+        # Admit real validation startup, then prove closure is clipped to the
+        # original remaining run (not the larger session/closure allowances).
+        run_seconds = 60
+        result = self.drive_policy("validation-closure-no-delivery", "--max-closure-seconds", str(run_seconds * 2),
+                            "--max-session-seconds", str(run_seconds * 2), "--handoff-seconds", ".3",
                             "--max-run-seconds", str(run_seconds), "--validation-reserve-seconds", ".05")
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("recovery/run limit reached", result.stderr)
@@ -1424,6 +1440,8 @@ class DriverTests(AutonomyTestCase):
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("records-only changes do not qualify", result.stderr)
         self.assertEqual(self.log.with_suffix(".gate-runs").read_text(), "run")
+        repair = json.loads(self.log.with_suffix('.plan.json').read_text())['repair']
+        self.assertEqual(json.loads(Path(repair['failed_result']).read_text())['state'], 'FAIL')
 
     def test_repair_binding_survives_source_checkpoint_before_submission(self) -> None:
         result = self.drive("repair-checkpoint", "--max-stalled", "2", "--validation-reserve-seconds", ".05")

@@ -13,6 +13,44 @@ import re
 from trusted_ci_policy import Refusal, require, validate_policy
 
 
+def creation_controls(runtime, name, work, policy, image=None):
+    """Shared fixed controls; callers add only their closed profile's mounts."""
+    image = policy['image'] if image is None else image
+    validate_policy(dict(policy, image=image))
+    require(runtime in ('docker', 'podman') and isinstance(work, str) and
+            re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,63}', work) and
+            name == 'agentic-candidate-' + work, 'owned OCI reservation required')
+    limits = policy['limits']
+    return [runtime, 'create', '--name', name, '--pull=never',
+            '--user=65534:65534', '--read-only', '--network=none', '--cap-drop=ALL',
+            '--security-opt=no-new-privileges', '--pids-limit=' + str(limits['processes']),
+            '--memory=' + str(limits['memory_mb']) + 'm', '--memory-swap=' + str(limits['memory_mb']) + 'm',
+            '--cpus=1', '--log-driver=none', '--volume', work + ':/work:nocopy']
+
+
+def effective_probe(policy):
+    """Shared trusted pre-candidate kernel, namespace and resource assertions."""
+    validate_policy(policy)
+    limits = policy['limits']
+    return ('import os,pathlib; '
+             'assert os.getuid()==65534; '
+             'assert os.statvfs("/").f_flag & os.ST_RDONLY; '
+             'status=pathlib.Path("/proc/self/status").read_text(); '
+             'assert "NoNewPrivs:\\t1" in status; assert "Seccomp:\\t2" in status; '
+             'assert "CapEff:\\t0000000000000000" in status; '
+             'assert sorted(p.name for p in pathlib.Path("/sys/class/net").iterdir())==["lo"]; '
+             'assert int(pathlib.Path("/sys/fs/cgroup/memory.max").read_text())==' +
+             str(limits['memory_mb'] * 1024 * 1024) + '; '
+             'assert int(pathlib.Path("/sys/fs/cgroup/pids.max").read_text())==' +
+             str(limits['processes']) + '; '
+             'cpu=pathlib.Path("/sys/fs/cgroup/cpu.max").read_text().split(); '
+             'assert cpu[0]!="max" and 0<int(cpu[0])<=int(cpu[1]); '
+             'assert not any(k in os.environ for k in '
+             '["GITHUB_TOKEN","GH_TOKEN","AGENTIC_READ_TOKEN","AGENTIC_ISSUER_TOKEN",'
+             '"ACTIONS_RUNTIME_TOKEN","GITHUB_OUTPUT","GITHUB_ENV"]); '
+             'assert not pathlib.Path("/var/run/docker.sock").exists()')
+
+
 def command(argv, seconds=120, limit=1024 * 1024):
     """Capture untrusted output as bounded data, never relay Actions commands."""
     with subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -114,12 +152,7 @@ class Sandbox:
         code, _ = command([self.runtime, 'volume', 'inspect', self.work])
         require(code == 0, 'work volume must be independently provisioned; implicit creation refused')
         # No Docker build, host environment, writable host mounts or privileged mode.
-        argv = [self.runtime, 'create', '--name', self.name, '--pull=never',
-                '--user=65534:65534', '--read-only', '--network=none', '--cap-drop=ALL',
-                '--security-opt=no-new-privileges', '--pids-limit=' + str(limits['processes']),
-                '--memory=' + str(limits['memory_mb']) + 'm', '--memory-swap=' + str(limits['memory_mb']) + 'm',
-                '--cpus=1', '--log-driver=none',
-                '--volume', self.work + ':/work:nocopy',
+        argv = creation_controls(self.runtime, self.name, self.work, self.policy) + [
                 '--tmpfs=/tmp:rw,noexec,nosuid,nodev,size=16m,mode=1777',
                 '--workdir=/work', '--entrypoint=python3', self.policy['image'],
                 '-I', '-c', 'import time; time.sleep(900)']
@@ -146,23 +179,7 @@ class Sandbox:
                       'assert not [p for p in pathlib.Path("/work").iterdir() if p.name!="lost+found"]')
             require(self.run(['python3', '-I', '-c', script], cwd='/work')[0] == 0,
                     'work volume must be empty and hard-sized within policy limit')
-            probe = ('import os,pathlib; '
-                     'assert os.getuid()==65534; '
-                     'assert os.statvfs("/").f_flag & os.ST_RDONLY; '
-                     'status=pathlib.Path("/proc/self/status").read_text(); '
-                     'assert "NoNewPrivs:\\t1" in status; assert "Seccomp:\\t2" in status; '
-                     'assert "CapEff:\\t0000000000000000" in status; '
-                     'assert sorted(p.name for p in pathlib.Path("/sys/class/net").iterdir())==["lo"]; '
-                     'assert int(pathlib.Path("/sys/fs/cgroup/memory.max").read_text())==' +
-                     str(limits['memory_mb'] * 1024 * 1024) + '; '
-                     'assert int(pathlib.Path("/sys/fs/cgroup/pids.max").read_text())==' +
-                     str(limits['processes']) + '; '
-                     'cpu=pathlib.Path("/sys/fs/cgroup/cpu.max").read_text().split(); '
-                     'assert cpu[0]!="max" and 0<int(cpu[0])<=int(cpu[1]); '
-                     'assert not any(k in os.environ for k in '
-                     '["GITHUB_TOKEN","GH_TOKEN","AGENTIC_READ_TOKEN","AGENTIC_ISSUER_TOKEN",'
-                     '"ACTIONS_RUNTIME_TOKEN","GITHUB_OUTPUT","GITHUB_ENV"]); '
-                     'assert not pathlib.Path("/var/run/docker.sock").exists()')
+            probe = effective_probe(self.policy)
             require(self.run(['python3', '-I', '-c', probe], cwd='/work')[0] == 0,
                     'effective isolation/resource controls were not established')
             return self
