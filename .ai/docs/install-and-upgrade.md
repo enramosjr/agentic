@@ -44,6 +44,40 @@ must name an explicit remote and refspec. Unchecked refs and alternate Git
 namespaces refuse rather than validating different content. Check out the branch
 you intend to publish first. These restrictions do not change adopter governance.
 
+## Linux and POSIX hooks
+
+The Codex, Claude, and Cursor POSIX hooks require Git, POSIX `sh`, and an
+installed Python 3.9+. They invoke the shared `.ai/scripts/posix_hook.sh`
+bootstrap rather than assuming a `python3` alias exists. Each executable named
+`python3` on PATH is checked in PATH order, followed by each `python` candidate.
+Failed or older interpreters are skipped. An active virtual environment follows
+the same PATH ordering; inactive environments are not selected automatically.
+
+When PATH candidates do not work, the launcher checks `/usr/local/bin/python3`,
+`/usr/bin/python3`, then `$HOME/.local/bin/python3`. The HOME fallback is omitted
+when HOME is unset or empty. For other installation locations, add the directory
+to PATH before starting the agent application; restart it after changing the
+environment. The bootstrap does not install Python or load shell profiles.
+
+Version probes cannot consume hook input or write into the hook response. Once
+a compatible interpreter is selected, the handler runs exactly once and its
+arguments, input, output streams, and exit status are preserved. Missing tools
+or kit files fail nonzero with repair guidance.
+
+Run `python3 .ai/scripts/tests/test_posix_hooks.py` in the framework source
+checkout on Linux to check discovery, actual configured hooks, stream forwarding,
+and installer upgrades. If only `python` is available, use that command name
+instead. Explicit acceptance execution without a POSIX runtime fails; ordinary
+cross-platform unittest discovery skips unsupported POSIX runtime cases.
+
+Upgrades migrate exact prior manifest-owned POSIX commands in place, preserving
+adopter timeouts, custom metadata, and Windows overrides. Unowned commands and
+unrelated hooks retain their existing ownership semantics. Review and trust the
+changed hook configuration in the agent application after upgrading.
+If an old owned command and its replacement coexist in the same registration,
+the upgrade retains one dispatch: the old owned entry's options take precedence,
+and fields found only on the replacement are retained.
+
 ## Native Windows and Codex
 
 Install Python 3.9+ and Git for Windows. The Codex hooks use `commandWindows`

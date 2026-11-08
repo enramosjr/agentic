@@ -1,6 +1,6 @@
 # Agent Governance & OKF Synchronization Protocol
 
-This document defines governance, workflow gates, evidence rules and agent selection for agents and human-agent pairs.
+Governance, workflow gates, evidence and agent selection for agents and human-agent pairs.
 
 The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", and "MAY" in this document are to be interpreted as described in BCP 14 ([RFC 2119](https://www.rfc-editor.org/rfc/rfc2119), [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174)) when, and only when, they appear in all capitals, as shown here. The same words in lowercase carry their ordinary English meaning and are not normative. The "Behavioral Guidelines" at the end of this document are written as plain-language guidance and are outside this convention.
 
@@ -17,7 +17,7 @@ The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", and "MAY" in this docu
 In adopter projects, agents MUST keep `knowledge/` synchronized with code, specification, architecture and workflow changes.
 
 ### Rationale & Purpose
-The OKF corpus (`knowledge/`) is the repository's persistent knowledge graph. Keeping it synchronized gives future agents and contributors reliable context and prevents knowledge decay.
+The OKF corpus (`knowledge/`) is the repository's persistent knowledge graph. Synchronization gives future agents and contributors reliable context.
 
 - **Requirement**: Any agent change that alters functionality, contracts, specifications, dependencies, or architectural patterns MUST update the corresponding OKF document(s) and append a log entry to `knowledge/log.md`.
 - **Scope**: Code changes are not considered complete until OKF synchronization is verified and updated where relevant.
