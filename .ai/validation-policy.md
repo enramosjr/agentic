@@ -4,6 +4,12 @@ These rules are normative: `AGENTS.md` §8.4 requires agents to load them before
 
 ## Implementation and batches
 
+For explicit framework source, run checks directly and report outcomes in chat.
+Do not create lifecycle ledgers, task documents or lesson records; use
+`framework_policy.py` for source hygiene. The execution/reuse/proportionality
+rules still apply, but artifact-producing lifecycle/OKF commands below are for
+adopter projects. Transient test logs, caches and process locks remain allowed.
+
 During implementation, run focused builds, unit/contract tests and acceptance-specific E2Es for the owned change. For related requirements delivered as a batch (§9.5), defer the full expensive required suite to one validator on the integrated batch head, deduplicating shared commands and retaining all required coverage. Workers report deferred commands explicitly; focused PASS results alone never authorize DONE or checked PR items. After a failure, or a change (including a base merge) to tested code, dependencies or build inputs, rerun the affected checks and the invalidated integrated gate. Records-only updates require OKF/index/whitespace checks, without repeating unchanged product suites.
 
 **Interactive (chat-driven) sessions** use the same split. A user turn ("continue", "commit and continue") is not a gate boundary.

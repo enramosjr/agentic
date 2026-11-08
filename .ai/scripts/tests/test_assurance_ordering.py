@@ -509,21 +509,19 @@ class MechanicalOrderingCompatibilityTests(ClockCase, GateCase):  # R6
         self.assertTrue(items['CALC-R2']['attested']['judgment'])
         self.assertEqual(data['schema_version'], 1)
 
-    def test_framework_req_writer_and_general_reuse_do_not_create_knowledge(self):
+    def test_framework_refuses_req_writer_and_general_reuse_without_artifacts(self):
         shutil.rmtree(self.root / 'knowledge')
         self.write('.agentic.json', '{"repository_kind":"framework"}\n')
         self.commit('framework fixture without requirements')
-        self.start()
-        self.lc('run', 'req:CALC-R1', '--inputs', 'check.py', 'src/**',
-                '--', sys.executable, 'check.py')
-        first = self.state()['ledger'][-1]
-        self.assertRegex(first['at'], r'\.\d{6}Z$')
-        self.assertEqual(first['inputs'], ['check.py', 'src/**'])
-        self.assertNotIn('runtime_sha256', first)
-        self.assertIn('REUSE', self.lc('reuse', 'req:CALC-R1').stdout)
-        report, code = self.report()
-        self.assertEqual(code, 0)
-        self.assertEqual(report['requirements'], [])
+        before = self.state()
+        for command in [('tier', 'L1', '--reason', 'framework refusal'),
+                        ('run', 'req:CALC-R1', '--inputs', 'check.py', 'src/**',
+                         '--', sys.executable, 'check.py'),
+                        ('reuse', 'req:CALC-R1'), ('assure', '--json')]:
+            with self.subTest(command=command):
+                result = self.lc(*command, code=1)
+                self.assertIn('framework source', result.stderr)
+                self.assertEqual(self.state(), before)
         self.assertFalse((self.root / 'knowledge').exists())
 
     def test_governance_and_status_shapes_are_preserved(self):

@@ -3,6 +3,12 @@ name: plan
 description: Use after the spec is approved and before implementing a non-trivial change (lifecycle tier L1 and above). Produces a light or full implementation plan whose steps trace to spec requirements.
 ---
 
+**Repository identity first:** for explicit `repository_kind: framework`, keep
+intent, plans and review in chat; do not persist self-task documents, OKF,
+lifecycle or lesson records, including in Git scratch. Run tests directly and
+`framework_policy.py` for source hygiene. Skip the adopter artifact steps below.
+For adopters, follow the workflow below unchanged.
+
 Run lifecycle Stage 1 (Plan).
 
 1. Load the stage: `python3 .ai/scripts/okf.py show .ai/lifecycle.md --section "Stage 1: Plan"` and the role: `python3 .ai/scripts/okf.py show .ai/agents/planner.md --section Contract --section Investigation --section "Plan size"`.

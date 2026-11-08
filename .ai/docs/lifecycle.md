@@ -30,8 +30,12 @@ configuration or contacting a remote. Local equality is not proof of remote fres
 fetch explicitly when required. A source checkout declares
 `{"repository_kind":"framework"}` in root `.agentic.json`, which is not exported
 by the installer. Installed manifests or an existing knowledge bundle identify
-adopters; an unconfigured checkout remains unknown. Source audit receipts stay in
-Git scratch, and source verification does not initialize or require knowledge.
+adopters; an unconfigured checkout remains unknown. Framework development uses
+conversational intent, planning and review, with direct test execution. It does
+not create self-task documents, OKF bundles, lifecycle receipts or lesson records,
+including in Git scratch. Ordinary operational logs, caches and process locks
+remain permitted. `framework_policy.py` checks its explicit maintained-source
+inventory before publication and distribution; the adopter lifecycle is unchanged.
 
 Use `repo.py commands TOOL [SUBCOMMAND]` for actual CLI help and `repo.py headings PATH`
 for actual Markdown headings. Neither operation requires an adopter bundle.

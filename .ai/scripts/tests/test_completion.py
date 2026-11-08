@@ -132,25 +132,16 @@ class CompletionTests(LifecycleCase):
         code, data = self.finish('--apply', '--bind', 'knowledge/capabilities/greeting.md=greeting')
         self.assertEqual(code, 0, data)
 
-    def test_read_only_report_then_apply_existing_evidence_without_rerun(self):
+    def test_framework_completion_refuses_without_creating_artifacts(self):
         (self.repo / '.agentic.json').write_text('{"repository_kind":"framework"}')
-        self.ok('tier', 'L1', '--reason', 'source completion')
-        self.ok('stage', 'intent', '--note', 'goal; assert counter; no new tests on finish')
-        self.ok('stage', 'plan', '--note', 'record and reuse')
-        counter = self.repo / '.git' / 'counter'
-        self.ok('run', 'check', '--', sys.executable, '-c',
-                f'from pathlib import Path; p=Path({str(counter)!r}); p.write_text(str(int(p.read_text())+1) if p.exists() else "1")')
-        self.ok('retrospect', '--no-new-lessons', 'fixture')
         before = lifecycle.load(self.repo)
-        code, data = self.finish()
-        self.assertEqual(code, 0, data)
-        self.assertFalse(data['verified'])
-        self.assertEqual(lifecycle.load(self.repo), before)
-        code, data = self.finish('--apply')
-        self.assertEqual(code, 0, data)
-        self.assertTrue(data['verified'])
-        self.assertEqual(counter.read_text(), '1')
-        self.assertEqual(len(lifecycle.load(self.repo)['ledger']), 1)
+        for options in ((), ('--apply',)):
+            with self.subTest(options=options):
+                code, out, err = self.run_cli('finish', '--json', *options)
+                self.assertEqual(code, 1, out + err)
+                self.assertIn('framework source', err)
+                self.assertEqual(lifecycle.load(self.repo), before)
+        self.assertFalse(lifecycle.state_path(self.repo, write=False).exists())
         self.assertFalse((self.repo / 'knowledge').exists())
 
     def test_apply_cannot_invent_review_or_green_evidence(self):

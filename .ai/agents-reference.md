@@ -2,6 +2,25 @@
 
 This material moved here verbatim from `AGENTS.md` so that sessions pay for it only when they need it. It is as binding as `AGENTS.md`; the words MUST, SHOULD and MAY carry the `AGENTS.md` BCP 14 meaning. Load by section: `python3 .ai/scripts/okf.py show .ai/agents-reference.md --outline`.
 
+## Framework source
+
+Select repository identity with `.agentic.json` or `repo.py context --json` before
+applying adopter workflows. For explicit `repository_kind: framework`, AGENTIC
+builds tooling for other projects; it MUST NOT apply the adopter artifact workflow
+to itself. Keep intent, plans, reviews and verification in chat. Agents MUST NOT
+create self-task specs, plans, review/verification reports, OKF bundles, lifecycle
+task records or lesson records anywhere, including `.ai/docs/`, ignored directories
+or Git scratch. Do not invoke artifact-producing lifecycle stages for source work.
+
+Run checks directly and `python3 .ai/scripts/framework_policy.py` for hygiene.
+Only maintained product documentation, reusable templates, roles, skills and test
+fixtures belong in `.agentic.json` `source_documents`; agents MUST NOT register task
+paperwork there. Operational logs, caches, build artifacts and process locks are
+allowed. Unknown/invalid identity grants no framework exemption. This branch takes
+precedence over adopter artifact instructions; correctness, test-first work,
+independent review, source-document synchronization and explicit publication
+authorization still apply.
+
 ## Subagents
 
 In Claude Code and Cursor the analyst, planner, and reviewer run read-only by tool restriction. Codex custom agents cannot set a sandbox, so their read-only rule is an instruction only, and Codex spawns subagents only when asked: name the role in the prompt (for example "have reviewer check this diff").

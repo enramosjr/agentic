@@ -42,7 +42,7 @@ class MergeDriverTests(unittest.TestCase):
         scripts.mkdir(parents=True)
         shutil.copy(SCRIPTS / "okf.py", scripts / "okf.py")
         shutil.copy(SCRIPTS / "learning.py", scripts / "learning.py")
-        for name in ('review_guard.py', 'scratch.py', 'ledger.py', 'process_runtime.py'):
+        for name in ('review_guard.py', 'scratch.py', 'ledger.py', 'process_runtime.py', 'framework_policy.py', 'project_context.py'):
             shutil.copy(SCRIPTS / name, scripts / name)
         self.env = {k: v for k, v in os.environ.items() if not k.startswith(("OKF_", "GIT_"))}
         self.env.update(GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t", PYTHONDONTWRITEBYTECODE="1")

@@ -35,7 +35,7 @@ def snapshot(root):
 
 
 def assert_prior_guide_paragraphs(case, root, baseline, guide):
-    """Permit only the reviewed explicit UTF-8 read in the current demo snippet."""
+    """Permit the reviewed encoding and framework artifact-boundary changes only."""
     import ast
     old_read = "Path('src/calc.py').read_text()"
     utf8_read = "Path('src/calc.py').read_text(encoding='utf-8')"
@@ -50,7 +50,17 @@ def assert_prior_guide_paragraphs(case, root, baseline, guide):
     case.assertEqual((guide.count(old_read), guide.count(utf8_read)), (0, 1),
                      'review current guide encoding substitution')
     case.assertIn(check.rstrip(), guide, 'current demo CHECK differs from the guide')
+    old_identity = ('The adopter knowledge mandate remains binding below; framework-source identity in\n'
+                    '`AGENTS.md` substitutes source documentation and Git-scratch receipts for a bundle:')
     for paragraph in baseline.split('\n\n'):
+        if paragraph == old_identity:
+            paragraph = 'The adopter knowledge mandate remains binding:'
+        elif paragraph.startswith('Enable prepares a fresh pending Review scaffold,'):
+            paragraph = paragraph.replace(
+                'framework source uses an ignored working path and creates no bundle.',
+                'framework source does not create self-review reports or captures.').replace(
+                'Read-only inspection and native capture remain available.',
+                'Read-only inspection and native capture remain available for adopters.')
         case.assertIn(paragraph.replace(old_read, utf8_read), guide, 'previous guide paragraph changed')
 
 
@@ -367,11 +377,19 @@ class CompatibilityTests(Fixture):  # R6
             self.assertIn(phrase, guide)
 
 
-class EndToEndTests(Fixture):  # R7
-    def test_framework_real_runner_reuse_and_each_input_invalidation(self):
+class AdopterLedger:
+    """Receipt/reuse tests belong to synthetic adopters, never framework source."""
+    def setUp(self):
+        super().setUp()
+        self.write('.agentic.json', '{"repository_kind":"adopter"}')
+        self.commit()
+
+
+class EndToEndTests(AdopterLedger, Fixture):  # R7
+    def test_adopter_real_runner_reuse_and_each_input_invalidation(self):
         value = self.suggestion()
         before = self.preflight()
-        self.lc('tier', 'L1', '--reason', 'framework profile fixture')
+        self.lc('tier', 'L1', '--reason', 'adopter profile fixture')
         self.lc('run', 'pilot', *value['lifecycle_inputs_argv'], '--', *COMMAND)
         self.assert_inputs_unchanged(before)
         self.assertIn('REUSE', self.lc('reuse', 'pilot'))
@@ -384,7 +402,7 @@ class EndToEndTests(Fixture):  # R7
             path.write_bytes(original + b'\n# changed input\n')
             self.assertIn('RERUN', self.lc('reuse', 'pilot', code=1))
             path.write_bytes(original)
-        self.assertFalse((self.root / 'knowledge').exists())
+        self.assertTrue(list((self.root / 'knowledge/history/lifecycle').glob('*.json')))
         import lifecycle
         state = lifecycle.load(self.root)
         entry = state['ledger'][-1]
@@ -591,11 +609,11 @@ class ArchitectureCompatibilityTests(ArchitectureFixture):  # R4
             self.assertIn(phrase, guide)
 
 
-class ArchitectureFrameworkEndToEndTests(ArchitectureFixture):  # R5
+class ArchitectureAdopterLedgerEndToEndTests(AdopterLedger, ArchitectureFixture):  # R5
     def record(self):
         value = self.suggestion()
         before = self.preflight()
-        self.lc('tier', 'L1', '--reason', 'architecture framework fixture')
+        self.lc('tier', 'L1', '--reason', 'architecture adopter fixture')
         self.lc('run', 'architecture', *value['lifecycle_inputs_argv'], '--', *ARCH_COMMAND)
         self.assert_inputs_unchanged(before)
         import lifecycle
@@ -615,7 +633,7 @@ class ArchitectureFrameworkEndToEndTests(ArchitectureFixture):  # R5
                     self.assertEqual(result.returncode, 1, 'missing freshness invalidation: ' + name)
                     self.assertIn('RERUN', result.stdout)
                 self.edit_and_restore(name, stale)
-        self.assertFalse((self.root / 'knowledge').exists())
+        self.assertTrue(list((self.root / 'knowledge/history/lifecycle').glob('*.json')))
 
 
 class ArchitectureAdopterEndToEndTests(ArchitectureFixture):  # R6
@@ -658,13 +676,13 @@ class ArchitectureAdopterEndToEndTests(ArchitectureFixture):  # R6
 class ArchitectureControlTests(ArchitectureFixture):  # R6
     def test_confirmed_broken_variants_fail_their_criteria(self):
         # Execute real acceptance cases against independent disposable sources.
-        variants = [('guide', ArchitectureFrameworkEndToEndTests, 'test_each_input_and_addition_invalidates',
+        variants = [('guide', ArchitectureAdopterLedgerEndToEndTests, 'test_each_input_and_addition_invalidates',
                      'missing freshness invalidation: ' + ARCH_GUIDE),
-                    ('helper', ArchitectureFrameworkEndToEndTests, 'test_each_input_and_addition_invalidates',
+                    ('helper', ArchitectureAdopterLedgerEndToEndTests, 'test_each_input_and_addition_invalidates',
                      'missing freshness invalidation: ' + ARCH_TESTS[1]),
                     ('loose', ArchitectureProfileTests, 'test_exact_registration_and_original_profile',
                      'unregistered argv exported'),
-                    ('empty', ArchitectureFrameworkEndToEndTests, 'test_each_input_and_addition_invalidates',
+                    ('empty', ArchitectureAdopterLedgerEndToEndTests, 'test_each_input_and_addition_invalidates',
                      'architecture execution count must be two')]
         for variant, cls, method, criterion in variants:
             with self.subTest(variant=variant):
@@ -903,11 +921,11 @@ class HarnessWiringCompatibilityTests(HarnessWiringFixture):  # R4
             self.assertIn(phrase, guide)
 
 
-class HarnessWiringFrameworkEndToEndTests(HarnessWiringFixture):  # R5
+class HarnessWiringAdopterLedgerEndToEndTests(AdopterLedger, HarnessWiringFixture):  # R5
     def record(self):
         value = self.suggestion()
         before = self.preflight()
-        self.lc('tier', 'L1', '--reason', 'static wiring framework fixture')
+        self.lc('tier', 'L1', '--reason', 'static wiring adopter fixture')
         self.lc('run', 'wiring', *value['lifecycle_inputs_argv'], '--', *WIRING_COMMAND)
         self.assert_inputs_unchanged(before)
         import lifecycle
@@ -928,7 +946,7 @@ class HarnessWiringFrameworkEndToEndTests(HarnessWiringFixture):  # R5
                     self.assertIn('RERUN', result.stdout)
                 self.edit_and_restore(name, stale)
         self.assertIn('REUSE', self.lc('reuse', 'wiring'))
-        self.assertFalse((self.root / 'knowledge').exists())
+        self.assertTrue(list((self.root / 'knowledge/history/lifecycle').glob('*.json')))
 
 
 class HarnessWiringFailureTests(HarnessWiringFixture):  # R5
@@ -1011,11 +1029,11 @@ class HarnessWiringAdopterEndToEndTests(HarnessWiringFixture):  # R6
 class HarnessWiringControlTests(HarnessWiringFixture):  # R6
     def test_confirmed_broken_variants_fail_intended_criteria(self):
         method = 'test_each_input_and_addition_invalidates'
-        variants = [(name, HarnessWiringFrameworkEndToEndTests, method,
+        variants = [(name, HarnessWiringAdopterLedgerEndToEndTests, method,
                      'missing wiring freshness invalidation: ' + name) for name in WIRING_JSON]
         variants += [('loose', HarnessWiringProfileTests, 'test_exact_registration_and_prior_profiles',
                       'unregistered wiring argv exported'),
-                     ('empty', HarnessWiringFrameworkEndToEndTests, method,
+                     ('empty', HarnessWiringAdopterLedgerEndToEndTests, method,
                       'wiring execution count must be three')]
         for variant, cls, test, criterion in variants:
             with self.subTest(variant=variant):
@@ -1070,7 +1088,7 @@ REPORT_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
     '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
-    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+'.ai/scripts/lifecycle.py': 'c309e7433c21c0d365d75f7e7c5652cc6b5e0a48a1ca1ad73d3014f13d146cd2',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
@@ -1364,11 +1382,11 @@ class ReviewerReportCompatibilityTests(ReviewerReportFixture):  # R4
             self.assertIn(phrase, guide)
 
 
-class ReviewerReportFrameworkEndToEndTests(ReviewerReportFixture):  # R5
+class ReviewerReportAdopterLedgerEndToEndTests(AdopterLedger, ReviewerReportFixture):  # R5
     def record(self):
         value = self.suggestion()
         before = self.preflight()
-        self.lc('tier', 'L1', '--reason', 'static report framework fixture')
+        self.lc('tier', 'L1', '--reason', 'static report adopter fixture')
         self.lc('run', 'report', *value['lifecycle_inputs_argv'], '--', *REPORT_COMMAND)
         self.assert_inputs_unchanged(before)
         import lifecycle
@@ -1389,7 +1407,7 @@ class ReviewerReportFrameworkEndToEndTests(ReviewerReportFixture):  # R5
                     self.assertIn('RERUN', result.stdout)
                 self.edit_and_restore(name, stale)
         self.assertIn('REUSE', self.lc('reuse', 'report'))
-        self.assertFalse((self.root / 'knowledge').exists())
+        self.assertTrue(list((self.root / 'knowledge/history/lifecycle').glob('*.json')))
 
 
 class ReviewerReportFailureTests(ReviewerReportFixture):  # R5
@@ -1462,10 +1480,10 @@ class ReviewerReportAdopterEndToEndTests(ReviewerReportFixture):  # R6
 class ReviewerReportControlTests(ReviewerReportFixture):  # R6
     def test_confirmed_broken_variants_fail_intended_criteria(self):
         method = 'test_each_input_and_addition_invalidates'
-        variants = [(p, ReviewerReportFrameworkEndToEndTests, method,
+        variants = [(p, ReviewerReportAdopterLedgerEndToEndTests, method,
                      'missing report freshness invalidation: ' + p) for p in REPORT_DOCS]
         variants += [('loose', ReviewerReportProfileTests, 'test_exact_registration_and_prior_profiles',
-                      '0 != 2'), ('empty', ReviewerReportFrameworkEndToEndTests, method,
+                      '0 != 2'), ('empty', ReviewerReportAdopterLedgerEndToEndTests, method,
                                   'report execution count must be one')]
         for variant, cls, test, criterion in variants:
             with self.subTest(variant=variant):
@@ -1678,7 +1696,7 @@ INSTALLER_DOC_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
     '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
-    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+'.ai/scripts/lifecycle.py': 'c309e7433c21c0d365d75f7e7c5652cc6b5e0a48a1ca1ad73d3014f13d146cd2',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
@@ -1810,11 +1828,11 @@ class InstallerDocCompatibilityTests(InstallerDocFixture):  # R4
             self.assertIn(phrase, guide)
 
 
-class InstallerDocFrameworkEndToEndTests(InstallerDocFixture):  # R5
+class InstallerDocAdopterLedgerEndToEndTests(AdopterLedger, InstallerDocFixture):  # R5
     def record(self):
         value = self.suggestion()
         before = self.preflight()
-        self.lc('tier', 'L1', '--reason', 'static installer doc framework fixture')
+        self.lc('tier', 'L1', '--reason', 'static installer doc adopter fixture')
         self.lc('run', 'installer-doc', *value['lifecycle_inputs_argv'], '--', *INSTALLER_DOC_COMMAND)
         self.assert_inputs_unchanged(before)
         import lifecycle
@@ -1837,7 +1855,7 @@ class InstallerDocFrameworkEndToEndTests(InstallerDocFixture):  # R5
                     self.assertIn('RERUN', result.stdout)
                 self.edit_and_restore(name, stale)
                 self.assertIn('REUSE', self.lc('reuse', 'installer-doc'))
-        self.assertFalse((self.root / 'knowledge').exists())
+        self.assertTrue(list((self.root / 'knowledge/history/lifecycle').glob('*.json')))
 
 
 class InstallerDocFailureTests(InstallerDocFixture):  # R5
@@ -1914,10 +1932,10 @@ class InstallerDocAdopterEndToEndTests(InstallerDocFixture):  # R6
 class InstallerDocControlTests(InstallerDocFixture):  # R6
     def test_confirmed_broken_variants_fail_intended_criteria(self):
         method = 'test_each_input_and_addition_invalidates'
-        variants = [(p, InstallerDocFrameworkEndToEndTests, method,
+        variants = [(p, InstallerDocAdopterLedgerEndToEndTests, method,
                      'missing installer doc freshness invalidation: ' + p) for p in INSTALLER_DOC_TEXT]
         variants += [('loose', InstallerDocProfileTests, 'test_exact_registration_and_prior_profiles', '0 != 2'),
-                     ('empty', InstallerDocFrameworkEndToEndTests, method, 'installer doc execution count must be one')]
+                     ('empty', InstallerDocAdopterLedgerEndToEndTests, method, 'installer doc execution count must be one')]
         self.assertEqual(len(variants), 5)
         for variant, cls, test, criterion in variants:
             with self.subTest(variant=variant):
@@ -2137,7 +2155,7 @@ VALIDATION_POLICY_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
     '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
-    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+'.ai/scripts/lifecycle.py': 'c309e7433c21c0d365d75f7e7c5652cc6b5e0a48a1ca1ad73d3014f13d146cd2',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
@@ -2267,11 +2285,11 @@ class ValidationPolicyCompatibilityTests(ValidationPolicyFixture):  # R4
             self.assertIn(phrase, guide)
 
 
-class ValidationPolicyFrameworkEndToEndTests(ValidationPolicyFixture):  # R5
+class ValidationPolicyAdopterLedgerEndToEndTests(AdopterLedger, ValidationPolicyFixture):  # R5
     def record(self):
         value = self.suggestion()
         before = self.preflight()
-        self.lc('tier', 'L1', '--reason', 'static validation policy framework fixture')
+        self.lc('tier', 'L1', '--reason', 'static validation policy adopter fixture')
         self.lc('run', 'validation-policy', *value['lifecycle_inputs_argv'], '--', *VALIDATION_POLICY_COMMAND)
         self.assert_inputs_unchanged(before)
         import lifecycle
@@ -2294,7 +2312,7 @@ class ValidationPolicyFrameworkEndToEndTests(ValidationPolicyFixture):  # R5
                     self.assertIn('RERUN', result.stdout)
                 self.edit_and_restore(name, stale)
                 self.assertIn('REUSE', self.lc('reuse', 'validation-policy'))
-        self.assertFalse((self.root / 'knowledge').exists())
+        self.assertTrue(list((self.root / 'knowledge/history/lifecycle').glob('*.json')))
 
 
 class ValidationPolicyFailureTests(ValidationPolicyFixture):  # R5
@@ -2378,10 +2396,10 @@ class ValidationPolicyAdopterEndToEndTests(ValidationPolicyFixture):  # R6
 class ValidationPolicyControlTests(ValidationPolicyFixture):  # R6
     def test_confirmed_broken_variants_fail_intended_criteria(self):
         method = 'test_each_input_and_addition_invalidates'
-        variants = [(p, ValidationPolicyFrameworkEndToEndTests, method,
+        variants = [(p, ValidationPolicyAdopterLedgerEndToEndTests, method,
                      'missing validation policy freshness invalidation: ' + p) for p in VALIDATION_POLICY_DOCS]
         variants += [('loose', ValidationPolicyProfileTests, 'test_exact_registration_and_prior_profiles', '0 != 2'),
-                     ('empty', ValidationPolicyFrameworkEndToEndTests, method, 'validation policy execution count must be one')]
+                     ('empty', ValidationPolicyAdopterLedgerEndToEndTests, method, 'validation policy execution count must be one')]
         self.assertEqual(len(variants), 4)
         for variant, cls, test, criterion in variants:
             with self.subTest(variant=variant):
@@ -2599,7 +2617,7 @@ AUDIT_DOC_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
     '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
-    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+'.ai/scripts/lifecycle.py': 'c309e7433c21c0d365d75f7e7c5652cc6b5e0a48a1ca1ad73d3014f13d146cd2',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
@@ -2740,11 +2758,11 @@ class AuditDocCompatibilityTests(AuditDocFixture):  # R4
             self.assertIn(phrase, guide)
 
 
-class AuditDocFrameworkEndToEndTests(AuditDocFixture):  # R5
+class AuditDocAdopterLedgerEndToEndTests(AdopterLedger, AuditDocFixture):  # R5
     def record(self):
         value = self.suggestion()
         before = self.preflight()
-        self.lc('tier', 'L1', '--reason', 'static audit doc framework fixture')
+        self.lc('tier', 'L1', '--reason', 'static audit doc adopter fixture')
         self.lc('run', 'audit-doc', *value['lifecycle_inputs_argv'], '--', *AUDIT_DOC_COMMAND)
         self.assert_inputs_unchanged(before)
         import lifecycle
@@ -2767,7 +2785,7 @@ class AuditDocFrameworkEndToEndTests(AuditDocFixture):  # R5
                     self.assertIn('RERUN', result.stdout)
                 self.edit_and_restore(name, stale)
                 self.assertIn('REUSE', self.lc('reuse', 'audit-doc'))
-        self.assertFalse((self.root / 'knowledge').exists())
+        self.assertTrue(list((self.root / 'knowledge/history/lifecycle').glob('*.json')))
 
 
 class AuditDocFailureTests(AuditDocFixture):  # R5
@@ -2845,10 +2863,10 @@ class AuditDocAdopterEndToEndTests(AuditDocFixture):  # R6
 class AuditDocControlTests(AuditDocFixture):  # R6
     def test_confirmed_broken_variants_fail_intended_criteria(self):
         method = 'test_each_input_and_addition_invalidates'
-        variants = [(p, AuditDocFrameworkEndToEndTests, method,
+        variants = [(p, AuditDocAdopterLedgerEndToEndTests, method,
                      'missing audit doc freshness invalidation: ' + p) for p in AUDIT_DOC_DOCS]
         variants += [('loose', AuditDocProfileTests, 'test_exact_registration_and_prior_profiles', '0 != 2'),
-                     ('empty', AuditDocFrameworkEndToEndTests, method, 'audit doc execution count must be one')]
+                     ('empty', AuditDocAdopterLedgerEndToEndTests, method, 'audit doc execution count must be one')]
         self.assertEqual(len(variants), 4)
         for variant, cls, test, criterion in variants:
             with self.subTest(variant=variant):
@@ -3074,7 +3092,7 @@ ANALYSIS_CONVERGENCE_DOC_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
     '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
-    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+'.ai/scripts/lifecycle.py': 'c309e7433c21c0d365d75f7e7c5652cc6b5e0a48a1ca1ad73d3014f13d146cd2',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
@@ -3231,11 +3249,11 @@ class AnalysisConvergenceDocCompatibilityTests(AnalysisConvergenceDocFixture):  
             self.assertIn(phrase, guide)
 
 
-class AnalysisConvergenceDocFrameworkEndToEndTests(AnalysisConvergenceDocFixture):  # R5
+class AnalysisConvergenceDocAdopterLedgerEndToEndTests(AdopterLedger, AnalysisConvergenceDocFixture):  # R5
     def record(self):
         value = self.suggestion()
         before = self.preflight()
-        self.lc('tier', 'L1', '--reason', 'static analysis/convergence doc framework fixture')
+        self.lc('tier', 'L1', '--reason', 'static analysis/convergence doc adopter fixture')
         self.lc('run', 'analysis-doc', *value['lifecycle_inputs_argv'], '--', *ANALYSIS_CONVERGENCE_DOC_COMMAND)
         self.assert_inputs_unchanged(before)
         import lifecycle
@@ -3258,7 +3276,7 @@ class AnalysisConvergenceDocFrameworkEndToEndTests(AnalysisConvergenceDocFixture
                     self.assertIn('RERUN', result.stdout)
                 self.edit_and_restore(name, stale)
                 self.assertIn('REUSE', self.lc('reuse', 'analysis-doc'))
-        self.assertFalse((self.root / 'knowledge').exists())
+        self.assertTrue(list((self.root / 'knowledge/history/lifecycle').glob('*.json')))
 
 
 class AnalysisConvergenceDocFailureTests(AnalysisConvergenceDocFixture):  # R5
@@ -3339,11 +3357,11 @@ class AnalysisConvergenceDocAdopterEndToEndTests(AnalysisConvergenceDocFixture):
 class AnalysisConvergenceDocControlTests(AnalysisConvergenceDocFixture):  # R6
     def test_confirmed_broken_variants_fail_intended_criteria(self):
         method = 'test_each_input_and_addition_invalidates'
-        variants = [(p, AnalysisConvergenceDocFrameworkEndToEndTests, method,
+        variants = [(p, AnalysisConvergenceDocAdopterLedgerEndToEndTests, method,
                      'missing analysis/convergence doc freshness invalidation: ' + p)
                     for p in ANALYSIS_CONVERGENCE_DOC_DOCS]
         variants += [('loose', AnalysisConvergenceDocProfileTests, 'test_exact_registration_and_prior_profiles', '0 != 2'),
-                     ('empty', AnalysisConvergenceDocFrameworkEndToEndTests, method,
+                     ('empty', AnalysisConvergenceDocAdopterLedgerEndToEndTests, method,
                       'analysis/convergence doc execution count must be one')]
         self.assertEqual(len(variants), 5)
         for variant, cls, test, criterion in variants:
@@ -3568,7 +3586,7 @@ STAGE_DOC_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
     '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
-    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+'.ai/scripts/lifecycle.py': 'c309e7433c21c0d365d75f7e7c5652cc6b5e0a48a1ca1ad73d3014f13d146cd2',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
@@ -3726,11 +3744,11 @@ class StageDocCompatibilityTests(StageDocFixture):  # R4
             self.assertIn(phrase, guide)
 
 
-class StageDocFrameworkEndToEndTests(StageDocFixture):  # R5
+class StageDocAdopterLedgerEndToEndTests(AdopterLedger, StageDocFixture):  # R5
     def record(self):
         value = self.suggestion()
         before = self.preflight()
-        self.lc('tier', 'L1', '--reason', 'static stage doc framework fixture')
+        self.lc('tier', 'L1', '--reason', 'static stage doc adopter fixture')
         self.lc('run', 'stage-doc', *value['lifecycle_inputs_argv'], '--', *STAGE_DOC_COMMAND)
         self.assert_inputs_unchanged(before)
         import lifecycle
@@ -3753,7 +3771,7 @@ class StageDocFrameworkEndToEndTests(StageDocFixture):  # R5
                     self.assertIn('RERUN', result.stdout)
                 self.edit_and_restore(name, stale)
                 self.assertIn('REUSE', self.lc('reuse', 'stage-doc'))
-        self.assertFalse((self.root / 'knowledge').exists())
+        self.assertTrue(list((self.root / 'knowledge/history/lifecycle').glob('*.json')))
 
 
 class StageDocFailureTests(StageDocFixture):  # R5
@@ -3851,11 +3869,11 @@ class StageDocAdopterEndToEndTests(StageDocFixture):  # R6
 class StageDocControlTests(StageDocFixture):  # R6
     def test_confirmed_broken_variants_fail_intended_criteria(self):
         method = 'test_each_input_and_addition_invalidates'
-        variants = [(p, StageDocFrameworkEndToEndTests, method,
+        variants = [(p, StageDocAdopterLedgerEndToEndTests, method,
                      'missing stage doc freshness invalidation: ' + p)
                     for p in STAGE_DOC_DOCS]
         variants += [('loose', StageDocProfileTests, 'test_exact_registration_and_prior_profiles', '0 != 2'),
-                     ('empty', StageDocFrameworkEndToEndTests, method,
+                     ('empty', StageDocAdopterLedgerEndToEndTests, method,
                       'stage doc execution count must be one')]
         self.assertEqual(len(variants), 3)
         for variant, cls, test, criterion in variants:
@@ -4103,7 +4121,7 @@ TIER_DOC_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
     '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
-    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+'.ai/scripts/lifecycle.py': 'c309e7433c21c0d365d75f7e7c5652cc6b5e0a48a1ca1ad73d3014f13d146cd2',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
@@ -4261,12 +4279,12 @@ class TierDocCompatibilityTests(TierDocFixture):  # R4
             self.assertIn(phrase, guide)
 
 
-class TierDocFrameworkEndToEndTests(TierDocFixture):  # R5
+class TierDocAdopterLedgerEndToEndTests(AdopterLedger, TierDocFixture):  # R5
     def record(self):
         value = self.suggestion()
         before = self.preflight()
         self.runtime_baseline()
-        self.lc('tier', 'L1', '--reason', 'static tier doc framework fixture')
+        self.lc('tier', 'L1', '--reason', 'static tier doc adopter fixture')
         self.lc('run', 'tier-doc', *value['lifecycle_inputs_argv'], '--', *TIER_DOC_COMMAND)
         self.assert_inputs_unchanged(before)
         import lifecycle
@@ -4289,7 +4307,7 @@ class TierDocFrameworkEndToEndTests(TierDocFixture):  # R5
                     self.assertIn('RERUN', result.stdout)
                 self.edit_and_restore(name, stale)
                 self.assertIn('REUSE', self.lc('reuse', 'tier-doc'))
-        self.assertFalse((self.root / 'knowledge').exists())
+        self.assertTrue(list((self.root / 'knowledge/history/lifecycle').glob('*.json')))
 
 
 class TierDocFailureTests(TierDocFixture):  # R5
@@ -4399,11 +4417,11 @@ class TierDocAdopterEndToEndTests(TierDocFixture):  # R6
 class TierDocControlTests(TierDocFixture):  # R6
     def test_confirmed_broken_variants_fail_intended_criteria(self):
         method = 'test_each_input_and_addition_invalidates'
-        variants = [(p, TierDocFrameworkEndToEndTests, method,
+        variants = [(p, TierDocAdopterLedgerEndToEndTests, method,
                      'missing tier doc freshness invalidation: ' + p)
                     for p in TIER_DOC_DOCS]
         variants += [('loose', TierDocProfileTests, 'test_exact_registration_and_prior_profiles', '0 != 2'),
-                     ('empty', TierDocFrameworkEndToEndTests, method,
+                     ('empty', TierDocAdopterLedgerEndToEndTests, method,
                       'tier doc execution count must be one')]
         self.assertEqual(len(variants), 4)
         for variant, cls, test, criterion in variants:
@@ -4634,7 +4652,7 @@ ASSURANCE_DOC_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
     '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
-    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+'.ai/scripts/lifecycle.py': 'c309e7433c21c0d365d75f7e7c5652cc6b5e0a48a1ca1ad73d3014f13d146cd2',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
@@ -4788,11 +4806,11 @@ class AssuranceDocCompatibilityTests(AssuranceDocFixture):  # R4
         assert_prior_guide_paragraphs(self, self.root, baseline_source, guide)
 
 
-class AssuranceDocFrameworkEndToEndTests(AssuranceDocFixture):  # R5
+class AssuranceDocAdopterLedgerEndToEndTests(AdopterLedger, AssuranceDocFixture):  # R5
     def record(self):
         value = self.suggestion()
         before = self.preflight()
-        self.lc('tier', 'L1', '--reason', 'static assurance doc framework fixture')
+        self.lc('tier', 'L1', '--reason', 'static assurance doc adopter fixture')
         self.lc('run', 'assurance-doc', *value['lifecycle_inputs_argv'], '--', *ASSURANCE_DOC_COMMAND)
         self.assert_inputs_unchanged(before)
         import lifecycle
@@ -4815,7 +4833,7 @@ class AssuranceDocFrameworkEndToEndTests(AssuranceDocFixture):  # R5
                     self.assertIn('RERUN', result.stdout)
                 self.edit_and_restore(name, stale)
                 self.assertIn('REUSE', self.lc('reuse', 'assurance-doc'))
-        self.assertFalse((self.root / 'knowledge').exists())
+        self.assertTrue(list((self.root / 'knowledge/history/lifecycle').glob('*.json')))
 
 
 class AssuranceDocFailureTests(AssuranceDocFixture):  # R5
@@ -4927,10 +4945,10 @@ class AssuranceDocAdopterEndToEndTests(AssuranceDocFixture):  # R6
 class AssuranceDocControlTests(AssuranceDocFixture):  # R6
     def test_confirmed_broken_variants_fail_intended_criteria(self):
         method = 'test_each_input_and_addition_invalidates'
-        variants = [(ASSURANCE_DOC_DOCS[0], AssuranceDocFrameworkEndToEndTests, method,
+        variants = [(ASSURANCE_DOC_DOCS[0], AssuranceDocAdopterLedgerEndToEndTests, method,
                      'missing assurance doc freshness invalidation: ' + ASSURANCE_DOC_DOCS[0]),
                     ('loose', AssuranceDocProfileTests, 'test_exact_registration_and_prior_profiles', '0 != 2'),
-                    ('empty', AssuranceDocFrameworkEndToEndTests, method,
+                    ('empty', AssuranceDocAdopterLedgerEndToEndTests, method,
                      'assurance doc execution count must be one')]
         self.assertEqual(len(variants), 3)
         for variant, cls, test, criterion in variants:
@@ -5151,7 +5169,7 @@ AGENTS_BUDGET_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
     '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
-    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+'.ai/scripts/lifecycle.py': 'c309e7433c21c0d365d75f7e7c5652cc6b5e0a48a1ca1ad73d3014f13d146cd2',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
@@ -5296,11 +5314,11 @@ class AgentsBudgetCompatibilityTests(AgentsBudgetFixture):  # R4
         assert_prior_guide_paragraphs(self, self.root, baseline_source, guide)
 
 
-class AgentsBudgetFrameworkEndToEndTests(AgentsBudgetFixture):  # R5
+class AgentsBudgetAdopterLedgerEndToEndTests(AdopterLedger, AgentsBudgetFixture):  # R5
     def record(self):
         value = self.suggestion()
         before = self.preflight()
-        self.lc('tier', 'L1', '--reason', 'encoded text budget framework fixture')
+        self.lc('tier', 'L1', '--reason', 'encoded text budget adopter fixture')
         self.lc('run', 'agents-budget', *value['lifecycle_inputs_argv'], '--', *AGENTS_BUDGET_COMMAND)
         self.assert_inputs_unchanged(before)
         import lifecycle
@@ -5323,7 +5341,7 @@ class AgentsBudgetFrameworkEndToEndTests(AgentsBudgetFixture):  # R5
                     self.assertIn('RERUN', result.stdout)
                 self.edit_and_restore(name, stale)
                 self.assertIn('REUSE', self.lc('reuse', 'agents-budget'))
-        self.assertFalse((self.root / 'knowledge').exists())
+        self.assertTrue(list((self.root / 'knowledge/history/lifecycle').glob('*.json')))
 
 
 class AgentsBudgetFailureTests(AgentsBudgetFixture):  # R5
@@ -5422,10 +5440,10 @@ class AgentsBudgetAdopterEndToEndTests(AgentsBudgetFixture):  # R6
 class AgentsBudgetControlTests(AgentsBudgetFixture):  # R6
     def test_confirmed_broken_variants_fail_intended_criteria(self):
         method = 'test_each_input_and_addition_invalidates'
-        variants = [('AGENTS.md', AgentsBudgetFrameworkEndToEndTests, method,
+        variants = [('AGENTS.md', AgentsBudgetAdopterLedgerEndToEndTests, method,
                      'missing agents budget freshness invalidation: AGENTS.md'),
                     ('loose', AgentsBudgetProfileTests, 'test_exact_registration_and_prior_profiles', '0 != 2'),
-                    ('empty', AgentsBudgetFrameworkEndToEndTests, method,
+                    ('empty', AgentsBudgetAdopterLedgerEndToEndTests, method,
                      'agents budget execution count must be one')]
         self.assertEqual(len(variants), 3)
         for variant, cls, test, criterion in variants:
@@ -5636,7 +5654,7 @@ SEMANTIC_LENS_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
     '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
-    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+'.ai/scripts/lifecycle.py': 'c309e7433c21c0d365d75f7e7c5652cc6b5e0a48a1ca1ad73d3014f13d146cd2',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
@@ -5800,11 +5818,11 @@ class SemanticLensCompatibilityTests(SemanticLensFixture):  # R4
         assert_prior_guide_paragraphs(self, self.root, baseline_source, guide)
 
 
-class SemanticLensFrameworkEndToEndTests(SemanticLensFixture):  # R5
+class SemanticLensAdopterLedgerEndToEndTests(AdopterLedger, SemanticLensFixture):  # R5
     def record(self):
         value = self.suggestion()
         before = self.preflight()
-        self.lc('tier', 'L1', '--reason', 'semantic lens framework fixture')
+        self.lc('tier', 'L1', '--reason', 'semantic lens adopter fixture')
         self.lc('run', 'semantic-lens', *value['lifecycle_inputs_argv'], '--', *SEMANTIC_LENS_COMMAND)
         self.assert_inputs_unchanged(before)
         import lifecycle
@@ -5827,7 +5845,7 @@ class SemanticLensFrameworkEndToEndTests(SemanticLensFixture):  # R5
                     self.assertIn('RERUN', result.stdout)
                 self.edit_and_restore(name, stale)
                 self.assertIn('REUSE', self.lc('reuse', 'semantic-lens'))
-        self.assertFalse((self.root / 'knowledge').exists())
+        self.assertTrue(list((self.root / 'knowledge/history/lifecycle').glob('*.json')))
 
 
 class SemanticLensFailureTests(SemanticLensFixture):  # R5
@@ -5958,10 +5976,10 @@ class SemanticLensAdopterEndToEndTests(SemanticLensFixture):  # R6
 class SemanticLensControlTests(SemanticLensFixture):  # R6
     def test_confirmed_broken_variants_fail_intended_criteria(self):
         method = 'test_each_input_and_addition_invalidates'
-        variants = [(name, SemanticLensFrameworkEndToEndTests, method,
+        variants = [(name, SemanticLensAdopterLedgerEndToEndTests, method,
                      'missing semantic lens freshness invalidation: ' + name) for name in SEMANTIC_LENS_DOCS]
         variants += [('loose', SemanticLensProfileTests, 'test_exact_registration_and_prior_profiles', '0 != 2'),
-                     ('empty', SemanticLensFrameworkEndToEndTests, method,
+                     ('empty', SemanticLensAdopterLedgerEndToEndTests, method,
                       'semantic lens execution count must be one')]
         self.assertEqual(len(variants), 6)
         for variant, cls, test, criterion in variants:
@@ -6244,7 +6262,7 @@ SKILL_FRONTMATTER_SETUP_PINS = {
     '.ai/scripts/tests/test_lifecycle_conformance.py': 'f12343b5d4c5124d9c8737511edd760ade76552ccdf0530f53bb3e55e3f92441',
     '.ai/scripts/tests/disk_tmp.py': '1772814b47ecdf11f4c9f1b33bd4e0965159218475daf5f63033ea25d222a0b2',
     '.ai/scripts/scratch.py': '10756f5420dc083992d9b413771f6a18a272e2258dc8003b86777e15faa922b0',
-    '.ai/scripts/lifecycle.py': 'eea65ba2ca39f83dd1bd7acf148111d836361c01888e03c7626988efa3ff95c9',
+'.ai/scripts/lifecycle.py': 'c309e7433c21c0d365d75f7e7c5652cc6b5e0a48a1ca1ad73d3014f13d146cd2',
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
@@ -6395,7 +6413,7 @@ SKILL_FRONTMATTER_FRESH = [*SKILL_FRONTMATTER_DOCS, *SKILL_FRONTMATTER_TESTS,
                           '.claude/skills/new_supported/SKILL.md', '.claude/skills/asset.txt']
 
 
-class SkillFrontmatterFrameworkEndToEndTests(SkillFrontmatterFixture):  # R5
+class SkillFrontmatterAdopterLedgerEndToEndTests(AdopterLedger, SkillFrontmatterFixture):  # R5
     def assert_stale(self, name):
         result = self.process([sys.executable, '.ai/scripts/lifecycle.py', 'reuse', 'skill-frontmatter'])
         self.assertEqual(result.returncode, 1, 'missing skill frontmatter freshness invalidation: ' + name)
@@ -6410,7 +6428,7 @@ class SkillFrontmatterFrameworkEndToEndTests(SkillFrontmatterFixture):  # R5
     def record(self):
         value = self.suggestion()
         before = self.preflight()
-        self.lc('tier', 'L1', '--reason', 'skill frontmatter framework fixture')
+        self.lc('tier', 'L1', '--reason', 'skill frontmatter adopter fixture')
         self.lc('run', 'skill-frontmatter', *value['lifecycle_inputs_argv'], '--', *SKILL_FRONTMATTER_COMMAND)
         self.assert_inputs_unchanged(before)
         import lifecycle
@@ -6442,7 +6460,7 @@ class SkillFrontmatterFrameworkEndToEndTests(SkillFrontmatterFixture):  # R5
                         self.assert_observation(self.observe(), [*SKILL_FRONTMATTER_DOCS, name])
                 self.edit_and_restore(name, stale)
                 self.assertIn('REUSE', self.lc('reuse', 'skill-frontmatter'))
-        self.assertFalse((self.root / 'knowledge').exists())
+        self.assertTrue(list((self.root / 'knowledge/history/lifecycle').glob('*.json')))
 
 
 class SkillFrontmatterFailureTests(SkillFrontmatterFixture):  # R5
@@ -6612,10 +6630,10 @@ class SkillFrontmatterAdopterEndToEndTests(SkillFrontmatterFixture):  # R6
 
 class SkillFrontmatterControlTests(SkillFrontmatterFixture):  # R6
     def test_confirmed_broken_variants_fail_intended_criteria(self):
-        variants = [('omit', SkillFrontmatterFrameworkEndToEndTests, 'check_skill_subtree_invalidation',
+        variants = [('omit', SkillFrontmatterAdopterLedgerEndToEndTests, 'check_skill_subtree_invalidation',
                      'missing skill frontmatter freshness invalidation: ' + SKILL_FRONTMATTER_DOCS[0]),
                     ('loose', SkillFrontmatterProfileTests, 'test_unregistered_symlink_refuses', '0 != 2'),
-                    ('empty', SkillFrontmatterFrameworkEndToEndTests, 'test_each_input_and_addition_invalidates',
+                    ('empty', SkillFrontmatterAdopterLedgerEndToEndTests, 'test_each_input_and_addition_invalidates',
                      'skill frontmatter execution count must be one')]
         self.assertEqual(len(variants), 3)
         for variant, cls, method, criterion in variants:

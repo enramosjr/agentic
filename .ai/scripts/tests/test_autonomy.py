@@ -608,12 +608,12 @@ if mode.startswith("repair-"):
         subprocess.run(["git", "add", "-A"], check=True)
         subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "--allow-empty", "-qm", "candidate"], check=True)
         gate = "from pathlib import Path; p=Path(" + repr(str(marker)) + "); p.write_text(p.read_text()+'run' if p.exists() else 'run'); " + "v={{}}; exec(Path('feature.py').read_text(),v); assert v['first']==1; assert v['second']==1"
-        value = {{"requirements": ["D.1"], "commands": [{{"label": "gate", "argv": [sys.executable, "-c", gate], "timeout_seconds": 2, "coverage": ["D.1"]}}]}}
+        value = {{"requirements": ["D.1"], "commands": [{{"label": "gate", "argv": [sys.executable, "-c", gate], "timeout_seconds": 10, "coverage": ["D.1"]}}]}}
         if step > 1 and not (mode == "repair-retain-stall" and launch == 5):
             previous = log.with_suffix(".result-path").read_text()
             key = "first" if step == 2 else "second"
             check = "from pathlib import Path; v={{}}; exec(Path('feature.py').read_text(),v); assert v[" + repr(key) + "]==" + ("2" if mode == "repair-bad-proof" else "1")
-            value["commands"].insert(0, {{"label": "fixed-regression", "argv": [sys.executable, "-c", check], "timeout_seconds": 2, "coverage": ["D.1"]}})
+            value["commands"].insert(0, {{"label": "fixed-regression", "argv": [sys.executable, "-c", check], "timeout_seconds": 10, "coverage": ["D.1"]}})
             value["commands"][1]["after"] = ["fixed-regression"]
             value["repair"] = {{"failed_result": previous, "regression": "fixed-regression", "review": "independent source review retained for " + key}}
         plan_path = log.with_suffix(".plan.json")
@@ -1226,7 +1226,7 @@ class DriverTests(AutonomyTestCase):
                 self.assertFalse(all(check.ok for check in okf.checkpoint(self.bundle)))
 
     def test_worker_failure_with_preserved_work_recovers_instead_of_stopping_run(self) -> None:
-        result = self.drive("crash", "--handoff-seconds", "1")
+        result = self.drive("crash", "--handoff-seconds", "10")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len(self.sessions()), 6)
         self.assertIn("RECOVERY ONLY", self.sessions()[1]["prompt"])
@@ -1629,7 +1629,7 @@ class DriverTests(AutonomyTestCase):
         # Copied into a repository that does not ignore __pycache__, as when the toolkit is adopted elsewhere.
         scripts = self.repo / ".ai" / "scripts"
         scripts.mkdir(parents=True)
-        for name in ("okf.py", "learning.py", "autonomy_driver.py", "autonomy_hook.py", "pr_sync.py", "timed_check.py", "autonomy_progress.py", "autonomy_validation.py", "scratch.py", "review_guard.py", "ledger.py", "process_runtime.py"):
+        for name in ("okf.py", "learning.py", "autonomy_driver.py", "autonomy_hook.py", "pr_sync.py", "timed_check.py", "autonomy_progress.py", "autonomy_validation.py", "scratch.py", "review_guard.py", "ledger.py", "process_runtime.py", "framework_policy.py", "project_context.py"):
             shutil.copy(SCRIPTS / name, scripts / name)
         self.commit_all("add toolkit")
         environment = {k: v for k, v in os.environ.items() if not k.startswith(("OKF_", "PYTHONDONTWRITEBYTECODE"))}

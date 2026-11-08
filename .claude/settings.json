@@ -21,12 +21,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/shell_guard.py\" --skip-in-cursor",
+            "command": "b=\"$CLAUDE_PROJECT_DIR/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$CLAUDE_PROJECT_DIR/.ai/scripts/shell_guard.py\" --skip-in-cursor",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/lifecycle.py\" hook --skip-in-cursor",
+            "command": "b=\"$CLAUDE_PROJECT_DIR/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$CLAUDE_PROJECT_DIR/.ai/scripts/lifecycle.py\" hook --skip-in-cursor",
             "timeout": 10
           }
         ]
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/lifecycle.py\" hook --skip-in-cursor",
+            "command": "b=\"$CLAUDE_PROJECT_DIR/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$CLAUDE_PROJECT_DIR/.ai/scripts/lifecycle.py\" hook --skip-in-cursor",
             "timeout": 10
           }
         ]
@@ -45,7 +45,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\" hook --adapter claude",
+            "command": "b=\"$CLAUDE_PROJECT_DIR/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\" hook --adapter claude",
             "timeout": 10
           }
         ]
@@ -56,17 +56,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/autonomy_hook.py\"",
+            "command": "b=\"$CLAUDE_PROJECT_DIR/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$CLAUDE_PROJECT_DIR/.ai/scripts/autonomy_hook.py\"",
             "timeout": 30
           },
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/lifecycle.py\" hook --skip-in-cursor",
+            "command": "b=\"$CLAUDE_PROJECT_DIR/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$CLAUDE_PROJECT_DIR/.ai/scripts/lifecycle.py\" hook --skip-in-cursor",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\" hook --adapter claude",
+            "command": "b=\"$CLAUDE_PROJECT_DIR/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\" hook --adapter claude",
             "timeout": 10
           }
         ]
@@ -77,7 +77,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/autonomy_hook.py\"",
+            "command": "b=\"$CLAUDE_PROJECT_DIR/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$CLAUDE_PROJECT_DIR/.ai/scripts/autonomy_hook.py\"",
             "timeout": 30
           }
         ]
@@ -88,7 +88,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\" hook --adapter claude",
+            "command": "b=\"$CLAUDE_PROJECT_DIR/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\" hook --adapter claude",
             "timeout": 10
           }
         ]
@@ -99,7 +99,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\" hook --adapter claude",
+            "command": "b=\"$CLAUDE_PROJECT_DIR/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\" hook --adapter claude",
             "timeout": 10
           }
         ]
@@ -110,7 +110,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\" hook --adapter claude",
+            "command": "b=\"$CLAUDE_PROJECT_DIR/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\" hook --adapter claude",
             "timeout": 10
           }
         ]
@@ -121,7 +121,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\" hook --adapter claude",
+            "command": "b=\"$CLAUDE_PROJECT_DIR/.ai/scripts/posix_hook.sh\"; [ -f \"$b\" ] || { printf '%s\\n' 'AGENTIC POSIX hook: missing bootstrap; reinstall the project-local kit.' >&2; exit 2; }; exec sh \"$b\" \"$CLAUDE_PROJECT_DIR/.ai/scripts/review_native.py\" hook --adapter claude",
             "timeout": 10
           }
         ]

@@ -3,6 +3,12 @@ name: spec
 description: Use before planning or coding any new or changed behavior, contract, or ambiguous request (lifecycle tier L1 and above). Clarifies the request and writes a testable spec with acceptance criteria.
 ---
 
+**Repository identity first:** for explicit `repository_kind: framework`, keep
+intent, plans and review in chat; do not persist self-task documents, OKF,
+lifecycle or lesson records, including in Git scratch. Run tests directly and
+`framework_policy.py` for source hygiene. Skip the adopter artifact steps below.
+For adopters, follow the workflow below unchanged.
+
 Run lifecycle Stage 0 (Intent).
 
 For an existing capability, use stable namespaced IDs and a delta with target metadata, Added/Modified/Removed requirements and an approval-bound `## Target baseline` mirror/pins. Inspect the contract with `python3 .ai/scripts/okf.py show .ai/lifecycle.md --section "Brownfield deltas"`. An unstructured legacy capability needs an explicitly drafted and approved baseline first; do not infer or convert it automatically.

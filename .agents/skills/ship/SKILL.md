@@ -3,6 +3,12 @@ name: ship
 description: Use when a reviewed change is ready to deliver. Freezes the candidate on the current base, confirms gate evidence, and follows the authorized PR, keep, or discard choice.
 ---
 
+**Repository identity first:** for explicit `repository_kind: framework`, keep
+intent, plans and review in chat; do not persist self-task documents, OKF,
+lifecycle or lesson records, including in Git scratch. Run tests directly and
+`framework_policy.py` for source hygiene. Skip the adopter artifact steps below.
+For adopters, follow the workflow below unchanged.
+
 Run lifecycle Stage 5 (Ship).
 
 For delta intent, `lifecycle.py merge SPEC` belongs before Verify, with a completed receipt and current convergence. If target changes invalidate that evidence during candidate preparation, resolve and repeat the affected checks before shipping; do not perform the initial delta fold after commit. See `python3 .ai/scripts/okf.py show .ai/lifecycle.md --section "Brownfield deltas"` for dry-run and interruption recovery.

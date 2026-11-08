@@ -3,6 +3,12 @@ name: onboard
 description: Build draft architecture and capability context for an existing repository from cited implementation evidence, after scaffolding its tracked-file inventory.
 ---
 
+**Repository identity first:** for explicit `repository_kind: framework`, keep
+intent, plans and review in chat; do not persist self-task documents, OKF,
+lifecycle or lesson records, including in Git scratch. Run tests directly and
+`framework_policy.py` for source hygiene. Skip the adopter artifact steps below.
+For adopters, follow the workflow below unchanged.
+
 Use when the user requests brownfield onboarding. Run `python3 .ai/scripts/okf.py onboard` in the installed repository. It keeps existing documents and creates only absent draft inventories; it executes no repository code. Candidate paths do not establish runtime architecture, passing tests or shipped behavior.
 
 Inspect the cited source/configuration and tests with the repository's bounded file tools. Draft architecture and capability prose with claim-level citations to `sources[].resource`; distinguish observed implementation from documentation and unexecuted tests. Keep `status: draft` and `evidence: project-documentation` until stronger evidence exists. Preserve adopter-authored content; propose changes to existing documents within the user's request.
