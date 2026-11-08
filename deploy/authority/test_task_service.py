@@ -23,7 +23,7 @@ import service
 
 class TaskServiceContracts(unittest.TestCase):
     def test_authenticated_access_only_delivery_precedes_source_key_loading_and_parent(self):
-        for mode in ('normal','forged','stale-intent'):
+        for mode in ('normal','forged','stale-intent','image-failure'):
             forged = mode == 'forged'
             with self.subTest(mode=mode):
                 controller, host, _, _, keys, b, task, _, _ = fixture(False)
@@ -61,7 +61,14 @@ class TaskServiceContracts(unittest.TestCase):
                         return host.pages(route,collection)
                     def fetch(self,route,**kwargs): return historical.fetch(route,**kwargs)
                 root = AppAPI(d,records,'coding')
-                loaded, parents, uploaded = [], [], []
+                loaded, parents, images = [], [], []
+                def image_loader(deployment, guard):
+                    self.assertEqual(deployment, d)
+                    self.assertEqual(loaded, [])
+                    self.assertEqual(parents, [])
+                    guard()
+                    images.append(deployment)
+                    if mode == 'image-failure': raise Refusal('synthetic image pull failed')
                 def app_factory(identity,pem):
                     self.assertEqual((identity,pem),(d['apps']['coding'],'SYNTHETIC-CODING-ROOT'))
                     loaded.append(identity)
@@ -87,16 +94,17 @@ class TaskServiceContracts(unittest.TestCase):
                 if mode != 'normal':
                     with self.assertRaises(Refusal): service._task(env,request,'synthetic-node',clock=lambda:1503,
                         api_factory=lambda token:API(),app_factory=app_factory,token_factory=root.token_api,
-                        uploader_factory=lambda node,environment:None,parent_factory=Parent)
+                        uploader_factory=lambda node,environment:None,parent_factory=Parent,image_loader=image_loader)
                     self.assertEqual(loaded,[])
                     self.assertEqual(parents,[])
                 else:
                     result = service._task(env,request,'synthetic-node',clock=lambda:1503,
                         api_factory=lambda token:API(),app_factory=app_factory,token_factory=root.token_api,
-                        uploader_factory=lambda node,environment:None,parent_factory=Parent)
+                        uploader_factory=lambda node,environment:None,parent_factory=Parent,image_loader=image_loader)
                     self.assertEqual(result,{'fixture':'parent execution tested separately'})
                     self.assertEqual(len(parents),1)
                     self.assertEqual(len(loaded),1)
+                    self.assertEqual(images,[d])
                     self.assertEqual(set(root.revoked),set(root.visible))
 
     def test_stale_intent_negative_control_detects_removed_pre_key_guard(self):

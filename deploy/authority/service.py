@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import re
 import secrets
+import subprocess
 import sys
 import time
 from urllib.parse import quote
@@ -256,8 +257,25 @@ def _task_controls(environment, request, node, clock=None, api_factory=GitHub, a
     return dict(run_id=task['run_id'], attempt=task['attempt'], job_id=job['id'], artifact_id=artifact)
 
 
+def _prepare_task_images(deployment, guard, runner=subprocess.run):
+    from codex_harness import profile
+    from coding_transport import ENGINE_ENVIRONMENT
+    resources = profile(deployment)
+    runtime = resources.get('container_runtime', 'docker')
+    require(runtime in ('docker', 'podman'), 'approved task image engine required')
+    # Only authenticated registry pins are pulled, before candidate execution or
+    # source credential construction. The engine never inherits authority keys.
+    for image in dict.fromkeys((deployment['policy']['image'], resources['coding_image'])):
+        guard()
+        result = runner([runtime, 'pull', '--', image], env=ENGINE_ENVIRONMENT,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            timeout=120, check=False)
+        require(result.returncode == 0, 'approved task image unavailable')
+        guard()
+
+
 def _task(environment, request, node, clock=None, api_factory=GitHub, app_factory=None, token_factory=GitHub,
-          uploader_factory=NodeUploader, parent_factory=None):
+          uploader_factory=NodeUploader, parent_factory=None, image_loader=None):
     import bootstrap
     from coding_parent import Parent, TASK_REQUEST_FIELDS
     import model_vault
@@ -301,6 +319,8 @@ def _task(environment, request, node, clock=None, api_factory=GitHub, app_factor
     def guard():
         require(registry.binding() == before and clock() < min(model_task['deadline'], lease['expires'], d['expires']),
                 'task service configuration or lease ended')
+    guard()
+    (image_loader or _prepare_task_images)(d, guard)
     guard()
     root = (app_factory or bootstrap.app_api)(d['apps']['coding'], environment.get('AGENTIC_CODING_PRIVATE_KEY'))
     with _coding_source(root, api, d, identities, before['branch_head'], clock, token_factory, guard) as source:

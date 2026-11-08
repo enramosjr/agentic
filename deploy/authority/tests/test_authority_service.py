@@ -2,6 +2,7 @@
 import backend_test_support
 import copy
 import json
+import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -16,6 +17,39 @@ from test_authority_closed_artifacts import HistoricalAPI
 
 
 class ServiceContracts(unittest.TestCase):
+    def test_task_images_are_pinned_guarded_and_loaded_without_credentials(self):
+        from coding_transport import ENGINE_ENVIRONMENT
+        d = configured()
+        calls, guarded = [], []
+        def runner(argv, **kwargs):
+            calls.append((argv, kwargs))
+            self.assertEqual(len(guarded), 2 * len(calls) - 1)
+            return subprocess.CompletedProcess(argv, 0)
+        service._prepare_task_images(d, lambda: guarded.append(True), runner=runner)
+        self.assertEqual([argv for argv, _ in calls], [
+            ['docker', 'pull', '--', d['policy']['image']],
+            ['docker', 'pull', '--', d['resources']['coding_image']]])
+        self.assertEqual(len(guarded), 4)
+        for _, kwargs in calls:
+            self.assertEqual(kwargs, dict(env=ENGINE_ENVIRONMENT, stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120, check=False))
+
+    def test_failed_or_expired_image_admission_stops_before_the_next_pull(self):
+        d = configured()
+        for mode in ('pull-failure', 'expired', 'bad-runtime', 'bad-image'):
+            changed, calls, guards = copy.deepcopy(d), [], []
+            if mode == 'bad-runtime': changed['resources']['container_runtime'] = 'arbitrary-command'
+            if mode == 'bad-image': changed['resources']['coding_image'] = 'candidate:latest'
+            def guard():
+                guards.append(True)
+                if mode == 'expired' and len(guards) == 2: raise Refusal('expired fixture')
+            def runner(argv, **kwargs):
+                calls.append(argv)
+                return subprocess.CompletedProcess(argv, 1 if mode == 'pull-failure' else 0)
+            with self.subTest(mode=mode), self.assertRaises(Refusal):
+                service._prepare_task_images(changed, guard, runner=runner)
+            self.assertEqual(len(calls), 0 if mode.startswith('bad-') else 1)
+
     def test_all_fixed_public_cli_roles_hold_before_stdin_or_api(self):
         class Unreadable:
             @property

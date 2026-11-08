@@ -1,13 +1,24 @@
 # Installed only in the independent authority repository; v1 stays unchanged.
-# Setup consumers only. Production/task modes are unavailable in this held build.
-name: AGENTIC v2 credential consumers
+# All service entrypoints remain held; this is not a qualified production workflow.
+name: AGENTIC v2 authority
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: Fixed credential or protected task producer path
+        type: choice
+        options: [credentials, task]
+        default: credentials
+        required: true
       challenges:
         description: Exact seven-purpose setup challenges from the trusted native coordinator
         type: string
-        required: true
+        required: false
+        default: '{}'
+      prompt:
+        description: Bounded task text; never a command or authority selector
+        type: string
+        required: false
 permissions:
   contents: read
   actions: read
@@ -16,6 +27,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   admin_credential_proof:
+    if: inputs.mode == 'credentials'
     name: credential proof (admin)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -40,6 +52,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_ADMIN_PRIVATE_KEY: ${{ secrets.AGENTIC_ADMIN_PRIVATE_KEY }}
   reader_credential_proof:
+    if: inputs.mode == 'credentials'
     name: credential proof (reader)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -64,6 +77,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_READER_PRIVATE_KEY: ${{ secrets.AGENTIC_READER_PRIVATE_KEY }}
   issuer_credential_proof:
+    if: inputs.mode == 'credentials'
     name: credential proof (issuer)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -88,6 +102,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_ISSUER_PRIVATE_KEY: ${{ secrets.AGENTIC_ISSUER_PRIVATE_KEY }}
   coding_credential_proof:
+    if: inputs.mode == 'credentials'
     name: credential proof (coding)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -112,6 +127,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_CODING_PRIVATE_KEY: ${{ secrets.AGENTIC_CODING_PRIVATE_KEY }}
   merge_credential_proof:
+    if: inputs.mode == 'credentials'
     name: credential proof (merge)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -136,6 +152,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_MERGE_PRIVATE_KEY: ${{ secrets.AGENTIC_MERGE_PRIVATE_KEY }}
   model_vault_credential_proof:
+    if: inputs.mode == 'credentials'
     name: credential proof (model_vault)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -160,6 +177,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_MODEL_VAULT_KEY: ${{ secrets.AGENTIC_MODEL_VAULT_KEY }}
   model_delivery_credential_proof:
+    if: inputs.mode == 'credentials'
     name: credential proof (model_delivery)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -183,3 +201,111 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_MODEL_DELIVERY_KEY: ${{ secrets.AGENTIC_MODEL_DELIVERY_KEY }}
+  prepare_task:
+    if: inputs.mode == 'task'
+    name: prepare task
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      request: ${{ steps.prepare.outputs.request }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        id: prepare
+        with:
+          role: prepare-task
+          prompt: ${{ inputs.prompt }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_READER_PRIVATE_KEY: ${{ secrets.AGENTIC_READER_PRIVATE_KEY }}
+  model_auth:
+    needs: [prepare_task]
+    name: model authorization
+    permissions:
+      contents: write
+      actions: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: model-authorization
+          task: ${{ needs.prepare_task.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_MODEL_VAULT_KEY: ${{ secrets.AGENTIC_MODEL_VAULT_KEY }}
+          AGENTIC_MODEL_DELIVERY_KEY: ${{ secrets.AGENTIC_MODEL_DELIVERY_KEY }}
+  task:
+    needs: [prepare_task, model_auth]
+    name: task (${{ fromJSON(needs.prepare_task.outputs.request).task.task_id }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: task
+          task: ${{ needs.prepare_task.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_CODING_PRIVATE_KEY: ${{ secrets.AGENTIC_CODING_PRIVATE_KEY }}
+          AGENTIC_MODEL_DELIVERY_KEY: ${{ secrets.AGENTIC_MODEL_DELIVERY_KEY }}
+  task_controls:
+    needs: [prepare_task, model_auth]
+    name: task controls (${{ fromJSON(needs.prepare_task.outputs.request).task.task_id }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: task-controls
+          task: ${{ needs.prepare_task.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_ADMIN_PRIVATE_KEY: ${{ secrets.AGENTIC_ADMIN_PRIVATE_KEY }}

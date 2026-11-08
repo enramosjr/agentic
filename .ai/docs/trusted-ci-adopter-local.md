@@ -46,6 +46,20 @@ the independently approved deployment before the worker imports code. Candidate
 bytes have their own per-job digest and a separate extraction/mount tree. An
 archive checksum alone does not establish a trusted release origin.
 
+The held `.ai/trusted-ci/authority-v2.yml` has two dispatch modes. The default
+`credentials` mode retains the seven independent setup consumers. The `task`
+mode prepares one request with the reader identity, authorizes its model lease
+in a separate job, then runs coding and administrative controls concurrently.
+Only the prepared request flows through job outputs; the controls job receives
+the admin key, while coding receives only its coding and model-delivery keys.
+Only model authorization has a write-capable authority token for its encrypted
+auth-state journal; the other jobs retain read-only authority access. Before
+loading the source coding key, the task host pulls the authenticated registry's
+digest-pinned formatter and coding images with a credential-free engine environment.
+Every job checks out the authority revision, never candidate-selected code.
+The existing release holds stop all these service roles before input reads or
+authentication. Workflow wiring does not qualify execution or activate a service.
+
 ## Provider components implemented locally
 
 - GitHub: marker-free merge discovery, separate purpose-App bootstrap components,
@@ -122,9 +136,10 @@ extracting it, then create/read back the exact Git tree, single-parent commit,
 creation-only task branch and PR using the scoped coding identity. Their result
 explicitly does not establish task admission. The controlled Codex app-server
 helper receives a task capability for a worker-local relay, validates exact
-thread/turn completion and retains `model_execution_qualified: false`. The actual
-worker supervisor, initial ChatGPT-plan consent and admission integration
-remain unfinished. Encrypted vault/access leases, signature-verified identity,
+thread/turn completion and retains `model_execution_qualified: false`. The parent
+supervisor composes cleanup, readiness and separate administrative readback before
+submission. Guided onboarding, initial ChatGPT-plan consent and hosted task
+qualification remain unfinished. Encrypted vault/access leases, signature-verified identity,
 separate Git auth-state CAS and dedicated-job refresh management have local
 fixture evidence. Unknown refresh outcomes remain pending rather than retrying a
 grant. No login, credential export or model call occurred.
@@ -155,7 +170,7 @@ convergence/review. The new repository software installer does not itself comple
 that journey or revoke registered Apps/cloud resources.
 
 Privileged setup, live GitHub registration, all hosted executions, live
-qualification, publication and activation remain blocked. No AWS/Azure accounts
-or trusted setup context are available. Adopters own any future resources and
+qualification, publication and activation remain blocked in this build. Separate
+trusted setup and adopter test accounts are required. Adopters own resources and
 usage; AGENTIC does not fund or operate a shared service. There is no hard billing
 cap, and Azure NAT/public-IP resources can incur idle charges if later deployed.
