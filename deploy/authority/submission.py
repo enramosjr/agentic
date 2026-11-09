@@ -109,7 +109,14 @@ def capture_source(api, deployment, base, guard=lambda: None):
     require(repository.get('id') == p['repository_id'] and repository.get('default_branch') == p['target'] and
             existing_ref(api, root, p['target']) == base, 'task source repository or target changed')
     commit = api.get(root + '/git/commits/' + base)
-    tree = tree_files(api, root, commit['tree']['sha'])
+    files = _read_tree(api, root, commit['tree']['sha'], guard)
+    require(existing_ref(api, root, p['target']) == base, 'task target moved during source capture')
+    return pack_export(files)
+
+
+def _read_tree(api, root, revision, guard):
+    """Bounded authenticated blobs shared by capture and exact completion recovery."""
+    tree = tree_files(api, root, revision)
     files, total = {}, 0
     for name, entry in tree.items():
         guard()
@@ -126,8 +133,7 @@ def capture_source(api, deployment, base, guard=lambda: None):
                 'source blob digest or size differs')
         files[name] = dict(content=raw, executable=entry['mode'] == '100755')
     guard()
-    require(existing_ref(api, root, p['target']) == base, 'task target moved during source capture')
-    return pack_export(files)
+    return files
 
 
 def tree_files(api, root, tree):

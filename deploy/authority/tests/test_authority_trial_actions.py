@@ -1,0 +1,36 @@
+"""Native trial producers share pins but keep job credential purposes separate."""
+import re
+import unittest
+import test_authority_task_workflow as tasks
+
+
+class TrialActions(unittest.TestCase):
+    setUp = tasks.TaskWorkflowContracts.setUp
+
+    def test_trial_mode_has_handshake_then_native_binding_before_producers(self):
+        self.assertIn('options: [credentials, task, production, qualification]', self.workflow)
+        self.assertIn("if: inputs.mode == 'qualification'", self.jobs['trial_handoff'])
+        self.assertIn('needs: [trial_handoff]', self.jobs['trial_prepare'])
+        self.assertIn('name: trial preparation', self.jobs['trial_prepare'])
+        for role in ('model_auth', 'admin_proof', 'reader_proof', 'issuer_proof', 'coding_proof', 'merge_proof'):
+            self.assertIn('needs: [trial_prepare]', self.jobs['trial_' + role])
+
+    def test_worker_and_controls_follow_all_closed_producers_and_run_in_parallel(self):
+        expected = '[trial_prepare, trial_model_auth, trial_admin_proof, trial_reader_proof, trial_issuer_proof, trial_coding_proof, trial_merge_proof]'
+        for job in ('qualification', 'trial_task_controls'):
+            self.assertIn('needs: ' + expected, self.jobs[job])
+            self.assertIn('task: ${{ needs.trial_prepare.outputs.request }}', self.jobs[job])
+        self.assertIn('name: hosted qualification', self.jobs['qualification'])
+        self.assertIn('name: trial task controls (${{ fromJSON(needs.trial_prepare.outputs.request).task.task_id }})',
+                      self.jobs['trial_task_controls'])
+
+    def test_each_trial_job_receives_only_its_purpose_and_scoped_origin_read(self):
+        expected = dict(trial_handoff=set(), trial_prepare=set(), trial_model_auth={'AGENTIC_MODEL_VAULT_KEY','AGENTIC_MODEL_DELIVERY_KEY'},
+            qualification={'AGENTIC_CODING_PRIVATE_KEY','AGENTIC_MODEL_DELIVERY_KEY'}, trial_task_controls={'AGENTIC_ADMIN_PRIVATE_KEY'},
+            **{'trial_' + p + '_proof':{'AGENTIC_' + p.upper() + '_PRIVATE_KEY'} for p in ('admin','reader','issuer','coding','merge')})
+        for name, keys in expected.items():
+            block = self.jobs[name]
+            self.assertEqual(set(re.findall(r'secrets\.(AGENTIC_[A-Z_]+)', block)), keys | {'AGENTIC_TRIAL_ORIGIN_TOKEN'})
+            self.assertIn('ref: ${{ github.sha }}', block)
+            self.assertIn('persist-credentials: false', block)
+            self.assertNotIn('continue-on-error', block)

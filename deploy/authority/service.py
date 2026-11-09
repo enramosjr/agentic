@@ -22,7 +22,7 @@ from artifact_uploader import NodeUploader
 import authority_release
 from registry import Registry
 import setup
-from trusted_ci_github import GitHub
+from trusted_ci_github import GitHub, HostRefusal
 from trusted_ci_policy import Refusal, digest, loads, object_fields, positive, require, sha
 
 
@@ -341,6 +341,175 @@ def _task(environment, request, node, clock=None, api_factory=GitHub, app_factor
 
 PRODUCER_ROLES = ('discover', 'prepare', 'verify', 'publication-controls', 'publish',
                   'proof', 'broker', 'controls', 'final-proof', 'finalize')
+TRIAL_ROLES = ('trial-handoff', 'trial-prepare', 'trial-model', 'trial-proof', 'trial-worker', 'trial-controls')
+
+
+def _trial_evidence(api, context):
+    """Locate exact closed producers; their domain validators authenticate contents."""
+    import provenance
+    task, d = context.task, context.record['trial']['deployment']
+    root = '/repos/' + d['policy']['authority_repository'] + '/actions/runs/' + str(task['run_id'])
+    jobs = api.pages(root + '/attempts/' + str(task['attempt']) + '/jobs', 'jobs')
+    artifacts = api.pages(root + '/artifacts', 'artifacts')
+    require(isinstance(jobs, list) and isinstance(artifacts, list) and len(jobs) <= 10000 and len(artifacts) <= 10000,
+            'bounded exact trial producer inventory required')
+    def locator(role, key, job_name):
+        producer = provenance.execution_job(api, d, task['run_id'], task['attempt'], job_name, completed=True)
+        matches = [a for a in artifacts if a.get('name') == role + '-' + key + '-' + str(task['attempt'])]
+        require(len(matches) == 1 and positive(matches[0].get('id')), 'missing or ambiguous closed trial producer')
+        return dict(run_id=task['run_id'], attempt=task['attempt'], job_id=producer['id'], artifact_id=matches[0]['id'])
+    return locator('model-lease', task['task_id'], 'model authorization'), {
+        p:locator('proof', p, 'proof (' + p + ')') for p in setup.PURPOSES}
+
+
+def _trial(environment, request, node, role, clock=None, api_factory=GitHub, app_factory=None,
+           token_factory=GitHub, uploader_factory=NodeUploader, root=None, store_factory=None,
+           image_loader=None, execution=None, sleep=time.sleep):
+    """Fixed native qualification graph; never production task or review admission."""
+    authority_release.authorize('protected-run')
+    import bootstrap
+    import private_setup
+    import provenance
+    import trial_handoff
+    from trial_admission import Admission
+    from trial_controls import Controls
+    from trial_worker import Worker
+    clock = clock or (lambda:int(time.time()))
+    require(role in TRIAL_ROLES, 'fixed trial role required')
+    trial_purpose = next((p for p in setup.PURPOSES if environment.get('GITHUB_JOB') == 'trial_' + p + '_proof'), None)
+    allowed = ({'AGENTIC_MODEL_VAULT_KEY', 'AGENTIC_MODEL_DELIVERY_KEY'} if role == 'trial-model' else
+        {'AGENTIC_CODING_PRIVATE_KEY', 'AGENTIC_MODEL_DELIVERY_KEY'} if role == 'trial-worker' else
+        {'AGENTIC_ADMIN_PRIVATE_KEY'} if role == 'trial-controls' else
+        {'AGENTIC_' + trial_purpose.upper() + '_PRIVATE_KEY'} if role == 'trial-proof' and trial_purpose else set())
+    forbidden = set(setup.CREDENTIAL_NAMES) - allowed | {'GH_TOKEN', 'OPENAI_API_KEY', 'AWS_ACCESS_KEY_ID',
+        'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'AZURE_CLIENT_SECRET', 'ARM_CLIENT_SECRET'}
+    require(not any(environment.get(k) for k in forbidden), 'trial producer inherited another purpose credential')
+    token = environment.get(setup.TrialReadStaging.NAME)
+    require(isinstance(token, str) and 0 < len(token) <= 16384, 'native staged origin-read capability required')
+    origin_reader = api_factory(token)
+    api, registry, before, identities = context(environment, api_factory)
+    if role == 'trial-handoff':
+        document = trial_handoff.consume(registry, api, environment, request, origin_reader, clock)
+        artifact = uploader_factory(node, environment)('trial-handoff-' + document['task_id'] + '-' + str(document['attempt']),
+            json.dumps(document, sort_keys=True, allow_nan=False).encode())
+        require(positive(artifact), 'trial handshake upload acknowledgement unknown; never replay')
+        return dict(run_id=document['run_id'], attempt=document['attempt'], job_id=document['job_id'], artifact_id=artifact)
+    if role == 'trial-prepare':
+        object_fields(request, ('handoff', 'prompt'), 'native trial preparation hints')
+        hint = request['handoff']
+        object_fields(hint, ('origin', 'revision'), 'native handoff lookup')
+        original = Registry(origin_reader, hint['origin'])
+        initial, origin = trial_handoff.read(original, hint['revision'], clock())
+        require(initial['execution'] is None and before == initial['trial'] and
+                digest(request['prompt']) == initial['prompt_digest'], 'native trial preparation intent differs')
+        provenance.admit_job(api, before['deployment'], environment, 'trial preparation', clock())
+        deadline = time.monotonic() + min(300, initial['expires'] - clock())
+        while True:
+            original.unchanged(origin)
+            registry.unchanged(before)
+            require(time.monotonic() < deadline and clock() < initial['expires'], 'native run binding remains pending')
+            try:
+                original.ref('agentic-trial-' + initial['task_id'] + '-execution')
+                break
+            except HostRefusal as error:
+                require(error.status == 404, 'native run binding observation unavailable')
+            sleep(0.25)
+        admitted = trial_handoff.Hosted(registry, origin_reader, api, environment, hint, request['prompt'], clock)
+        return dict(schema_version=2, handoff=hint, task=admitted.task, prompt=request['prompt'],
+            source_base=admitted.record['pair']['fixture_revision'], configuration_revision=before['configuration_revision'],
+            deployment_digest=before['deployment_digest'])
+    object_fields(request, ('schema_version', 'handoff', 'task', 'prompt', 'source_base', 'configuration_revision',
+                            'deployment_digest'), 'native prepared trial request')
+    admitted = trial_handoff.Hosted(registry, origin_reader, api, environment, request['handoff'], request['prompt'], clock)
+    expected = dict(schema_version=2, handoff=request['handoff'], task=admitted.task, prompt=request['prompt'],
+        source_base=admitted.record['pair']['fixture_revision'], configuration_revision=before['configuration_revision'],
+        deployment_digest=before['deployment_digest'])
+    require(request == expected, 'prepared trial request differs from authenticated native binding')
+    if role == 'trial-model':
+        require(environment.get('GITHUB_JOB') == 'trial_model_auth', 'separate trial model authorization required')
+        admitted.guard()
+        from trial_configuration import _Boundary
+        from oauth_transport import OpenAI
+        guarded = _Boundary(api, admitted.guard, admitted.local_guard)
+        def uploader(node, environment):
+            target = uploader_factory(node, environment)
+            def send(*args):
+                admitted.guard()
+                value = target(*args)
+                admitted.guard()
+                return value
+            return send
+        result = _model_authorization(environment, admitted.task, node, clock, lambda token:guarded, uploader,
+            provider=_Boundary(OpenAI(), admitted.guard, admitted.local_guard), expected_binding=before)
+        admitted.guard()
+        return result
+    if role == 'trial-proof':
+        require(trial_purpose is not None, 'fixed trial own-App proof purpose required')
+        app = (app_factory or bootstrap.app_api)(before['deployment']['apps'][trial_purpose],
+            environment.get('AGENTIC_' + trial_purpose.upper() + '_PRIVATE_KEY'))
+        class GuardedApp:
+            def get(self, path):
+                admitted.local_guard()
+                return app.get(path)
+            def post(self, path, body):
+                admitted.guard()
+                value = app.post(path, body)
+                try: admitted.guard()
+                except BaseException:
+                    app_proofs.revoke(value, token_factory)
+                    raise
+                return value
+        admitted.guard()
+        document = app_proofs.prove(GuardedApp(), api, before['deployment'], identities, trial_purpose, before['branch_head'], clock(), token_factory)
+        admitted.guard()
+        artifact = uploader_factory(node, environment)('proof-' + trial_purpose + '-' + str(admitted.task['attempt']),
+            json.dumps(document, sort_keys=True, allow_nan=False).encode())
+        admitted.guard()
+        require(positive(artifact), 'trial own-App proof upload acknowledgement unknown; never replay')
+        return dict(run_id=admitted.task['run_id'], attempt=admitted.task['attempt'], job_id=admitted.job['id'], artifact_id=artifact)
+    model, proofs = _trial_evidence(api, admitted)
+    purpose = 'coding' if role == 'trial-worker' else 'admin'
+    require((role, environment.get('GITHUB_JOB')) in (('trial-worker', 'qualification'),
+            ('trial-controls', 'trial_task_controls')), 'fixed trial worker or independent controls required')
+    if role == 'trial-worker':
+        # Authenticate/decrypt before coding-root construction; model refresh keys
+        # belong only to the separate auth job. The container gets only the relay.
+        import model_vault
+        model_vault.read_delivery(api, before, admitted.task, model, environment.get('AGENTIC_MODEL_DELIVERY_KEY'), clock())
+    root = Path(root) if root is not None else Path.home() / ('.agentic-trial-' + str(before['deployment']['policy']['authority_repository_id']) +
+        '-' + str(admitted.task['run_id']) + '-' + str(admitted.task['attempt']) + '-' + str(admitted.job['id']))
+    store_factory = store_factory or private_setup.Store
+    store_factory(root)  # Establish the private parent before purpose children.
+    upload = uploader_factory(node, environment)
+    controls = None
+    if role == 'trial-controls':
+        controls = Controls.hosted(registry, origin_reader, api, root, clock, environment, request['handoff'], request['prompt'],
+                                  model, proofs, store_factory)
+        import task_control_protocol
+        task_control_protocol.wait_ready(controls, api, before, controls.request, clock, admitted.guard)
+    app = (app_factory or bootstrap.app_api)(before['deployment']['apps'][purpose],
+        environment.get('AGENTIC_' + purpose.upper() + '_PRIVATE_KEY'))
+    with _source_token(purpose, app, api, before['deployment'], identities, before['branch_head'], clock,
+                       token_factory, admitted.guard) as source:
+        class Readback:
+            def get(self, path):
+                admitted.local_guard()
+                if path == '/repos/' + before['deployment']['policy']['authority_repository']: return api.get(path)
+                return source.get(path)
+            def pages(self, path, *args):
+                admitted.local_guard()
+                return source.pages(path, *args)
+            def fetch(self, path, **kwargs):
+                admitted.local_guard()
+                return source.fetch(path, **kwargs)
+        if controls is not None:
+            return controls.collect(Readback(), environment, upload)
+        admission = Admission.hosted(registry, origin_reader, api, Readback(), root, clock, environment, request['handoff'],
+            request['prompt'], model, proofs, environment.get('AGENTIC_MODEL_DELIVERY_KEY'), store_factory)
+        (image_loader or _prepare_task_images)(before['deployment'], admission._guard)
+        admission._guard()
+        return Worker(admission, source)._run(request['prompt'], environment.get('AGENTIC_MODEL_DELIVERY_KEY'),
+            upload, None, **(execution or {}))
 PRODUCER_FIELDS = ('schema_version configuration_revision deployment_digest operation_id sequence snapshot task qualification').split()
 
 
@@ -743,7 +912,7 @@ def _finalize(environment, request, node=None, clock=None, api_factory=GitHub, a
 
 def main():
     # Hold before stdin reads, API construction, root-key loading or SDK import.
-    require(len(sys.argv) == 3 and sys.argv[1] in ('credential', 'prepare-task', 'model-authorization', 'task', 'task-controls') + PRODUCER_ROLES,
+    require(len(sys.argv) == 3 and sys.argv[1] in ('credential', 'prepare-task', 'model-authorization', 'task', 'task-controls') + PRODUCER_ROLES + TRIAL_ROLES,
             'fixed authority role required')
     role = sys.argv[1]
     authority_release.authorize('bootstrap' if role == 'credential' else
@@ -751,7 +920,10 @@ def main():
     raw = sys.stdin.buffer.read(65537)
     require(0 < len(raw) <= 65536, 'bounded credential challenge required')
     request = loads(raw)
-    if role in ('prepare-task','discover','prepare'):
+    if role in TRIAL_ROLES:
+        result = _trial(os.environ, request, sys.argv[2], role)
+        if role == 'trial-prepare': print(json.dumps(result, sort_keys=True, allow_nan=False))
+    elif role in ('prepare-task','discover','prepare'):
         handler = {'prepare-task':_prepare_task,'discover':_discover,'prepare':_prepare}[role]
         print(json.dumps(handler(os.environ,request),sort_keys=True,allow_nan=False))
     elif role == 'finalize':

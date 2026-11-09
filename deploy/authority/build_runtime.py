@@ -29,6 +29,8 @@ FILES = (
     'oauth_transport.py', 'operation_fence.py', 'private_setup.py', 'provenance.py', 'qualification_record.py',
     'reconcile.py', 'registration.py', 'registry.py', 'repository.py', 'service.py', 'setup.py', 'submission.py',
     'task_admission.py', 'task_controls.py', 'task_control_protocol.py', 'transition.py', 'worker_facts.py', 'requirements-auth.txt', 'requirements-aws.txt',
+    'operator_setup.py', 'trial_setup.py', 'trial_configuration.py', 'trial_admission.py',
+    'trial_handoff.py', 'trial_controls.py', 'trial_worker.py',
     'artifact_upload/action.yml', 'artifact_upload/action.mjs', 'artifact_upload/cli.mjs',
     'artifact_upload/upload.mjs', 'artifact_upload/package.json', 'artifact_upload/package-lock.json',
 ))

@@ -46,6 +46,7 @@ class Worker:
             require(not cancelled(), 'trial worker cancelled')
             require(state.get('phase') == 'complete', 'trial worker outcome pending; never replay execution or upload')
             return copy.deepcopy(state['result'])
+        if c._hosted is not None: approve = c._hosted.approve_worker
         require(callable(approve) and approve(copy.deepcopy(preview)) == digest(preview),
                 'exact trial worker prompt consent required')
         c._guard()

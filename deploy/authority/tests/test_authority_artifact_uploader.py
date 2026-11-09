@@ -15,6 +15,9 @@ import merge_receipts
 
 
 class UploadChildContracts(unittest.TestCase):
+    def test_native_trial_documents_keep_distinct_fixed_members(self):
+        for role in ('trial-handoff', 'trial-task', 'trial-task-ready', 'trial-task-controls'):
+            self.assertEqual(artifact_uploader.document_member(role + '-' + 'a' * 32 + '-1'), role + '.json')
     def environment(self):
         return dict(os.environ, ACTIONS_RUNTIME_TOKEN='SYNTHETIC-ARTIFACT-CAP',
             ACTIONS_RESULTS_URL='https://results-receiver.actions.githubusercontent.com',

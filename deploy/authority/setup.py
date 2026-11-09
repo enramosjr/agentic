@@ -10,7 +10,7 @@ import re
 
 import authority_release
 from trusted_ci_github import HostRefusal
-from trusted_ci_policy import digest, object_fields, positive, require, sha
+from trusted_ci_policy import Refusal, digest, object_fields, positive, require, sha
 from repository import Repository, valid_path
 
 
@@ -194,6 +194,140 @@ class _FreshInstallation:
 PURPOSES = ('admin', 'reader', 'issuer', 'coding', 'merge')
 CREDENTIAL_NAMES = tuple('AGENTIC_' + p.upper() + '_PRIVATE_KEY' for p in PURPOSES) + (
     'AGENTIC_MODEL_VAULT_KEY', 'AGENTIC_MODEL_DELIVERY_KEY')
+
+
+class TrialReadStaging:
+    """Stage one expiring original-authority reader token, never its root key.
+
+    A secret acknowledgement is not consumption proof. The dispatch coordinator
+    must authenticate its exact closed consumer before binding execution.
+    """
+    NAME = 'AGENTIC_TRIAL_ORIGIN_TOKEN'
+
+    def __init__(self, provision, registry, revision, reader, token_factory):
+        self.provision, self.registry, self.revision = provision, registry, revision
+        self.reader, self.token_factory = reader, token_factory
+
+    def run(self):
+        authority_release.authorize('bootstrap')
+        import app_proofs
+        import trial_handoff
+        from trial_setup import Provision
+        from trusted_ci_deployment import timestamp
+        c = self.provision
+        require(isinstance(c, Provision), 'actual completed native trial provision required')
+        publication = c.store(c.root / 'handoff').read()
+        require(publication is not None and publication['value']['phase'] == 'published' and
+                publication['value']['revision'] == self.revision, 'retained native handoff publication required')
+        record, origin = trial_handoff.read(c.session.registry, self.revision, c.clock())
+        require(publication['value']['record'] == record and publication['value']['approval'] == digest(record) and
+                c.completed() == record['pair'], 'native handoff consent or completed pair differs')
+        session, original = c.session, c.session.registry
+        ownership = copy.deepcopy((session.operation_id, session.sequence, session.owner, session.scope, session.software))
+        expected = tuple(origin[k] for k in ('configuration_revision', 'deployment_digest', 'branch_head'))
+        provision_document = copy.deepcopy(c.document)
+        journal = c.store(c.root / 'trial-read-staging')
+        document = journal.read()
+        branch = 'agentic-trial-' + record['task_id']
+        def guard():
+            require(c.session is session and session.registry is original and session.expected == expected and
+                    (session.operation_id, session.sequence, session.owner, session.scope, session.software) == ownership and
+                    c.journal.read() == provision_document and c.document == provision_document and
+                    c.store(c.root / 'handoff').read() == publication and journal.read() == document and
+                    record['created'] <= c.clock() < record['expires'], 'native trial delegation changed or expired')
+            session._owned(origin)
+            original_branch = original.unchanged(origin)
+            self.registry.unchanged(record['trial'])
+            require(original.ref(original.coordinates['registry_branch']) == origin['branch_head'] and
+                    original.ref(original_branch) == origin['software_revision'] and
+                    original.ref(branch) == self.revision, 'original pointers moved during final trial observation')
+            require(c.journal.read() == provision_document and journal.read() == document and
+                    c.store(c.root / 'handoff').read() == publication and c.clock() < record['expires'],
+                    'native delegation authorization changed during readback')
+        self._guard = guard
+        guard()
+        if document is None:
+            inventory = c.api.pages(self.registry.root + '/actions/secrets', 'secrets')
+            require(isinstance(inventory, list) and len(inventory) <= 10000 and
+                    all(isinstance(v, dict) and isinstance(v.get('name'), str) for v in inventory) and
+                    not any(v['name'].upper() == self.NAME for v in inventory), 'unowned origin-read secret already exists')
+            guard()
+            document = journal.write(None, dict(revision=self.revision, phase='prepared', credential=None))
+        state = copy.deepcopy(document['value'])
+        object_fields(state, ('revision', 'phase', 'credential'), 'native trial read staging')
+        require(state['revision'] == self.revision and state['phase'] in
+                ('prepared', 'mint-started', 'minted', 'secret-started', 'staged'), 'retained trial delegation differs')
+        if state['phase'] == 'prepared':
+            identities = app_proofs.load_identities(origin['deployment'])
+            app_proofs.authenticate(self.reader, original.api, origin['deployment'], identities, 'reader')
+            guard()
+            state['phase'] = 'mint-started'
+            document = journal.write(document, state)
+            guard()
+            response = self.reader.post('/app/installations/' + str(identities['apps']['reader']['installation_id']) +
+                '/access_tokens', dict(repository_ids=[original.coordinates['repository_id']], permissions=dict(contents='read')))
+            try:
+                require(isinstance(response.get('token'), str) and response['token'] and
+                        app_proofs.normalized(response.get('permissions')) == dict(contents='read') and
+                        [v['id'] for v in response.get('repositories', [])] == [original.coordinates['repository_id']],
+                        'delegated token scope differs from original authority contents-read')
+                expires = int(timestamp(response['expires_at']).timestamp())
+                require(c.clock() < expires <= c.clock() + 3600, 'delegated token must be short-lived')
+                guard()
+                scoped = self.token_factory(response['token'])
+                require([v['id'] for v in scoped.pages('/installation/repositories', 'repositories')] ==
+                        [original.coordinates['repository_id']], 'delegated read token reaches another repository')
+                guard()
+                state.update(phase='minted', credential=dict(token=response['token'], expires=expires))
+                document = journal.write(document, state)
+            except BaseException:
+                app_proofs.revoke(response, self.token_factory)
+                raise
+        require(state['credential'] is not None, 'delegated token mint remains unknown; never mint another')
+        credential = state['credential']
+        require(c.clock() < min(record['expires'], credential['expires']), 'retained origin-read token expired')
+        if state['phase'] == 'minted':
+            guard()
+            actor = c.gh.api('/user')
+            require(actor.get('type') == 'User' and actor.get('id') == c.preview['fixture']['operator_id'],
+                    'delegated secret writer differs from native operator')
+            guard()
+            state['phase'] = 'secret-started'
+            document = journal.write(document, state)
+            try:
+                guard()
+                c.gh.secret(record['pair']['authority_repository'], self.NAME, credential['token'])
+                guard()
+            except Refusal:
+                app_proofs.revoke(credential, self.token_factory)
+                raise
+            state['phase'] = 'staged'
+            document = journal.write(document, state)
+        guard()
+        return dict(revision=self.revision, repository_id=original.coordinates['repository_id'],
+            permissions=dict(contents='read'), token_digest=digest(credential['token']),
+            expires=min(record['expires'], credential['expires']))
+
+    def revoke(self):
+        """Cleanup stays available after expiry; it never mints or stages another token."""
+        authority_release.authorize('bootstrap')
+        import app_proofs
+        from trial_setup import Provision
+        require(isinstance(self.provision, Provision), 'actual native trial purpose required for cleanup')
+        journal = self.provision.store(self.provision.root / 'trial-read-staging')
+        document = journal.read()
+        require(document is not None and document['value']['revision'] == self.revision and
+                document['value']['credential'] is not None, 'retained exact delegated token required')
+        state = copy.deepcopy(document['value'])
+        if state['phase'] == 'revoked': return
+        state['phase'] = 'revoke-started'
+        document = journal.write(document,state)
+        try:
+            app_proofs.revoke(state['credential'],self.token_factory)
+        except HostRefusal as error:
+            require(error.status == 401, 'delegated token revocation remains unknown')
+        state['phase'] = 'revoked'
+        journal.write(document,state)
 
 
 class RuntimePins:

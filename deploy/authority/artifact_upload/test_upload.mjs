@@ -53,6 +53,7 @@ await assert.rejects(readyContract(async (actual, ...rest) => {
   return upload(actual, ...rest);
 }), /deliberately rejected readiness/);
 const documents = [
+  ...['trial-handoff','trial-task','trial-task-ready','trial-task-controls'].map(role=>[`${role}-${'a'.repeat(32)}-1`,`${role}.json`]),
   ['evidence-7-1', 'evidence.json'], ['controls-7-1', 'controls.json'],
   ['publication-controls-7-1', 'publication-controls.json'],
   ['task-' + 'a'.repeat(32) + '-1', 'task.json'], ['qualification-1', 'qualification.json'],

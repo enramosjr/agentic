@@ -13,7 +13,7 @@ class ProducerWorkflowContracts(unittest.TestCase):
         self.jobs = dict(zip(parts[1::2], parts[2::2]))
 
     def test_preliminary_proofs_follow_verification_and_publication_has_own_admin_job(self):
-        self.assertIn('options: [credentials, task, production]', self.workflow)
+        self.assertIn('options: [credentials, task, production, qualification]', self.workflow)
         self.assertIn("if: inputs.mode == 'production'", self.jobs['discover'])
         self.assertIn('needs: [discover]', self.jobs['prepare'])
         self.assertIn('role: prepare', self.jobs['prepare'])

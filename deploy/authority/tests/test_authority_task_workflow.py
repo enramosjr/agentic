@@ -15,7 +15,7 @@ class TaskWorkflowContracts(unittest.TestCase):
 
     def test_modes_preserve_existing_credential_dispatch_and_separate_task_secrets(self):
         self.assertIn('default: credentials', self.workflow)
-        self.assertIn('options: [credentials, task, production]', self.workflow)
+        self.assertIn('options: [credentials, task, production, qualification]', self.workflow)
         for purpose in ('admin', 'reader', 'issuer', 'coding', 'merge', 'model_vault', 'model_delivery'):
             block = self.jobs[purpose + '_credential_proof']
             self.assertIn("if: inputs.mode == 'credentials'", block)
@@ -70,7 +70,7 @@ class TaskWorkflowContracts(unittest.TestCase):
     def test_only_model_authorization_can_persist_its_auth_state(self):
         self.assertIn('    permissions:\n      contents: write\n      actions: read', self.jobs['model_auth'])
         for name, block in self.jobs.items():
-            if name != 'model_auth':
+            if name not in ('model_auth', 'trial_model_auth'):
                 self.assertNotIn('contents: write', block)
 
 

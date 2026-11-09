@@ -48,19 +48,24 @@ def admit_job(api, d, environment, name, now):
     require(environment.get('GITHUB_REPOSITORY_ID') == str(p['authority_repository_id']) and
             environment.get('GITHUB_SHA') == p['workflow_sha'], 'not the pinned authority environment')
     key = {'discover': 'discover', 'prepare': 'prepare', 'hosted qualification': 'qualification',
-           'model authorization': 'model_auth', 'prepare task': 'prepare_task'}.get(name)
+           'model authorization': 'model_auth', 'prepare task': 'prepare_task', 'trial handoff': 'trial_handoff',
+           'trial preparation':'trial_prepare'}.get(name)
     matrix = re.fullmatch(r'(verify|controls|publish|broker|publication controls) \([1-9][0-9]{0,19}\)', name)
     proof = re.fullmatch(r'(proof|final proof) \((admin|reader|issuer|coding|merge)\)', name)
     if matrix:
         key = matrix.group(1).replace(' ', '_')
     elif proof:
         key = proof.group(2) + ('_final_proof' if proof.group(1) == 'final proof' else '_proof')
+        if d['state'] == 'qualification' and proof.group(1) == 'proof' and environment.get('GITHUB_JOB') == 'trial_' + key:
+            key = 'trial_' + key
     elif credential:
         key = credential.group(1) + '_credential_proof'
     elif task:
         key = 'task'
     elif task_controls:
         key = 'task_controls'
+    if name == 'model authorization' and d['state'] == 'qualification' and environment.get('GITHUB_JOB') == 'trial_model_auth':
+        key = 'trial_model_auth'
     require(key is not None and environment.get('GITHUB_JOB') == key,
             'current authority job key differs from expected role')
     values = [environment.get(key, '') for key in ('GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT')]
@@ -133,9 +138,9 @@ def _authenticated_document(api, d, locator, role, key, now, live=False):
             'current authority artifact coordinates required')
     require(role in ('evidence', 'controls', 'publication-controls', 'proof', 'final-proof', 'task', 'task-ready', 'task-controls',
                     'model-lease', 'qualification', 'credential-proof', 'trial-task', 'trial-task-ready',
-                    'trial-task-controls') and live == (role in ('task-ready', 'trial-task-ready')),
+                    'trial-task-controls', 'trial-handoff') and live == (role in ('task-ready', 'trial-task-ready')),
             'unknown authority producer role')
-    if role.startswith('trial-task'):
+    if role.startswith('trial-'):
         require(d['state'] == 'qualification' and d['qualification'] is None and
                 isinstance(key, str) and re.fullmatch('[0-9a-f]{32}', key), 'unqualified trial producer required')
     if role in ('evidence', 'controls', 'publication-controls'):
@@ -154,6 +159,8 @@ def _authenticated_document(api, d, locator, role, key, now, live=False):
     elif role in ('trial-task', 'trial-task-ready', 'trial-task-controls'):
         job_name = 'trial task controls (' + key + ')' if role == 'trial-task-controls' else 'hosted qualification'
         prefix = role + '-' + key
+    elif role == 'trial-handoff':
+        job_name, prefix = 'trial handoff', 'trial-handoff-' + key
     elif role == 'credential-proof':
         require(key in ('admin', 'reader', 'issuer', 'coding', 'merge', 'model_vault', 'model_delivery'),
                 'unknown credential producer')

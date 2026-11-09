@@ -10,7 +10,7 @@ import authority_release
 import provenance
 import task_control_protocol as protocol
 import task_controls
-from trial_admission import Admission
+from trial_admission import Admission, ControlAdmission
 from trusted_ci_policy import digest, object_fields, require
 
 
@@ -20,9 +20,19 @@ class Controls:
     live_readiness = staticmethod(provenance.live_trial_readiness)
 
     def __init__(self, admission, request):
-        require(isinstance(admission, Admission), 'native trial admission required')
+        require(isinstance(admission, (Admission, ControlAdmission)), 'authenticated trial admission required')
         self.admission, self.request = admission, copy.deepcopy(request)
         self._request(request, admission.binding, admission.clock())
+
+    @classmethod
+    def hosted(cls, registry, origin_reader, authority, root, clock, environment, hint, prompt, model, proofs,
+               store_factory):
+        authority_release.authorize('protected-run')
+        admission = ControlAdmission(registry, origin_reader, authority, root, clock, environment, hint, prompt,
+                                     model, proofs, store_factory)
+        request = dict(schema_version=2, task=admission.intent['task'], prompt=prompt,
+            **{k:admission.intent[k] for k in ('source_base', 'configuration_revision', 'deployment_digest')})
+        return cls(admission, request)
 
     def _request(self, request, binding, now):
         c = self.admission
@@ -51,14 +61,28 @@ class Controls:
         authority_release.authorize('protected-run')
         c, task = self.admission, self.request['task']
         c._guard()
-        worker = c.store(c.root / 'worker').read()
+        remote = isinstance(c, ControlAdmission)
+        worker = None if remote else c.store(c.root / 'worker').read()
         intent = dict(kind='trial-worker', admission_digest=digest(c.intent), request=self.request)
-        require(worker is not None and worker['value'].get('intent') == intent and
+        require(remote or worker is not None and worker['value'].get('intent') == intent and
                 worker['value'].get('approval') == digest(intent) and worker['value'].get('phase') == 'execution-started',
                 'retained exact worker consent required before trial control observation')
+        location, readiness, ready_metadata = None, None, None
+        def metadata():
+            root = '/repos/' + c.binding['deployment']['policy']['authority_repository'] + '/actions/runs/' + str(task['run_id'])
+            values = [a for a in c.authority.pages(root + '/artifacts', 'artifacts') if a.get('id') == location['artifact_id']]
+            require(len(values) == 1 and values[0].get('expired') is False, 'exact cleanup readiness metadata required')
+            return values[0]
         def guard():
             c._worker_configuration()
-            require(c.store(c.root / 'worker').read() == worker, 'worker consent changed during trial control readback')
+            if remote:
+                if location is not None:
+                    job = provenance.execution_job(c.authority, c.binding['deployment'], task['run_id'], task['attempt'], 'hosted qualification')
+                    require(job['id'] == location['job_id'] and metadata() == ready_metadata,
+                            'authenticated cleanup readiness producer or immutable artifact changed')
+                    self.validate_ready(readiness, self.request, c.binding, c.clock())
+            else:
+                require(c.store(c.root / 'worker').read() == worker, 'worker consent changed during trial control readback')
         p = c.binding['deployment']['policy']
         expected = dict(GITHUB_REPOSITORY_ID=str(p['authority_repository_id']), GITHUB_SHA=p['workflow_sha'],
                         GITHUB_RUN_ID=str(task['run_id']), GITHUB_RUN_ATTEMPT=str(task['attempt']),
@@ -68,6 +92,9 @@ class Controls:
                                        self.admin_name(task['task_id']))
         require(job['id'] != c.intent['execution']['job_id'], 'separate trial administrative producer required')
         location = protocol.wait_ready(self, c.authority, c.binding, self.request, c.clock, guard)
+        if remote:
+            readiness = self.read_ready(c.authority, c.binding, self.request, location, c.clock())
+            ready_metadata = copy.deepcopy(metadata())
         journal = c.store(c.root / 'worker-controls')
         retained = journal.read()
         observation = dict(request_digest=digest(self.request), ready_location=location, admin_job_id=job['id'])

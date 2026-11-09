@@ -59,7 +59,7 @@ client is not a trusted bootstrap: the frozen client and OS context must already
 be outside coding-agent access. Protected storage does not establish same-user
 coding isolation.
 
-The held `.ai/trusted-ci/authority-v2.yml` has three dispatch modes. The default
+The held `.ai/trusted-ci/authority-v2.yml` has four dispatch modes. The default
 `credentials` mode retains the seven independent setup consumers. The `task`
 mode prepares one request with the reader identity, authorizes its model lease
 in a separate job, then runs coding and administrative controls concurrently.
@@ -272,22 +272,67 @@ library never automatically reruns a worker or upload after interruption. A know
 completed worker returns its original locator while its admission remains live.
 Resolving uncertain intermediate effects is not supplied by this library.
 
-These libraries do not yet supply qualification/task workflow dispatch or produce
-qualification case outcomes. Credential-consumer dispatch above is setup only.
-The native retained Admission and original configuration session cannot currently
-be reconstructed in independent Actions jobs through a supported authenticated
-handoff. Copying native setup authority or accepting caller JSON would violate
-the execution boundary. No workflow path is enabled by preparation.
-Production task and broker eligibility still require active
-qualification. Local fixtures exercise decrypted delivery, actual worker pipes,
-relay streaming, administrative controls and exact submission, with synthetic
-OCI/kernel/host/model boundaries; they do not prove hosted execution or isolation.
-The native coordinator must prepare and dispatch these jobs and exercise the
-actual verification/publication/broker paths. Setting a
-deployment to `active`, supplying
-a local receipt or treating setup consent as human review cannot resolve these
-missing producers. The full trial/case graph and hosted qualification remain
-unavailable.
+The held `trial_handoff.Native` connects preparation to the Actions
+`qualification` mode. Its separately approved prompt digest, exact original
+configuration/fence, disposable identities, software/runtime/model pins and expiry
+are published through the existing conditional registry writer into immutable
+per-task refs in the original authority. The original registry and software refs
+remain unchanged. Each record binds its parent instead of its own commit digest;
+recovery authenticates the exact conditional commit and unrelated Git entries.
+Neither record nor setup consent authorizes candidate review or active enforcement.
+
+`setup.TrialReadStaging` authenticates the original reader App and automatically
+stages one expiring token with only `contents:read` on the original numeric
+authority repository. Its root stays native. The protected native credential
+journal retains the token; public records and outputs contain its fingerprint,
+scope and effective deadline. Secret write intent and the workflow run baseline
+precede the single possible dispatch to the locked software ref. A closed
+`trial handoff` job proves exact token consumption. Native coordination then
+publishes the exact run/attempt binding before any model, proof or worker job can
+proceed. A lost acknowledgement is observed, never another POST. Missing or
+ambiguous evidence remains pending. The effective deadline does not extend the
+provider token's expiry or substitute for actual revocation.
+
+`Admission.hosted` authenticates those original-authority records and live fence,
+the current disposable configuration, exact pinned job, five closed own-App
+proofs and closed decrypted model delivery before using the existing execution
+guards. It reconstructs no native Provision or configuration-session object.
+The separate `Controls.hosted` observation purpose authenticates the same native
+task/consent, closed producers and live cleanup readiness; it receives no model
+key and copies no native worker journal across jobs. Immutable artifact metadata
+and live producer identity preserve exact nonce/run/attempt/artifact bindings
+without repeatedly downloading the same archive. The original 120-second readiness,
+30-second observation/write and monotonic budgets remain unchanged.
+
+The fixed launcher supplies each job only its existing purpose credentials and
+the consumed origin-read capability. Only the model authorization job receives
+the model vault key; the trusted parent outside the container receives the
+delivery key. Candidate execution receives only its model relay capability.
+Source reads reuse the coding-scoped transport; exact authority metadata reads
+use the read-only Actions transport. Admin, reader, issuer and merger roots do
+not enter the coding job. Only model authorization may write its encrypted auth
+journal through the workflow token.
+
+`Native.observe` authenticates the exact closed task artifact, actual Git parents,
+tree, bounded blobs/modes, request marker and exact PR readback under the live
+original/trial bindings. Known completion revokes the retained origin token;
+staging cleanup remains available after expiry. An absent artifact or open PR
+alone never proves failure. Unknown execution, upload or submission remains held
+without replay; incomplete intermediate effects are not manufactured into a
+completed receipt. Later work needs fresh authorization under a valid fence.
+
+The connected local fixture covers native setup, dispatch, real model encryption,
+own-App proofs, worker pipes, relay streaming, independent administrative controls,
+exact submission and completed readback. First execution additionally completes
+with 100ms transport latency without extending those windows; completed readback
+is verified separately without simulated latency. GitHub/OAuth/OCI/kernel/model transports are fixtures;
+this does not prove hosted execution or isolation. Ordered qualification cases,
+qualification receipt production and external independent human candidate review
+remain unfinished. Production task/broker validators still require active
+qualification; no state flip or caller JSON can replace those missing producers.
+All public operations remain release-held, with no trusted bootstrap release or
+enabled installed qualification command. The full case graph and hosted
+qualification remain unavailable.
 
 Local broker foundations include a durable operation fence on the independent
 registry branch, stable deployment-blob identity separate from branch CAS, scoped

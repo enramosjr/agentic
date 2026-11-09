@@ -18,6 +18,7 @@ import operation_fence
 
 DOCUMENT = '.agentic-authority/deployment.json'
 OPERATION = '.agentic-authority/operation.json'
+TRIAL = '.agentic-authority/trial-handoff.json'
 MAX_DOCUMENT = 512 * 1024
 
 
@@ -51,9 +52,9 @@ class Registry:
         entries = {entry['path']: entry for entry in result['tree']}
         require(len(entries) == len(result['tree']), 'ambiguous registry tree paths')
         for name, entry in entries.items():
-            if any(path.startswith(name + '/') for path in (DOCUMENT, OPERATION)):
+            if any(path.startswith(name + '/') for path in (DOCUMENT, OPERATION, TRIAL)):
                 require(entry['type'] == 'tree' and entry['mode'] == '040000', 'registry ancestor is not a directory')
-            require(not any(name.startswith(path + '/') for path in (DOCUMENT, OPERATION)),
+            require(not any(name.startswith(path + '/') for path in (DOCUMENT, OPERATION, TRIAL)),
                     'registry document collides with adopter-owned directory')
         return tree, entries
 
@@ -267,10 +268,16 @@ class Registry:
         require(unrelated(old_entries) == unrelated(new_entries), 'unrelated registry data changed')
         return current
 
-    def _replace(self, before, documents, before_effect=None, terminal_only=False):
+    def _replace(self, before, documents, before_effect=None, terminal_only=False, trial_branch=None):
         """Only fixed registry documents; sibling commits race by nonforce CAS."""
         c = self.coordinates
-        require(set(documents) <= {DOCUMENT, OPERATION}, 'unknown registry document')
+        require(set(documents) <= {DOCUMENT, OPERATION} or
+                set(documents) == {TRIAL} and callable(before_effect) and
+                before['deployment']['state'] == 'qualification' and before['deployment']['qualification'] is None and
+                before['fence']['pending'] is not None and trial_branch == 'agentic-trial-' + documents[TRIAL]['task_id'] +
+                    ('-execution' if documents[TRIAL]['execution'] else ''),
+                'unknown or unqualified registry document')
+        require(trial_branch is None or set(documents) == {TRIAL}, 'trial branch only accepts its handoff record')
         require(not terminal_only or set(documents) == {OPERATION} and
                 before['fence']['pending'] is not None and documents[OPERATION]['pending'] is None and
                 documents[OPERATION]['completed'][:-1] == before['fence']['completed'] and
@@ -325,7 +332,9 @@ class Registry:
                     self.blob(commit, OPERATION)[1] == changes[0]['sha'], 'terminal commit changed unrelated data')
             return observed
         try:
-            if before['branch_exists']:
+            if trial_branch is not None:
+                self.api.post(self.root + '/git/refs', {'ref': 'refs/heads/' + trial_branch, 'sha': commit})
+            elif before['branch_exists']:
                 self.api.fetch(self.root + '/git/refs/heads/' + quote(c['registry_branch'], safe=''),
                                method='PATCH', data={'sha': commit, 'force': False})
             else:
@@ -334,6 +343,10 @@ class Registry:
             if not terminal_only: raise
             return terminal_readback()  # Never repeat the write or the merge.
         if terminal_only: return terminal_readback()
+        if trial_branch is not None:
+            require(self.ref(trial_branch) == commit and self.binding() == before and
+                    self.blob(commit, TRIAL)[0] == documents[TRIAL], 'trial publication readback differs')
+            return commit
         after = self.binding()
         require(after['branch_head'] == commit, 'registry write readback differs')
         for path, value in documents.items():

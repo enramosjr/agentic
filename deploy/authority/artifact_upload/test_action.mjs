@@ -30,6 +30,24 @@ for (const [role, job, keys] of [
   assert.throws(()=>launchParameters({...source,GITHUB_JOB:'candidate'}));
 }
 const result = launchParameters(env);
+for (const [role,job,expected] of [
+  ['trial-handoff','trial_handoff',[]], ['trial-prepare','trial_prepare',[]],
+  ['trial-model','trial_model_auth',['AGENTIC_MODEL_VAULT_KEY','AGENTIC_MODEL_DELIVERY_KEY']],
+  ['trial-proof','trial_reader_proof',['AGENTIC_READER_PRIVATE_KEY']],
+  ['trial-worker','qualification',['AGENTIC_CODING_PRIVATE_KEY','AGENTIC_MODEL_DELIVERY_KEY']],
+  ['trial-controls','trial_task_controls',['AGENTIC_ADMIN_PRIVATE_KEY']]]) {
+  const source = {...env, INPUT_ROLE:role,GITHUB_JOB:job,INPUT_TASK:'{}',INPUT_PROMPT:'prompt',
+    AGENTIC_TRIAL_ORIGIN_TOKEN:'scoped-read',AGENTIC_MODEL_VAULT_KEY:'vault',AGENTIC_MODEL_DELIVERY_KEY:'delivery',
+    AGENTIC_READER_PRIVATE_KEY:'reader',AGENTIC_ISSUER_PRIVATE_KEY:'issuer',AGENTIC_MERGE_PRIVATE_KEY:'merge'};
+  const params = launchParameters(source,'linux');
+  assert.equal(params.environment.AGENTIC_TRIAL_ORIGIN_TOKEN,'scoped-read');
+  for(const name of ['AGENTIC_ADMIN_PRIVATE_KEY','AGENTIC_READER_PRIVATE_KEY','AGENTIC_ISSUER_PRIVATE_KEY',
+    'AGENTIC_CODING_PRIVATE_KEY','AGENTIC_MERGE_PRIVATE_KEY','AGENTIC_MODEL_VAULT_KEY','AGENTIC_MODEL_DELIVERY_KEY']) {
+    assert.equal(Boolean(params.environment[name]),expected.includes(name));
+  }
+  assert.equal(params.executable === '/usr/bin/sudo',role === 'trial-worker');
+  assert.throws(()=>launchParameters({...source,GITHUB_JOB:'candidate'},'linux'));
+}
 assert.equal(producerOutput('{"pr":7}\n','discover'),'request={"pr":7}\n');
 assert.equal(producerOutput('{"pr":null}','discover'),'request={"pr":null}\n');
 for(const bad of ['{"pr":true}','{"pr":0}','{"pr":7,"key":"secret"}','{"pr":7}\nextra=value']) {

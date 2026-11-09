@@ -9,6 +9,8 @@ function documentMember(name) {
   const proof = /^(proof|final-proof)-(admin|reader|issuer|coding|merge)-[1-9][0-9]{0,19}$/.exec(name);
   if (candidate) return `${candidate[1]}.json`;
   if (proof) return `${proof[1]}.json`;
+  const trial = /^(trial-handoff|trial-task|trial-task-ready|trial-task-controls)-[a-f0-9]{32}-[1-9][0-9]{0,19}$/.exec(name);
+  if (trial) return `${trial[1]}.json`;
   if (/^credential-proof-(admin|reader|issuer|coding|merge|model_vault|model_delivery)-[1-9][0-9]{0,19}$/.test(name)) return 'credential-proof.json';
   if (/^task-[a-f0-9]{32}-[1-9][0-9]{0,19}$/.test(name)) return 'task.json';
   const task = /^(task-ready|task-controls)-[a-f0-9]{32}-[1-9][0-9]{0,19}$/.exec(name);
