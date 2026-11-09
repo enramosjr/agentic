@@ -76,8 +76,9 @@ class Admission:
         require(task['run_id'] == int(environment['GITHUB_RUN_ID']) and
                 task['attempt'] == int(environment['GITHUB_RUN_ATTEMPT']), 'qualification task belongs to another execution')
         lease = model_vault.read_delivery(self.authority, binding, task, model, delivery_key, now)
+        origin_binding = self.provision.session._check()
         app_digests, expires = {}, [task['deadline'], lease['expires'], d['expires'],
-            self.provision.preview['expires'], self.provision.session._check()['fence']['pending']['execution_deadline']]
+            self.provision.preview['expires'], origin_binding['fence']['pending']['execution_deadline']]
         for purpose, locator in proofs.items():
             proof = provenance.authenticated_document(self.authority, d, locator, 'proof', purpose, now)
             require(proof['run_id'] == task['run_id'] and proof['attempt'] == task['attempt'],
@@ -94,6 +95,7 @@ class Admission:
         # bracket their authentication without downloading them again per blob.
         self.binding, self.pair = copy.deepcopy(binding), copy.deepcopy(pair)
         self.provision_document = copy.deepcopy(self.provision.document)
+        self.origin_binding = copy.deepcopy(origin_binding)
         return dict(schema_version=1, kind='qualification-execution-admission', origin=pair['origin'],
             provision_digest=digest(pair), configuration_revision=binding['configuration_revision'],
             deployment_digest=binding['deployment_digest'], branch_head=binding['branch_head'],
@@ -173,3 +175,43 @@ class Admission:
         raw = submission.capture_source(self.source, self.binding['deployment'], self.intent['source_base'], self._clock)
         self._guard()
         return raw
+
+    def _worker_configuration(self):
+        """Live configuration pointers to immutable documents authenticated by run()."""
+        self._clock()
+        expected = dict(admission=self.intent, approval=digest(self.intent))
+        def journals():
+            require(self.journal.read() == self.document and self.document['value'] == expected and
+                    self.provision.journal.read() == self.provision_document,
+                    'retained trial consent or provisioning changed')
+        journals()
+        session = self.provision.session
+        require(session.expected == (self.origin_binding['configuration_revision'], self.origin_binding['deployment_digest'],
+                                     self.origin_binding['branch_head']) and
+                session.operation_id == self.intent['origin']['operation_id'] and
+                session.sequence == self.intent['origin']['sequence'], 'original trial session changed')
+        session._owned(self.origin_binding)  # Local ownership/scope/deadline checks; no immutable blob download.
+        original_branch = session.registry.unchanged(self.origin_binding)
+        trial_branch = self.registry.unchanged(self.binding)
+        journals()
+        self._clock()
+        return original_branch, trial_branch
+
+    def _worker_guard(self):
+        """Full job/controls checks bracket work; source/config pointers guard effects."""
+        original_branch, trial_branch = self._worker_configuration()
+        session = self.provision.session
+        p = self.binding['deployment']['policy']
+        repo = self.source.get('/repos/' + p['repository'])
+        require(repo.get('id') == p['repository_id'] and repo.get('private') is True and
+                repo.get('owner', {}).get('id') == self.pair['identities']['owner_id'] and
+                repo.get('default_branch') == p['target'] and
+                submission.existing_ref(self.source, '/repos/' + p['repository'], p['target']) == self.intent['source_base'],
+                'trial frozen source identity or ref changed')
+        for registry, binding, branch in ((session.registry, self.origin_binding, original_branch),
+                                          (self.registry, self.binding, trial_branch)):
+            require(registry.ref(registry.coordinates['registry_branch']) == binding['branch_head'] and
+                    registry.ref(branch) == binding['software_revision'], 'trial pointers moved during source readback')
+        require(self.journal.read() == self.document and
+                self.provision.journal.read() == self.provision_document, 'trial journals moved during source readback')
+        self._clock()

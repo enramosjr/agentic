@@ -28,7 +28,7 @@ FILES = (
     'model_bridge.py', 'model_consent.py', 'model_oidc.py', 'model_relay.py', 'model_vault.py',
     'oauth_transport.py', 'operation_fence.py', 'private_setup.py', 'provenance.py', 'qualification_record.py',
     'reconcile.py', 'registration.py', 'registry.py', 'repository.py', 'service.py', 'setup.py', 'submission.py',
-    'task_admission.py', 'task_controls.py', 'transition.py', 'worker_facts.py', 'requirements-auth.txt', 'requirements-aws.txt',
+    'task_admission.py', 'task_controls.py', 'task_control_protocol.py', 'transition.py', 'worker_facts.py', 'requirements-auth.txt', 'requirements-aws.txt',
     'artifact_upload/action.yml', 'artifact_upload/action.mjs', 'artifact_upload/cli.mjs',
     'artifact_upload/upload.mjs', 'artifact_upload/package.json', 'artifact_upload/package-lock.json',
 ))

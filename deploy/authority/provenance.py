@@ -112,7 +112,7 @@ def authenticated_document(api, d, locator, role, key, now):
     authenticated transport data, not a substitute for its domain validator.
     Unlike broker dispatch receipts, every role here requires a successful job.
     """
-    require(role != 'task-ready', 'live readiness is not closed producer evidence')
+    require(role not in ('task-ready', 'trial-task-ready'), 'live readiness is not closed producer evidence')
     return _authenticated_document(api, d, locator, role, key, now)
 
 
@@ -121,14 +121,23 @@ def live_task_readiness(api, d, locator, key, now):
     return _authenticated_document(api, d, locator, 'task-ready', key, now, live=True)
 
 
+def live_trial_readiness(api, d, locator, key, now):
+    """Qualification-parent cleanup readiness; never production task admission."""
+    return _authenticated_document(api, d, locator, 'trial-task-ready', key, now, live=True)
+
+
 def _authenticated_document(api, d, locator, role, key, now, live=False):
     validate_deployment(d)
     object_fields(locator, ('run_id', 'attempt', 'job_id', 'artifact_id'), 'authority artifact locator')
     require(all(positive(v) for v in locator.values()) and type(now) is int and 0 < now < d['expires'],
             'current authority artifact coordinates required')
     require(role in ('evidence', 'controls', 'publication-controls', 'proof', 'final-proof', 'task', 'task-ready', 'task-controls',
-                    'model-lease', 'qualification', 'credential-proof') and live == (role == 'task-ready'),
+                    'model-lease', 'qualification', 'credential-proof', 'trial-task', 'trial-task-ready',
+                    'trial-task-controls') and live == (role in ('task-ready', 'trial-task-ready')),
             'unknown authority producer role')
+    if role.startswith('trial-task'):
+        require(d['state'] == 'qualification' and d['qualification'] is None and
+                isinstance(key, str) and re.fullmatch('[0-9a-f]{32}', key), 'unqualified trial producer required')
     if role in ('evidence', 'controls', 'publication-controls'):
         require(positive(key), 'numeric candidate producer required')
         job_name = ('verify' if role == 'evidence' else role.replace('-', ' ')) + ' (' + str(key) + ')'
@@ -141,6 +150,9 @@ def _authenticated_document(api, d, locator, role, key, now, live=False):
         require(isinstance(key, str) and re.fullmatch('[0-9a-f]{32}', key), 'fixed task identity required')
         job_name = ('task controls (' + key + ')' if role == 'task-controls' else
                     'model authorization' if role == 'model-lease' else 'task (' + key + ')')
+        prefix = role + '-' + key
+    elif role in ('trial-task', 'trial-task-ready', 'trial-task-controls'):
+        job_name = 'trial task controls (' + key + ')' if role == 'trial-task-controls' else 'hosted qualification'
         prefix = role + '-' + key
     elif role == 'credential-proof':
         require(key in ('admin', 'reader', 'issuer', 'coding', 'merge', 'model_vault', 'model_delivery'),

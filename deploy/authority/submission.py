@@ -173,6 +173,11 @@ def submit(api, deployment, request, files, now):
             sha(request['configuration_revision']) and request['deployment_digest'] == digest(d) and sha(request['base']) and
             all(positive(request[k]) for k in ('issued', 'run_id', 'attempt')) and type(now) is int and
             request['issued'] <= now < d['expires'] and d['state'] == 'active', 'current protected task binding required')
+    return _submit(api, d, request, files)
+
+
+def _submit(api, d, request, files):
+    """Exact content-addressed writes after the caller's domain admission."""
     manifest = export_manifest(files)  # Refuse malformed candidate bytes before any API mutation.
     p, root = d['policy'], '/repos/' + d['policy']['repository']
     repo = api.get(root)

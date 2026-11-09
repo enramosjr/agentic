@@ -112,6 +112,21 @@ class Registry:
     def read(self):
         return self.binding()['deployment']
 
+    def unchanged(self, binding):
+        """Reobserve live pointers to an already authenticated immutable binding.
+
+        This never authenticates caller data or admits a new configuration. Callers
+        must first obtain binding() and retain that exact snapshot privately.
+        """
+        repo = self.api.get(self.root)
+        require(repo.get('id') == self.coordinates['repository_id'] and repo.get('private') is True and
+                repo.get('default_branch') != self.coordinates['registry_branch'] and
+                self.ref(repo['default_branch']) == binding['software_revision'] and
+                self.ref(self.coordinates['registry_branch']) == binding['branch_head'],
+                'authenticated registry identity, software or configuration moved')
+        require(self.ref(repo['default_branch']) == binding['software_revision'], 'registry software moved during readback')
+        return repo['default_branch']
+
     def write(self, expected, value, operation_id=None, before_effect=None):
         validate_deployment(value)
         raw = (json.dumps(value, sort_keys=True, allow_nan=False) + '\n').encode()

@@ -223,13 +223,43 @@ or mutation.
 `Provision.completed()` supplies read-only frozen-pair readback after the trial
 registry exists, without replaying initial installation or registration.
 
-This library admission does not configure the disposable registry/controls or
-stage its credentials, supply the native hosted-qualification workflow, admit a
-coding worker or produce case outcomes. Production task and broker eligibility
-still require active qualification. Local transport/crypto fixtures exercise
-admission, refusal, recovery and exact source capture, not hosted execution.
-The execution coordinator still must connect protected trial task/control jobs
-and exercise the actual verification/publication/broker paths. Setting a
+The held `trial_worker.Worker` consumes that native retained admission, a separate
+fixture-only coding transport, the original encrypted model delivery and exact
+prompt consent. It reuses the protected parent's worker measurement, model relay,
+protocol, stopped-volume export and confirmed cleanup before any readiness upload
+or source write. `trial_controls.Controls.collect` is the separate pinned
+`trial_task_controls` administrative job, named `trial task controls (<task_id>)`.
+It reads the live parent cleanup artifact, performs real effective administrative
+readback and uploads its response; the worker authenticates the closed successful
+job. The shared task-control protocol retains its exact nonce/artifact bindings,
+120-second readiness limit, original 30-second observation and monotonic budgets.
+Only then can the parent submit the exact exported tree to the disposable fixture.
+The frozen seed may include the exact owned `.github/CODEOWNERS` path.
+Already authenticated configuration/software commits are immutable: hot guards
+reobserve their exact live refs and repository identities, retained journals,
+original session ownership and expiry. Source mutations additionally bracket the
+current source identity/ref with late configuration/software reads. Full live
+job/effective-control readbacks bracket execution and submission. Cancellation is
+checked through submission and completion, including after blocking readback.
+
+Trial readiness, controls and task artifacts use distinct `trial-task-ready`,
+`trial-task-controls` and `trial-task` names. They are not production task admission
+or a qualification receipt, and all results retain `hosted_qualified` and
+`enforcement_active` false. Protected purpose journals retain exact prompt consent
+and known completion without model tokens or delivery keys. Unknown worker,
+readiness, administrative-upload or submission outcomes stay pending; this bounded
+library never automatically reruns a worker or upload after interruption. A known
+completed worker returns its original locator while its admission remains live.
+Resolving uncertain intermediate effects is not supplied by this library.
+
+These libraries do not configure the disposable registry/controls, stage its
+credentials, supply native workflow dispatch or produce qualification case
+outcomes. Production task and broker eligibility still require active
+qualification. Local fixtures exercise decrypted delivery, actual worker pipes,
+relay streaming, administrative controls and exact submission, with synthetic
+OCI/kernel/host/model boundaries; they do not prove hosted execution or isolation.
+The native coordinator must prepare and dispatch these jobs and exercise the
+actual verification/publication/broker paths. Setting a
 deployment to `active`, supplying
 a local receipt or treating setup consent as human review cannot resolve these
 missing producers. The full trial/case graph and hosted qualification remain

@@ -87,6 +87,29 @@ def configuration_operation(store):
 
 
 class RegistryContracts(unittest.TestCase):
+    def test_unchanged_reobserves_live_refs_and_late_software_without_redownloading_blobs(self):
+        for fault in (None, 'configuration', 'software', 'late-software'):
+            host = RegistryHost()
+            store = registry.Registry(host, coordinates())
+            store.write(None, intent())
+            binding = store.binding()
+            original = host.get
+            calls = []
+            def get(path):
+                calls.append(path)
+                result = original(path)
+                if fault == 'late-software' and path.endswith('/git/ref/heads/agentic-registry'):
+                    host.refs['main'] = '9' * 40
+                return result
+            host.get = get
+            if fault == 'configuration': host.refs['agentic-registry'] = '9' * 40
+            if fault == 'software': host.refs['main'] = '9' * 40
+            with self.subTest(fault=fault):
+                if fault:
+                    with self.assertRaises(Refusal): store.unchanged(binding)
+                else: self.assertEqual(store.unchanged(binding), 'main')
+            self.assertFalse(any('/git/blobs/' in path or '/git/commits/' in path for path in calls))
+
     def test_oversized_valid_record_is_rejected_before_any_mutation(self):
         host = RegistryHost()
         store = registry.Registry(host, coordinates())

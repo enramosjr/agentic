@@ -20,7 +20,7 @@ def valid_path(name):
             not PurePosixPath(name).is_absolute() and '\\' not in name and
             all(re.fullmatch('[A-Za-z0-9_.-]+', p) and p not in ('.', '..', '.git') for p in name.split('/')) and
             (name.startswith(('.ai/scripts/', 'deploy/authority/', '.github/workflows/')) or
-             name in ('.agentic-authority/bootstrap.json', '.agentic-authority/identities.json')),
+             name in ('.github/CODEOWNERS', '.agentic-authority/bootstrap.json', '.agentic-authority/identities.json')),
             'release path escapes owned authority software')
 
 

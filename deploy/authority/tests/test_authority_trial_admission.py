@@ -108,7 +108,7 @@ class Source:
 
 @unittest.skipIf(Fernet is None, 'optional model-auth cryptography environment required')
 class TrialAdmissionContracts(unittest.TestCase):
-    def fixture(self):
+    def fixture(self, seed=None):
         from test_model_vault import fixture as model_fixture
         fixture = provision_fixture.TrialProvisionContracts()
         record, b, task = model_fixture()
@@ -117,6 +117,7 @@ class TrialAdmissionContracts(unittest.TestCase):
         origin['resources'].update(b['deployment']['resources'])
         with patch.object(provision_fixture, 'intent', return_value=origin):
             c, pair, _, journals, _, _, approve, production, clock = fixture.fixture()
+        if seed: c.fixture_files.update(seed)
         result = fixture.run_local(c, approve)
         d = copy.deepcopy(b['deployment'])
         d.update(state='qualification', qualification=None, generation=1)
@@ -129,7 +130,9 @@ class TrialAdmissionContracts(unittest.TestCase):
         d['apps'] = {k: v['id'] for k, v in result['identities']['apps'].items()}
         d['resources'].update(authority=p['authority_repository'], identity_digest=digest(result['identities']),
             identity_record=json.dumps(result['identities']), operation_id='e' * 32,
-            acceptance_rule='101', updates_rule='102', model_session='d' * 32)
+            acceptance_rule='101', updates_rule='102', model_session='d' * 32,
+            coding_slug=result['identities']['apps']['coding']['slug'],
+            coding_bot_id=str(result['identities']['apps']['coding']['actor_id']))
         record.update(authority_repository_id=702, session_id='d' * 32)
         host = TrialHost(pair, result)
         reg = registry.Registry(host, dict(schema_version=2, repository=p['authority_repository'],

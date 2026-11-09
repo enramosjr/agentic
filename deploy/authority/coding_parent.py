@@ -96,33 +96,8 @@ class Parent:
             task_controls.validate_response(response, request, readiness, location, before, self.clock())
         source = _FencedSource(self.source, guard, authorize_write)
         archive = submission.capture_source(source, d, request['source_base'], guard)
-        runtime = d['resources'].get('container_runtime', 'docker')
-        require(runtime in ('docker', 'podman'), 'approved coding engine required')
-        capability = 'agentic-task.' + secrets.token_hex(32)
-        expires = min(issued + d['policy']['limits']['seconds'], task['deadline'], lease['expires'], d['expires'])
-        name = 'agentic-task-' + task['task_id']
-        with tempfile.TemporaryDirectory(prefix='agentic-coding-parent-') as temporary, ExitStack() as owned:
-            guard(force=True)
-            disk = owned.enter_context(disk_factory(name, d['policy']['limits']['disk_mb'], runtime=runtime,
-                                                     formatter_image=d['policy']['image']))
-            relay = relay_factory(lease, before, task, capability, clock=self.clock)
-            owned.callback(relay.close)
-            relay._start(Path(temporary))
-            box = sandbox_factory(d, disk.name, relay.directory, runtime=runtime)
-            box._enter()
-            owned.callback(box.close)
-            facts = measure(box)  # Before source materialization or candidate execution.
-            protocol = _conversation(box, d, archive, capability, request['prompt'], expires, guard,
-                                     cancelled=lambda: cancelled() or relay.failed)
-            inference = relay.result()
-            require(inference['completed_inference'] is True and inference['model_execution_qualified'] is False and
-                    positive(inference['requests']) and positive(inference['completed']), 'completed task inference required')
-            relay.close()  # Revoke the capability before the stopped-volume exporter.
-            exported = box._export(guard)
-        # ExitStack has confirmed box, relay and hard disk cleanup. No source write
-        # or receipt upload occurs while candidate resources are still owned.
-        guard(force=True)
-        files = submission.read_export(exported)
+        files, protocol, facts, inference = _execute(request, lease, before, archive, guard, self.clock,
+            disk_factory, relay_factory, sandbox_factory, cancelled, issued=issued)
         authorization.append(task_controls.acquire(self.authority, self.registry.binding, request, job['id'],
             digest(submission.export_manifest(files)), uploader, self.clock, lambda: guard(force=True)))
         authorization_deadline.append(time.monotonic() + 30 - (self.clock() - authorization[0][2]['readback_started']))
@@ -149,3 +124,38 @@ class Parent:
         guard(force=True)
         require(positive(artifact), 'managed task artifact identity unavailable')
         return dict(run_id=task['run_id'], attempt=task['attempt'], job_id=job['id'], artifact_id=artifact)
+
+
+def _execute(request, lease, before, archive, guard, clock, disk_factory=WorkDisk, relay_factory=Relay,
+             sandbox_factory=CodingSandbox, cancelled=lambda: False, issued=None):
+    """Shared protected execution. No admission, source mutation or receipt upload."""
+    d, task = before['deployment'], request['task']
+    issued = clock() if issued is None else issued
+    runtime = d['resources'].get('container_runtime', 'docker')
+    require(runtime in ('docker', 'podman'), 'approved coding engine required')
+    capability = 'agentic-task.' + secrets.token_hex(32)
+    expires = min(issued + d['policy']['limits']['seconds'], task['deadline'], lease['expires'], d['expires'])
+    name = 'agentic-task-' + task['task_id']
+    with tempfile.TemporaryDirectory(prefix='agentic-coding-parent-') as temporary, ExitStack() as owned:
+        guard(force=True)
+        disk = owned.enter_context(disk_factory(name, d['policy']['limits']['disk_mb'], runtime=runtime,
+                                                 formatter_image=d['policy']['image']))
+        relay = relay_factory(lease, before, task, capability, clock=clock)
+        owned.callback(relay.close)
+        relay._start(Path(temporary))
+        box = sandbox_factory(d, disk.name, relay.directory, runtime=runtime)
+        box._enter()
+        owned.callback(box.close)
+        facts = measure(box)  # Before source materialization or candidate execution.
+        protocol = _conversation(box, d, archive, capability, request['prompt'], expires, guard,
+                                 cancelled=lambda: cancelled() or relay.failed)
+        inference = relay.result()
+        require(inference['completed_inference'] is True and inference['model_execution_qualified'] is False and
+                positive(inference['requests']) and positive(inference['completed']), 'completed task inference required')
+        relay.close()  # Revoke the capability before the stopped-volume exporter.
+        exported = box._export(guard)
+    # ExitStack has confirmed box, relay and hard disk cleanup. No source write
+    # or receipt upload occurs while candidate resources are still owned.
+    guard(force=True)
+    files = submission.read_export(exported)
+    return files, protocol, facts, inference

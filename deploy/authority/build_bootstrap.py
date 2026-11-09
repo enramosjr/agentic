@@ -17,6 +17,8 @@ FILES = tuple(dict.fromkeys(build_runtime.FILES + (
     'deploy/authority/operator_setup.py',
     'deploy/authority/trial_setup.py',
     'deploy/authority/trial_admission.py',
+    'deploy/authority/trial_controls.py',
+    'deploy/authority/trial_worker.py',
     'deploy/authority/build_runtime.py',
     'deploy/authority/bootstrap_stage.py',
     '.ai/trusted-ci/authority-v2.yml',
