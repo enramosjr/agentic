@@ -23,7 +23,7 @@ def document_member(name):
     proof = re.fullmatch(r'(proof|final-proof)-(admin|reader|issuer|coding|merge)-[1-9][0-9]{0,19}', name)
     if candidate: return candidate.group(1) + '.json'
     if proof: return proof.group(1) + '.json'
-    trial = re.fullmatch(r'(trial-handoff|trial-task|trial-task-ready|trial-task-controls)-[a-f0-9]{32}-[1-9][0-9]{0,19}', name)
+    trial = re.fullmatch(r'(trial-handoff|trial-case-handoff|trial-task|trial-task-ready|trial-task-controls)-[a-f0-9]{32}-[1-9][0-9]{0,19}', name)
     if trial: return trial.group(1) + '.json'
     if re.fullmatch(r'credential-proof-(admin|reader|issuer|coding|merge|model_vault|model_delivery)-[1-9][0-9]{0,19}', name):
         return 'credential-proof.json'

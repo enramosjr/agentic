@@ -270,13 +270,17 @@ class Native:
         authenticated case owner may bracket this same reader with its exact
         retained fence transition instead; this reader grants no such authority.
         """
+        return self.worker_completion(self.registry, source or self.provision.api, record, prompt, self.provision.clock)
+
+    @staticmethod
+    def worker_completion(registry, source, record, prompt, clock):
+        """Shared immutable CLOSED worker reader; caller owns the live phase guard."""
         import provenance
         import submission
         from trusted_ci_deployment import timestamp
-        c = self.provision
         task = dict(task_id=record['task_id'],run_id=record['execution']['handshake']['run_id'],attempt=1,
             deadline=min(record['expires'],record['execution']['credential']['expires']),purpose='qualification')
-        d, api = record['trial']['deployment'], self.registry.api
+        d, api = record['trial']['deployment'], registry.api
         request = dict(schema_version=2,task=task,prompt=prompt,source_base=record['pair']['fixture_revision'],
             configuration_revision=record['trial']['configuration_revision'],deployment_digest=record['trial']['deployment_digest'])
         job = provenance.execution_job(api,d,task['run_id'],1,'hosted qualification',completed=True)
@@ -285,7 +289,7 @@ class Native:
                      a.get('name') == 'trial-task-' + task['task_id'] + '-1']
         require(len(artifacts) == 1, 'exact completed trial artifact remains pending; never replay')
         location = dict(run_id=task['run_id'],attempt=1,job_id=job['id'],artifact_id=artifacts[0]['id'])
-        proof = provenance.authenticated_document(api,d,location,'trial-task',task['task_id'],c.clock())
+        proof = provenance.authenticated_document(api,d,location,'trial-task',task['task_id'],clock())
         receipt = proof['document']
         object_fields(receipt,('schema_version kind admission_digest request_digest execution submitted protocol isolation relay '
             'controls_digest cleanup_complete completed hosted_qualified enforcement_active').split(),'completed trial receipt')
@@ -295,7 +299,7 @@ class Native:
                 proof['job_started'] <= receipt['completed'] <= proof['artifact_created'] <= proof['job_completed'],
                 'closed trial receipt does not establish exact cleaned-up completion')
         submitted = receipt['submitted']
-        p, source = d['policy'], source or c.api
+        p = d['policy']
         source_root = '/repos/' + p['repository']
         require(submitted['task_id'] == task['task_id'] and submitted['run_id'] == task['run_id'] and submitted['attempt'] == 1 and
                 submitted['configuration_revision'] == record['trial']['configuration_revision'] and
@@ -305,7 +309,7 @@ class Native:
         commit = source.get(source_root + '/git/commits/' + submitted['head'])
         require(commit.get('sha') == submitted['head'] and commit['tree']['sha'] == submitted['tree'] and
                 [v['sha'] for v in commit['parents']] == [request['source_base']], 'actual submitted Git parents or tree differ')
-        def clock_guard(): require(c.clock() < record['expires'], 'native completion recovery expired')
+        def clock_guard(): require(clock() < record['expires'], 'native completion recovery expired')
         files = submission._read_tree(source,source_root,submitted['tree'],clock_guard)
         manifest = submission.export_manifest(files)
         require(digest(manifest) == submitted['export_digest'], 'actual Git blobs or executable modes differ from exported trial')

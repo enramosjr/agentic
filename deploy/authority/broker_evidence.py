@@ -180,7 +180,8 @@ def _finish(registry, source, authority, identities, prepared, request, control_
     require(current_snapshot(api, d, op['pr'], op['run_id'], op['attempt']) == current,
             'candidate moved during final authorization')
     _same(registry.binding(), binding)
-    valid_until = dict(proofs['valid_until'], deployment=d['expires'], qualification=qualification['document']['expires'],
+    valid_until = dict(proofs['valid_until'], deployment=d['expires'],
+                       qualification=qualification['document']['expires'] if admission is None else qualification['expires'],
                        task=task['expires'])
     valid_until['admin'] = min(valid_until['admin'], controls['expires'])
     gate = dict(schema_version=2, operation_id=op['operation_id'], sequence=binding['fence']['sequence'],

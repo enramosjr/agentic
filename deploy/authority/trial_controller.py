@@ -16,7 +16,8 @@ from trusted_ci_policy import digest, object_fields, require
 
 
 def authenticated(value, binding=None):
-    require(type(value) is Admission, 'actual native trial controller admission required')
+    from trial_case import Hosted
+    require(type(value) in (Admission, Hosted), 'actual authenticated trial controller admission required')
     require(value.worker is not None, 'authenticated CLOSED worker required')
     value.local_guard(binding)
     return value

@@ -98,4 +98,7 @@ class Finalizer:
         require(read() == before, 'registry changed during terminal recovery')
         # The storage helper checks exact nonforce pointer/parent/tree readback,
         # including lost acknowledgements. No source mutation exists in this class.
+        if _admission is not None:
+            _admission.guard(before)
+            return self.registry.finalize_operation(before['branch_head'], terminal, before_effect=lambda:_admission.guard(before))
         return self.registry.finalize_operation(before['branch_head'], terminal)

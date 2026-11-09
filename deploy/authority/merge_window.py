@@ -37,7 +37,8 @@ def _validate(gate, binding, now, admission=None, clock=None):
                 'pr', 'head', 'base', 'merge', 'workflow_sha', 'run_id', 'attempt'):
         require(gate[key] == operation[key], 'merge operation binding differs: ' + key)
     p = d['policy']
-    qualification_digest = (admission.qualification(binding)['qualification_digest'] if admission is not None else d['qualification'])
+    qualification = admission.qualification(binding) if admission is not None else None
+    qualification_digest = qualification['qualification_digest'] if admission is not None else d['qualification']
     require(gate['configuration_revision'] == binding['configuration_revision'] and
             gate['deployment_digest'] == binding['deployment_digest'] == digest(d) and
             gate['authority_repository_id'] == p['authority_repository_id'] and
@@ -60,6 +61,9 @@ def _validate(gate, binding, now, admission=None, clock=None):
             gate['expires'] - now >= 60 and operation['created'] <= gate['issued'] and
             operation['execution_deadline'] - now >= 60, 'broker authorization is stale, future or too short')
     object_fields(gate['valid_until'], EXPIRING, 'expiring broker proofs')
+    if admission is not None:
+        require(gate['valid_until']['qualification'] <= qualification['expires'],
+                'trial authorization extended an admitted capability expiry')
     require(gate['valid_until']['deployment'] == d['expires'] and
             all(positive(v) and v - now >= 60 for v in gate['valid_until'].values()),
             'a required proof expires before the dispatch safety window')

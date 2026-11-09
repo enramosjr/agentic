@@ -22,6 +22,11 @@ TRIAL = '.agentic-authority/trial-handoff.json'
 MAX_DOCUMENT = 512 * 1024
 
 
+def trial_reference(record):
+    suffix = '-case' if record.get('kind') == 'trial-case-handoff' else ''
+    return 'agentic-trial-' + record['task_id'] + suffix + ('-execution' if record['execution'] else '')
+
+
 class Registry:
     """Mutations require a trusted setup caller; runtime receives a reader only."""
 
@@ -198,7 +203,7 @@ class Registry:
         operation_fence.validate(fence)
         return self._replace(before, {OPERATION: fence}, before_effect=before_effect)
 
-    def finalize_operation(self, expected_head, terminal):
+    def finalize_operation(self, expected_head, terminal, before_effect=None):
         """Admin only: authenticate terminal artifacts/source state before calling.
 
         A timeout, missing artifact or open PR is never a terminal receipt. This
@@ -217,7 +222,7 @@ class Registry:
         fence['completed'].append(dict(terminal))
         fence['pending'] = None
         operation_fence.validate(fence)
-        return self._replace(before, {OPERATION: fence}, terminal_only=True)
+        return self._replace(before, {OPERATION: fence}, before_effect=before_effect, terminal_only=True)
 
     def authenticate_setup_progress(self, before, documents):
         """Authenticate one retained native CAS intent, never arbitrary latest state."""
@@ -274,8 +279,7 @@ class Registry:
         require(set(documents) <= {DOCUMENT, OPERATION} or
                 set(documents) == {TRIAL} and callable(before_effect) and
                 before['deployment']['state'] == 'qualification' and before['deployment']['qualification'] is None and
-                before['fence']['pending'] is not None and trial_branch == 'agentic-trial-' + documents[TRIAL]['task_id'] +
-                    ('-execution' if documents[TRIAL]['execution'] else ''),
+                before['fence']['pending'] is not None and trial_branch == trial_reference(documents[TRIAL]),
                 'unknown or unqualified registry document')
         require(trial_branch is None or set(documents) == {TRIAL}, 'trial branch only accepts its handoff record')
         require(not terminal_only or set(documents) == {OPERATION} and

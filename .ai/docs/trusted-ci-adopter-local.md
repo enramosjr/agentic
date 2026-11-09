@@ -441,7 +441,7 @@ only immutable worker/Git readback with that observation path.
 
 The production entrypoints retain their ACTIVE state and existing-qualified-receipt
 admission. The separate internal trial entrypoint requires an actual authenticated
-native admission object; caller JSON, a certificate alone or a fabricated active
+native or read-only case admission object; caller JSON, a certificate alone or a fabricated active
 deployment cannot select it. Both paths share the same controller implementations.
 Independent human review is observed before fencing and again by the final broker;
 the fixture may model authenticated host review but no coordinator submits or
@@ -451,20 +451,54 @@ merge parents and tree. Withdrawal or stale final readback refuses dispatch;
 genuine no-dispatch evidence can finalize, while uncertain effects remain pending
 until actual evidence resolves them. Known terminal cases cannot restart.
 
-This is a native source-local composition, not an implemented cross-job certificate
-handoff or new Actions mode. Native objects and journals are never sent to hosted
-jobs. The native object retains provisioning/session capabilities in its trusted
-process; this composition does not establish credential-isolated producer
-processes. Hosted producers will need a separately authenticated transport and
-their existing purpose-only credentials, not this native object. Terminal recovery
-consumes the existing explicitly configured finalization/recovery runtime pin.
+The native composition retains provisioning/session capabilities in its trusted
+process. The separate held `trial_case.Publication` library publishes the exact
+pending case, certificate, request and original CLOSED worker through the existing
+conditional registry path. It records intent before effects and authenticates the
+exact committed parent, message, document, unrelated tree entries and per-task
+case ref. Lost acknowledgements recover read-only; absent effects never permit a
+repeated write. The original settled binding, owned pending case fence and terminal
+transition remain distinct.
+
+`trial_case.CaseReadStaging` shares the existing native reader-App mint/stage/revoke
+implementation. Its separate `AGENTIC_TRIAL_CASE_ORIGIN_TOKEN` and protected purpose
+journal own a fresh original-authority-only `contents:read` delegation. The revoked
+worker token and its old handshake cannot substitute for this capability. A pinned
+`trial case handoff` consumer in the already prepared case run produces a distinct
+CLOSED artifact. Native binding authenticates its exact case/revision, token digest,
+numeric scope, run/attempt and job interval before publishing the case execution
+binding. Unknown mint/write/binding effects remain retained without replay.
+
+Each `service.case_producer` invocation reconstructs a fresh read-only `Hosted`
+admission from lookup hints, authenticated original/case records, the CLOSED fresh
+consumer, original worker/Git evidence and the exact conditional pending fence.
+Only existing purpose credentials, read-only Actions access and the new scoped
+read delegation enter the role. No native Provision, configuration session,
+protected journal, model keys or other role roots cross the handoff. The same
+verification, publication, broker, controls, proof, receipt and terminal engines
+consume this admission. Terminal recovery uses the existing independently
+configured recovery/finalization pin and narrowly scoped administrative writer;
+it never dispatches or requires access to the native owner. It still requires
+live original authorization, certificate and consumed read delegation. Recovery
+after their expiry is not established. Native cleanup can revoke the exact
+retained case delegation even after expiry.
+The consumed delegation also bounds the broker gate's effective lifetime and
+retains the original 60-second dispatch margin. Trial terminal effects recheck
+that live admission before every conditional Git write, including after blocking
+receipt reads; the ordinary production recovery path retains its existing rules.
+
+This supplies connected source/local-fixture producer entrypoints. It does not add
+an Actions dispatch mode or launch hosted jobs; the fixture explicitly models the
+pinned role executions and CLOSED artifact transport. Native objects and journals
+are never sent to those producer instances. The tests establish neither separate
+OS processes nor hosted credential isolation.
 Local fixture execution drives authenticated job/closed-artifact readers,
 actual App proofs, verifier cleanup, effective controls and the actual merge
 request encoder, with GitHub/OCI/kernel/model boundaries modeled. It establishes
 neither hosted execution/isolation nor qualification. The one-candidate controller
 does not prepare the case-specific mutations or coordinate all sixteen probes.
-Hosted admission transport, ordered case recovery, qualification receipt production
-and final hosted qualification remain unfinished. Trial and original deployments
+Hosted workflow dispatch/coordination, ordered case recovery, qualification receipt
+production and final hosted qualification remain unfinished. Trial and original deployments
 stay unqualified; `qualification_record` remains a strict reader. No complete
 original requirement, trusted release, activation or enforcement is claimed.
 

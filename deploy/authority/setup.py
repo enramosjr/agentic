@@ -203,6 +203,7 @@ class TrialReadStaging:
     must authenticate its exact closed consumer before binding execution.
     """
     NAME = 'AGENTIC_TRIAL_ORIGIN_TOKEN'
+    JOURNAL = 'trial-read-staging'
 
     def __init__(self, provision, registry, revision, reader, token_factory):
         self.provision, self.registry, self.revision = provision, registry, revision
@@ -210,10 +211,8 @@ class TrialReadStaging:
 
     def run(self):
         authority_release.authorize('bootstrap')
-        import app_proofs
         import trial_handoff
         from trial_setup import Provision
-        from trusted_ci_deployment import timestamp
         c = self.provision
         require(isinstance(c, Provision), 'actual completed native trial provision required')
         publication = c.store(c.root / 'handoff').read()
@@ -226,10 +225,9 @@ class TrialReadStaging:
         ownership = copy.deepcopy((session.operation_id, session.sequence, session.owner, session.scope, session.software))
         expected = tuple(origin[k] for k in ('configuration_revision', 'deployment_digest', 'branch_head'))
         provision_document = copy.deepcopy(c.document)
-        journal = c.store(c.root / 'trial-read-staging')
-        document = journal.read()
+        journal = c.store(c.root / self.JOURNAL)
         branch = 'agentic-trial-' + record['task_id']
-        def guard():
+        def guard(document):
             require(c.session is session and session.registry is original and session.expected == expected and
                     (session.operation_id, session.sequence, session.owner, session.scope, session.software) == ownership and
                     c.journal.read() == provision_document and c.document == provision_document and
@@ -244,6 +242,15 @@ class TrialReadStaging:
             require(c.journal.read() == provision_document and journal.read() == document and
                     c.store(c.root / 'handoff').read() == publication and c.clock() < record['expires'],
                     'native delegation authorization changed during readback')
+        return self._stage(c, record, origin, journal, guard)
+
+    def _stage(self, c, record, origin, journal, check):
+        """Shared own-App mint/write journal; phases never replay unknown effects."""
+        import app_proofs
+        from trusted_ci_deployment import timestamp
+        original = c.session.registry
+        document = journal.read()
+        def guard(): check(document)
         self._guard = guard
         guard()
         if document is None:
@@ -314,7 +321,7 @@ class TrialReadStaging:
         import app_proofs
         from trial_setup import Provision
         require(isinstance(self.provision, Provision), 'actual native trial purpose required for cleanup')
-        journal = self.provision.store(self.provision.root / 'trial-read-staging')
+        journal = self.provision.store(self.provision.root / self.JOURNAL)
         document = journal.read()
         require(document is not None and document['value']['revision'] == self.revision and
                 document['value']['credential'] is not None, 'retained exact delegated token required')

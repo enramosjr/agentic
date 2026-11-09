@@ -807,6 +807,79 @@ def _trial_producer(admission, environment, request, node, role, clock=None, api
     return _produce(environment,request,node,role,admission.clock,api_factory,app_factory,token_factory,uploader_factory,verifier,sleeper,admission)
 
 
+def case_producer(environment, hint, node, role):
+    authority_release.authorize('qualify-live')
+    return _case_producer(environment,hint,node,role)
+
+
+def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub, app_factory=None,
+                   token_factory=GitHub, uploader_factory=NodeUploader, verifier=None, sleeper=time.sleep):
+    """Reconstruct each job from authenticated data; never accept native objects."""
+    import bootstrap
+    import trial_case
+    clock = clock or (lambda:int(time.time()))
+    object_fields(hint, ('origin','revision'), 'case lookup hint')
+    require(role in ('handoff','finalize','verify','proof','publication-controls','publish','broker','controls','final-proof'),
+            'fixed case producer required')
+    require(not environment.get('AGENTIC_TRIAL_ORIGIN_TOKEN'), 'original worker capability is not a case delegation')
+    purpose = 'admin' if role == 'finalize' else _producer_purpose(environment,role)
+    require(purpose in ('admin','reader','issuer','coding','merge'), 'fixed case credential purpose required')
+    if role == 'handoff':
+        _producer_environment(environment,purpose)
+        require(not any(environment.get(k) for k in setup.CREDENTIAL_NAMES), 'case consumer inherited another purpose credential')
+    else:
+        _producer_environment(environment,purpose,broker=role == 'broker')
+    token = environment.get(trial_case.CaseReadStaging.NAME)
+    require(isinstance(token,str) and 0 < len(token) <= 16384, 'fresh staged case read capability required')
+    origin_reader = api_factory(token)
+    api, registry, before, identities = context(environment,api_factory)
+    if role == 'finalize':
+        from broker_finalize import Finalizer
+        Finalizer(None,api,None,loads(environment.get('AGENTIC_RECOVERY_PIN','')),environment,clock)._admit()
+    if role == 'handoff':
+        value = trial_case.consume(registry,origin_reader,environment,hint,clock)
+        artifact = _upload_document(uploader_factory(node,environment),'trial-case-handoff-'+value['task_id']+'-1',value)
+        return dict(run_id=value['run_id'],attempt=1,job_id=value['job_id'],artifact_id=artifact)
+    # Authenticate scope, CLOSED consumption, exact pending fence and pinned job
+    # before constructing a role root or minting its source credentials.
+    admitted = trial_case.Hosted(registry,origin_reader,None,environment,hint,role,clock)
+    read_purpose = 'reader' if role == 'broker' else purpose
+    root = (app_factory or bootstrap.app_api)(before['deployment']['apps'][read_purpose],environment.get('AGENTIC_'+read_purpose.upper()+'_PRIVATE_KEY'))
+    with _source_token(read_purpose,root,api,before['deployment'],identities,before['configuration_revision'],clock,token_factory,admitted.guard) as source:
+        admitted.bind_source(source)
+        if role == 'finalize':
+            from broker_finalize import Finalizer
+            pin = loads(environment.get('AGENTIC_RECOVERY_PIN',''))
+            # Administrative write authority is borrowed only by this separately
+            # pinned terminal role, using the existing finalizer and fence engine.
+            with _admin_authority(root,api,registry,before,identities,token_factory) as writer:
+                admitted.guard()
+                return Finalizer(writer,api,source,pin,environment,clock)._finalize(
+                    admitted.request['operation_id'],admitted.request['sequence'],
+                    _case_broker_job(api,admitted),_admission=admitted)
+        return _trial_producer(admitted,environment,admitted.request,node,role,clock,api_factory,app_factory,
+                               token_factory,uploader_factory,verifier,sleeper)
+
+
+def _case_broker_job(api, admission):
+    s = admission.request['snapshot']
+    p = admission.binding['deployment']['policy']
+    jobs = api.pages('/repos/'+p['authority_repository']+'/actions/runs/'+str(s['run_id'])+
+                     '/attempts/'+str(s['run_attempt'])+'/jobs','jobs')
+    require(isinstance(jobs,list) and len(jobs) <= 10000, 'bounded terminal job inventory required')
+    matches = [j for j in jobs if j.get('name') == 'broker ('+str(s['pr'])+')']
+    require(len(matches) == 1 and positive(matches[0].get('id')), 'exact terminal broker hint required')
+    # A denial normally fails its job. Finalizer's existing terminal_job reader
+    # authenticates the hint and admissible terminal conclusion, not success-only.
+    return matches[0]['id']
+
+
+def _producer_purpose(environment, role):
+    return ('admin' if role in ('publication-controls','controls') else 'issuer' if role == 'publish' else
+            'merge' if role == 'broker' else environment.get('GITHUB_JOB','').split('_',1)[0]
+            if role in ('proof','final-proof') else 'reader')
+
+
 def _produce(environment, request, node, role, clock=None, api_factory=GitHub, app_factory=None,
              token_factory=GitHub, uploader_factory=NodeUploader, verifier=None, sleeper=time.sleep, admission=None):
     """Fixed candidate-free service roles; public dispatch remains release-held."""
@@ -814,9 +887,7 @@ def _produce(environment, request, node, role, clock=None, api_factory=GitHub, a
     import broker_proofs
     from authority_github import Readers, current_snapshot
     from provenance import admit_job, authenticated_document, validate_evidence
-    purpose = ('admin' if role in ('publication-controls','controls') else 'issuer' if role == 'publish' else
-               'merge' if role == 'broker' else environment.get('GITHUB_JOB','').split('_',1)[0]
-               if role in ('proof','final-proof') else 'reader')
+    purpose = _producer_purpose(environment,role)
     require(purpose in ('admin','reader','issuer','coding','merge'), 'fixed producer purpose required')
     _producer_environment(environment, purpose, broker=role == 'broker')
     clock = clock or (lambda:int(time.time()))

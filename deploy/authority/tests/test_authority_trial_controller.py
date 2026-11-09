@@ -91,6 +91,7 @@ class Connected:
                 def __init__(self): self.token = token
                 def get(self,path):
                     if path.startswith('/repos/' + self.p['authority_repository']): return self.api.get(path)
+                    if path == '/repos/' + self.p['repository']: return read(path)
                     if '/pulls/' in path or '/git/' in path or '/branches/' in path: return read(path)
                     return original_get(path)
                 def pages(self,path,collection=None):
@@ -103,6 +104,7 @@ class Connected:
                 def fetch(self,path,**kw):
                     if self.p['authority_repository'] in path: return self.api.fetch(path,**kw)
                     if '/tarball/' in path: return self.tar
+                    if '/git/blobs/' in path and kw.get('method','GET') == 'GET': return read(path)
                     return original_fetch(path,**kw)
             # These are fixture transport closures, never credentials in a worker.
             Scoped.p, Scoped.api, Scoped.source, Scoped.tar = self.p, self.api, self.source, getattr(self,'tar',b'')
