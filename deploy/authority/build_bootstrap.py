@@ -16,6 +16,7 @@ import build_runtime
 FILES = tuple(dict.fromkeys(build_runtime.FILES + (
     'deploy/authority/operator_setup.py',
     'deploy/authority/trial_setup.py',
+    'deploy/authority/trial_configuration.py',
     'deploy/authority/trial_admission.py',
     'deploy/authority/trial_controls.py',
     'deploy/authority/trial_worker.py',

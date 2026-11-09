@@ -223,6 +223,26 @@ or mutation.
 `Provision.completed()` supplies read-only frozen-pair readback after the trial
 registry exists, without replaying initial installation or registration.
 
+The held native `trial_configuration.Prepare(provision).run(approve)` prepares
+that completed pair through the existing operator configuration coordinator. It
+derives a new setup deployment from the origin's approved critical policy and
+model/runtime pins, with the disposable numeric repositories and five own Apps,
+a fresh acceptance epoch and separate model authorization. Production model
+session/account metadata and credential roots are not copied. Exact policy and
+configuration previews require their own consent. The original retained pair,
+configuration fence and expiry bracket native transport calls and session checks.
+The original origin fence must remain live throughout preparation and recovery.
+
+The shared coordinator creates/authenticates the disposable registry, owns its
+configuration fence, prepares runtime pins and dispatch protection, stages all
+seven separate purpose credentials, authenticates their closed consumer proofs,
+records model metadata only after those proofs, and reconciles effective fixture
+protections. Lost secret/consumer-dispatch acknowledgements use the existing
+retained consumption proofs, never blind replay. Registry recovery accepts only
+the exact retained conditional commit. The completed result is still unqualified
+`qualification` with enforcement inactive. Native setup may access separate roots;
+this does not make any root available to the coding worker.
+
 The held `trial_worker.Worker` consumes that native retained admission, a separate
 fixture-only coding transport, the original encrypted model delivery and exact
 prompt consent. It reuses the protected parent's worker measurement, model relay,
@@ -252,9 +272,13 @@ library never automatically reruns a worker or upload after interruption. A know
 completed worker returns its original locator while its admission remains live.
 Resolving uncertain intermediate effects is not supplied by this library.
 
-These libraries do not configure the disposable registry/controls, stage its
-credentials, supply native workflow dispatch or produce qualification case
-outcomes. Production task and broker eligibility still require active
+These libraries do not yet supply qualification/task workflow dispatch or produce
+qualification case outcomes. Credential-consumer dispatch above is setup only.
+The native retained Admission and original configuration session cannot currently
+be reconstructed in independent Actions jobs through a supported authenticated
+handoff. Copying native setup authority or accepting caller JSON would violate
+the execution boundary. No workflow path is enabled by preparation.
+Production task and broker eligibility still require active
 qualification. Local fixtures exercise decrypted delivery, actual worker pipes,
 relay streaming, administrative controls and exact submission, with synthetic
 OCI/kernel/host/model boundaries; they do not prove hosted execution or isolation.

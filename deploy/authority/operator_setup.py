@@ -200,25 +200,36 @@ def configure_operator(operator, bundle_sha, approve, select=select_deployment):
     activation remain separate and cannot be manufactured by this coordinator.
     """
     authority_release.authorize('provision')
+    operator.journal = operator.store(operator.root)
+    operator.document = operator.journal.read()
+    require(operator.document is not None, 'connect the native operator before setup')
+    connected_state = operator.document['value']
+    connected = operator.connect(connected_state['source'], connected_state['authority'], approve)
+    return _configure_connected(operator, connected, bundle_sha, approve, select)
+
+
+def _configure_connected(operator, connected, bundle_sha, approve, select, before_call=lambda: None,
+                         guard_api=lambda api: api, retain_binding=False, on_session=lambda session: None):
+    """Shared native configuration after authenticated provisioning readback.
+
+    The trial controller supplies live origin guards; this core admits no pair.
+    """
     import app_proofs
     import configuration
     import dispatch_controls
     from registry import Registry, DOCUMENT, OPERATION
     from reconcile import Reconciler
     from authority_protocol import validate_deployment
-    operator.journal = operator.store(operator.root)
-    operator.document = operator.journal.read()
-    require(operator.document is not None, 'connect the native operator before setup')
-    connected_state = operator.document['value']
-    connected = operator.connect(connected_state['source'], connected_state['authority'], approve)
+    before_call()
     records = connected['identities']
     registrations = operator.store(operator.root / 'registration').read()['value']['apps']
     apps = {purpose: copy.deepcopy(value['registration']) for purpose, value in registrations.items()}
-    app = bootstrap.app_api(records['apps']['admin']['id'], apps['admin']['pem'])
+    app = guard_api(bootstrap.app_api(records['apps']['admin']['id'], apps['admin']['pem']))
     installation = records['apps']['admin']['installation_id']
     token = bootstrap.installation_token(app, installation, [connected['authority_repository_id']], dict(contents='write'))
     try:
-        registry = Registry(GitHub(token), dict(schema_version=2, repository=connected['authority_repository'],
+        before_call()
+        registry = Registry(guard_api(GitHub(token)), dict(schema_version=2, repository=connected['authority_repository'],
             repository_id=connected['authority_repository_id'], registry_branch='agentic-registry'))
         journal = operator.store(operator.root / 'configuration')
         document = journal.read()
@@ -244,7 +255,7 @@ def configure_operator(operator, bundle_sha, approve, select=select_deployment):
         require(d['state'] == 'setup' and d['policy']['workflow_sha'] == connected['software_revision'] and
                 d['resources']['bundle_sha'] == bundle_sha, 'retained policy or native release changed')
         before = registry.binding(missing=True)
-        if before['deployment'] is None: registry.write(None, d)
+        if before['deployment'] is None: registry.write(None, d, before_effect=before_call)
         before = registry.binding()
         def persist():
             nonlocal document
@@ -325,6 +336,20 @@ def configure_operator(operator, bundle_sha, approve, select=select_deployment):
         require(known(before) == state['known'] and before['fence']['pending'] == state['operation'],
                 'native setup progress is not its retained authenticated binding')
         class TrackedSession(configuration.SetupConfigurationSession):
+            def _check(self):
+                before_call()
+                cached = getattr(self, '_retained_binding', None)
+                if retain_binding and cached is not None and self.expected == tuple(cached[k] for k in
+                        ('configuration_revision', 'deployment_digest', 'branch_head')):
+                    self.registry.unchanged(cached)
+                    current = self._owned(cached)
+                    self.registry.unchanged(cached)
+                else:
+                    current = super()._check()
+                    self._retained_binding = copy.deepcopy(current)
+                before_call()
+                return current
+
             def write_configuration(self, expected_digest, value):
                 prior = self._check()
                 state['write'] = dict(before=prior, documents={DOCUMENT: copy.deepcopy(value)})
@@ -335,6 +360,7 @@ def configure_operator(operator, bundle_sha, approve, select=select_deployment):
                 persist()
         session = TrackedSession(registry, state['operation']['operation_id'], before['fence']['sequence'],
             operator.api, app, records, state['preview'], state['preview']['effects'], state['known'], operator.clock)
+        on_session(session)
         if state['phase'] == 'provision':
             if provider is not None:
                 import cloud_setup
