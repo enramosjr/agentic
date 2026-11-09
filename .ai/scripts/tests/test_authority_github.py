@@ -48,6 +48,16 @@ class Discovery(unittest.TestCase):
             with self.assertRaises(Refusal):
                 split.get(path)
 
+    def test_control_identity_reads_are_single_login_gets_only(self):
+        class Reader:
+            def get(self,path): return path
+        split=a.Readers(Reader(),Reader(),deployment())
+        for path in ('/users/maintainer','/users/agentic-coding%5Bbot%5D'):
+            self.assertEqual(split.get(path),path)
+        for path in ('/users/maintainer/repos','/users/../repos/owner/other','/users/maintainer?x=y',
+                     'https://api.github.com/users/maintainer','/users/maintainer%2Frepos'):
+            with self.assertRaises(Refusal): split.get(path)
+
 
 if __name__ == '__main__':
     unittest.main()

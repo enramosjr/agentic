@@ -22,11 +22,18 @@ FACT_FIELDS = ('schema_version deployment_digest generation base controls_digest
 
 
 def validate_ready(value, binding, broker_job_id, now, historical=False):
+    return _validate_ready(value, binding, broker_job_id, now, historical)
+
+
+def _validate_ready(value, binding, broker_job_id, now, historical=False, admission=None):
+    if admission is not None:
+        from trial_controller import authenticated
+        authenticated(admission, binding)
     object_fields(value, READY_FIELDS, 'broker ready request')
     d = validate_deployment(binding['deployment'])
     fence = validate_fence(binding['fence'])
     op = fence['pending']
-    require(d['state'] == 'active' and op is not None and op['kind'] == 'merge' and
+    require((admission is not None or d['state'] == 'active') and op is not None and op['kind'] == 'merge' and
             type(value['schema_version']) is int and value['schema_version'] == 2 and
             value['kind'] == 'control-ready' and positive(broker_job_id) and value['broker_job_id'] == broker_job_id and
             type(value['sequence']) is int and value['sequence'] == fence['sequence'], 'current warm broker required')
@@ -48,6 +55,10 @@ def validate_ready(value, binding, broker_job_id, now, historical=False):
 
 
 def ready(binding, broker_job_id, nonce, now):
+    return _ready(binding, broker_job_id, nonce, now)
+
+
+def _ready(binding, broker_job_id, nonce, now, admission=None):
     fence = validate_fence(binding['fence'])
     op = fence['pending']
     require(op is not None and op['kind'] == 'merge', 'pending merge operation required')
@@ -55,7 +66,7 @@ def ready(binding, broker_job_id, nonce, now):
              'target', 'pr', 'head', 'base', 'merge', 'workflow_sha', 'run_id', 'attempt')}
     value.update(schema_version=2, kind='control-ready', sequence=fence['sequence'], broker_job_id=broker_job_id,
         nonce=nonce, issued=now, expires=min(now + 120, op['execution_deadline'], binding['deployment']['expires']))
-    return validate_ready(value, binding, broker_job_id, now)
+    return _validate_ready(value, binding, broker_job_id, now, admission=admission)
 
 
 def validate_facts(facts, binding):
@@ -87,7 +98,11 @@ def validate_source_facts(facts, d, deployment_digest, base):
 
 
 def response(request, binding, broker_job_id, started, completed, facts):
-    validate_ready(request, binding, broker_job_id, completed)
+    return _response(request, binding, broker_job_id, started, completed, facts)
+
+
+def _response(request, binding, broker_job_id, started, completed, facts, admission=None):
+    _validate_ready(request, binding, broker_job_id, completed, admission=admission)
     validate_facts(facts, binding)
     require(type(started) is int and type(completed) is int and
             request['issued'] <= started <= completed <= started + 30, 'fresh administrative readback required')
@@ -98,8 +113,12 @@ def response(request, binding, broker_job_id, started, completed, facts):
 
 
 def validate_response(value, request, binding, proof, now):
+    return _validate_response(value, request, binding, proof, now)
+
+
+def _validate_response(value, request, binding, proof, now, admission=None):
     object_fields(value, RESPONSE_FIELDS, 'administrative rendezvous response')
-    validate_ready(request, binding, request['broker_job_id'], now)
+    _validate_ready(request, binding, request['broker_job_id'], now, admission=admission)
     require(type(value['schema_version']) is int and value['schema_version'] == 2 and
             value['kind'] == 'control-response' and value['ready_digest'] == digest(request) and
             all(value[k] == request[k] for k in ('nonce', 'operation_id', 'sequence',
@@ -115,18 +134,26 @@ def validate_response(value, request, binding, proof, now):
 
 
 def read_ready(authority, read_binding, broker_job_id, locator, clock):
+    return _read_ready(authority, read_binding, broker_job_id, locator, clock)
+
+
+def _read_ready(authority, read_binding, broker_job_id, locator, clock, admission=None):
     from merge_receipts import ActionsReceipts
-    store = ActionsReceipts(authority, read_binding, broker_job_id, clock)
+    store = ActionsReceipts._create(authority, read_binding, broker_job_id, clock, admission=admission)
     require(locator['kind'] == 'control-ready', 'exact broker readiness artifact required')
     value = store.authenticate(locator)
-    return validate_ready(value, read_binding(), broker_job_id, clock())
+    return _validate_ready(value, read_binding(), broker_job_id, clock(), admission=admission)
 
 
 def collect(admin, authority, read_binding, broker_job_id, ready_locator, clock):
+    return _collect(admin, authority, read_binding, broker_job_id, ready_locator, clock)
+
+
+def _collect(admin, authority, read_binding, broker_job_id, ready_locator, clock, admission=None):
     """Administrative producer: GET-only observation, after authenticated ready."""
     from controls import observe
     binding = copy.deepcopy(read_binding())
-    request = read_ready(authority, read_binding, broker_job_id, ready_locator, clock)
+    request = _read_ready(authority, read_binding, broker_job_id, ready_locator, clock, admission)
     d, op = binding['deployment'], binding['fence']['pending']
     started = clock()
     first = current_snapshot(admin, d, op['pr'], op['run_id'], op['attempt'])
@@ -138,12 +165,16 @@ def collect(admin, authority, read_binding, broker_job_id, ready_locator, clock)
     current = read_binding()
     require(all(current[k] == binding[k] for k in ('configuration_revision', 'deployment_digest', 'deployment', 'fence')),
             'configuration changed during admin observation')
-    return response(request, binding, broker_job_id, started, clock(), facts)
+    return _response(request, binding, broker_job_id, started, clock(), facts, admission)
 
 
 def read_response(authority, binding, request, locator, now):
+    return _read_response(authority, binding, request, locator, now)
+
+
+def _read_response(authority, binding, request, locator, now, admission=None):
     proof = authenticated_document(authority, binding['deployment'], locator, 'controls', request['pr'], now)
-    value = validate_response(proof['document'], request, binding, proof, now)
+    value = _validate_response(proof['document'], request, binding, proof, now, admission)
     return {'document': value, 'provenance': {k: v for k, v in proof.items() if k != 'document'},
             'controls_digest': digest({'document': value, 'provenance': {k: v for k, v in proof.items() if k != 'document'}}),
             'readback_started': value['readback_started'], 'readback_completed': value['readback_completed'],

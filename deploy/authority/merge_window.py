@@ -16,30 +16,43 @@ EXPIRING = ('deployment', 'qualification', 'task', 'admin', 'reader', 'issuer', 
 
 
 def validate(gate, binding, now):
+    return _validate(gate, binding, now)
+
+
+def _validate(gate, binding, now, admission=None, clock=None):
+    if admission is not None:
+        from trial_controller import authenticated
+        authenticated(admission, binding)
+        admission.guard(binding)
     """Check exact authenticated gate/fence bindings and remaining dispatch time."""
     object_fields(gate, FIELDS, 'broker authorization')
     d = validate_deployment(binding['deployment'])
     fence = validate_fence(binding['fence'])
     operation = fence['pending']
     require(type(gate['schema_version']) is int and gate['schema_version'] == 2 and
-            type(now) is int and d['state'] == 'active' and operation is not None and operation['kind'] == 'merge',
+            type(now) is int and (admission is not None or d['state'] == 'active') and operation is not None and operation['kind'] == 'merge',
             'active deployment and pending merge operation required')
     require(positive(gate['sequence']) and gate['sequence'] == fence['sequence'], 'merge fence sequence differs')
     for key in ('operation_id', 'repository_id', 'target', 'configuration_revision', 'deployment_digest',
                 'pr', 'head', 'base', 'merge', 'workflow_sha', 'run_id', 'attempt'):
         require(gate[key] == operation[key], 'merge operation binding differs: ' + key)
     p = d['policy']
+    qualification_digest = (admission.qualification(binding)['qualification_digest'] if admission is not None else d['qualification'])
     require(gate['configuration_revision'] == binding['configuration_revision'] and
             gate['deployment_digest'] == binding['deployment_digest'] == digest(d) and
             gate['authority_repository_id'] == p['authority_repository_id'] and
             gate['workflow_sha'] == p['workflow_sha'] and gate['epoch'] == p['epoch'] and
-            gate['check_name'] == p['check_name'] and gate['qualification_digest'] == d['qualification'],
+            gate['check_name'] == p['check_name'] and gate['qualification_digest'] == qualification_digest,
             'current configuration or qualification differs')
     require(sha(gate['tree']) and all(fingerprint(gate[k]) for k in
             ('evidence_digest', 'controls_digest', 'proofs_digest', 'task_digest', 'qualification_digest')) and
             positive(gate['check_id']) and isinstance(gate['review_ids'], list) and gate['review_ids'] and
             all(positive(v) for v in gate['review_ids']) and len(set(gate['review_ids'])) == len(gate['review_ids']),
             'complete authenticated gate evidence required')
+    # Native authentication performs blocking live reads. Dispatch supplies its
+    # actual clock so those reads cannot consume a window checked against an
+    # earlier sample. Historical receipt authentication keeps its given time.
+    if clock is not None: now = clock()
     for key in ('issued', 'expires', 'readback_started', 'readback_completed'):
         require(positive(gate[key]), 'invalid broker timestamp')
     require(gate['issued'] <= gate['readback_started'] <= gate['readback_completed'] <= now and
@@ -54,6 +67,10 @@ def validate(gate, binding, now):
 
 
 def dispatch(gate, read_binding, receipts, source, clock):
+    return _dispatch(gate, read_binding, receipts, source, clock)
+
+
+def _dispatch(gate, read_binding, receipts, source, clock, admission=None):
     """Create-only immutable intent + authenticated readback precede ONE request.
 
     receipts.append MUST reject an existing operation/sequence/kind. Its runtime
@@ -61,13 +78,13 @@ def dispatch(gate, read_binding, receipts, source, clock):
     The caller cannot retry an uncertain operation with the same artifact name.
     """
     binding = read_binding()
-    validate(gate, binding, clock())
+    _validate(gate, binding, clock(), admission, clock=clock)
     intent = {'schema_version': 2, 'kind': 'dispatch', 'gate_digest': digest(gate),
               'operation_id': gate['operation_id'], 'sequence': gate['sequence'], 'gate': gate}
     stored = receipts.append('dispatch', intent)
     require(receipts.authenticate(stored) == intent, 'durable dispatch intent differs')
     binding = read_binding()
-    validate(gate, binding, clock())  # Include upload/readback latency and CAS races.
+    _validate(gate, binding, clock(), admission, clock=clock)  # Include upload/readback latency and CAS races.
     try:
         response = source.merge(binding['deployment']['policy']['repository'], gate['pr'], gate['head'], timeout=30)
     except Exception:

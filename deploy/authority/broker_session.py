@@ -77,12 +77,17 @@ class Session:
         proofs = {purpose: locate('final-proof-' + purpose, 'final proof (' + purpose + ')') for purpose in PURPOSES}
         return controls, proofs
 
-    def _run(self):
+    def _run(self, _admission=None):
         """Internal source tests only until the public release hold is lifted."""
         self.binding = self.registry.binding()
+        self._admission = _admission
+        if _admission is not None:
+            from trial_controller import authenticated
+            authenticated(_admission, self.binding)
         op = self.binding['fence']['pending']
         require(op is not None and op['kind'] == 'merge', 'pending broker operation required')
-        self.receipts = ActionsReceipts(self.authority, self.registry.binding, self.job_id, self.clock, uploader=self.uploader)
+        self.receipts = ActionsReceipts._create(self.authority, self.registry.binding, self.job_id, self.clock,
+                                               uploader=self.uploader, admission=_admission)
         try:
             gate = self._collect(op)
         except Exception:
@@ -95,7 +100,9 @@ class Session:
         # Crossing this boundary is permanently uncertain, including failures
         # before dispatch itself reaches HTTP. Never emit not-submitted here.
         try:
-            return merge_window.dispatch(gate, self.registry.binding, self.receipts, self.merger, self.clock)
+            if _admission is None:
+                return merge_window.dispatch(gate, self.registry.binding, self.receipts, self.merger, self.clock)
+            return merge_window._dispatch(gate, self.registry.binding, self.receipts, self.merger, self.clock, _admission)
         except Exception:
             return {'state': 'unknown', 'fence_pending': True, 'operation_id': op['operation_id'],
                     'sequence': self.binding['fence']['sequence']}
@@ -106,12 +113,14 @@ class Session:
         self._wait(min(self.clock() + 120, op['execution_deadline'] - 60,
                        self.binding['deployment']['expires'] - 60), warm=True)
         locators = self.locators() if callable(self.locators) else self.locators
-        prepared = broker_evidence.preload(self.registry, self.source, self.authority, self.identities,
-                                           self.job_id, locators, self.clock)
+        arguments = (self.registry,self.source,self.authority,self.identities,self.job_id,locators,self.clock)
+        prepared = (broker_evidence.preload(*arguments) if self._admission is None else
+                    broker_evidence._preload(*arguments,admission=self._admission))
         self._guard()
-        request = control_rendezvous.ready(self.binding, self.job_id, secrets.token_hex(16), self.clock())
+        request = control_rendezvous._ready(self.binding, self.job_id, secrets.token_hex(16), self.clock(), self._admission)
         self.receipts.append('control-ready', request)
         jobs = self._wait(request['expires'] - 60, warm=False)
         controls, final_proofs = self._locators(jobs)
-        return broker_evidence.finish(self.registry, self.source, self.authority, self.identities,
-                                      prepared, request, controls, final_proofs, self.clock)
+        arguments = (self.registry,self.source,self.authority,self.identities,prepared,request,controls,final_proofs,self.clock)
+        return (broker_evidence.finish(*arguments) if self._admission is None else
+                broker_evidence._finish(*arguments,admission=self._admission))

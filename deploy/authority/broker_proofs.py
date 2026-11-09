@@ -13,11 +13,19 @@ FIELDS = ('schema_version kind operation_id sequence configuration_revision depl
 
 
 def current_operation(binding, snapshot):
+    require(binding['deployment']['state'] == 'active', 'current pending broker configuration required')
+    return _operation(binding, snapshot)
+
+
+def _operation(binding, snapshot, admission=None):
+    if admission is not None:
+        from trial_controller import authenticated
+        authenticated(admission, binding)
     d = validate_deployment(binding['deployment'])
     s = validate_snapshot(snapshot, d['policy'])
     fence = validate_fence(binding['fence'])
     op = fence['pending']
-    require(d['state'] == 'active' and op is not None and op['kind'] == 'merge' and
+    require((admission is not None or d['state'] == 'active') and op is not None and op['kind'] == 'merge' and
             binding['configuration_revision'] == op['configuration_revision'] and
             binding['deployment_digest'] == op['deployment_digest'] == digest(d),
             'current pending broker configuration required')
@@ -28,10 +36,10 @@ def current_operation(binding, snapshot):
     return op
 
 
-def _read(authority, binding, identities, snapshot, locators, now, request=None):
+def _read(authority, binding, identities, snapshot, locators, now, request=None, admission=None):
     d = binding['deployment']
     app_proofs.identity_record(d, identities)
-    op = current_operation(binding, snapshot)
+    op = _operation(binding, snapshot, admission)
     object_fields(locators, ('admin', 'reader', 'issuer', 'coding', 'merge'), 'broker purpose locators')
     documents, provenance, valid_until = {}, {}, {}
     for purpose in ('admin', 'reader', 'issuer', 'coding', 'merge'):
@@ -83,15 +91,24 @@ def read(authority, binding, identities, snapshot, locators, now):
 
 
 def read_final(authority, binding, identities, snapshot, request, locators, now):
-    from control_rendezvous import validate_ready
-    validate_ready(request, binding, request['broker_job_id'], now)
-    return _read(authority, binding, identities, snapshot, locators, now, request=request)
+    return _read_final(authority, binding, identities, snapshot, request, locators, now)
+
+
+def _read_final(authority, binding, identities, snapshot, request, locators, now, admission=None):
+    from control_rendezvous import _validate_ready
+    _validate_ready(request, binding, request['broker_job_id'], now, admission=admission)
+    return _read(authority, binding, identities, snapshot, locators, now, request=request, admission=admission)
 
 
 def refresh(app_api, authority, registry, identities, purpose, environment, broker_job_id,
             ready_locator, clock, token_factory=GitHub):
+    return _refresh(app_api, authority, registry, identities, purpose, environment, broker_job_id, ready_locator, clock, token_factory)
+
+
+def _refresh(app_api, authority, registry, identities, purpose, environment, broker_job_id,
+             ready_locator, clock, token_factory=GitHub, admission=None):
     """Own-purpose producer, in its separate job; returns no token/root credential."""
-    from control_rendezvous import read_ready, validate_ready
+    from control_rendezvous import _read_ready, _validate_ready
     require(purpose in ('admin', 'reader', 'issuer', 'coding', 'merge'), 'unknown final capability purpose')
     binding = copy.deepcopy(registry.binding())
     d = binding['deployment']
@@ -101,12 +118,12 @@ def refresh(app_api, authority, registry, identities, purpose, environment, brok
     admit_job(authority, d, environment, 'final proof (' + purpose + ')', clock())
     require(str(op['run_id']) == environment.get('GITHUB_RUN_ID') and
             str(op['attempt']) == environment.get('GITHUB_RUN_ATTEMPT'), 'final capability producer attempt differs')
-    request = read_ready(authority, registry.binding, broker_job_id, ready_locator, clock)
+    request = _read_ready(authority, registry.binding, broker_job_id, ready_locator, clock, admission)
     started = clock()
     result = app_proofs.prove(app_api, authority, d, identities, purpose, binding['configuration_revision'],
                               started, token_factory)
     completed = clock()
-    validate_ready(request, binding, broker_job_id, completed)
+    _validate_ready(request, binding, broker_job_id, completed, admission=admission)
     require(request['issued'] <= started <= completed <= request['issued'] + 30,
             'final capability readback exceeded the fresh window')
     current = registry.binding()
@@ -117,7 +134,7 @@ def refresh(app_api, authority, registry, identities, purpose, environment, brok
         epoch=p['epoch'], policy_digest=digest(p), verifier_sha=p['verifier_sha'], image=p['image'],
         authority_repository_id=p['authority_repository_id'], workflow_sha=p['workflow_sha'],
         run_id=op['run_id'], run_attempt=op['attempt'])
-    current_operation(binding, snapshot)
+    _operation(binding, snapshot, admission)
     return dict(schema_version=2, kind='broker-final-purpose-proof', operation_id=op['operation_id'],
         sequence=binding['fence']['sequence'], configuration_revision=binding['configuration_revision'],
         deployment_digest=binding['deployment_digest'], snapshot=snapshot, issued=started, completed=completed,

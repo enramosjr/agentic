@@ -181,7 +181,7 @@ class Registry:
                 pending['operation_id'] == operation_id, 'owned configuration fence required')
         return pending
 
-    def acquire_operation(self, expected_head, expected_configuration, pending):
+    def acquire_operation(self, expected_head, expected_configuration, pending, before_effect=None):
         operation_fence.operation(pending)
         before = self.binding()
         require(before['branch_head'] == expected_head and
@@ -196,7 +196,7 @@ class Registry:
         fence['sequence'] += 1
         fence['pending'] = copy.deepcopy(pending)
         operation_fence.validate(fence)
-        return self._replace(before, {OPERATION: fence})
+        return self._replace(before, {OPERATION: fence}, before_effect=before_effect)
 
     def finalize_operation(self, expected_head, terminal):
         """Admin only: authenticate terminal artifacts/source state before calling.

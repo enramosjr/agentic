@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from urllib.parse import unquote, urlsplit
+import re
 
 from authority_protocol import validate_deployment
 from trusted_ci_policy import digest, positive, require, validate_snapshot
@@ -28,6 +29,11 @@ class Readers:
         require(False, 'read outside approved repositories refused')
 
     def get(self, path):
+        # Effective CODEOWNERS and App-bot readback need public login identities,
+        # not another repository or a caller-selected URL. Preserve GET-only and
+        # an exact single login path; all mutation APIs remain absent.
+        if isinstance(path, str) and re.fullmatch(r'/users/[A-Za-z0-9_-]+(?:%5[Bb]bot%5[Dd])?', path):
+            return self.source.get(path)
         return self._api(path).get(path)
 
     def pages(self, path, collection=None):

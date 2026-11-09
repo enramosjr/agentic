@@ -52,7 +52,7 @@ class Finalizer:
                 job['status'] == 'in_progress' and job['conclusion'] is None, 'recovery job provenance differs')
         return dict(run_id=run_id, attempt=attempt, job_id=job['id'], workflow_sha=p['workflow_sha'])
 
-    def _finalize(self, operation_id, sequence, broker_job_id):
+    def _finalize(self, operation_id, sequence, broker_job_id, _admission=None):
         require(isinstance(operation_id, str) and re.fullmatch('[0-9a-f]{32}', operation_id) and
                 positive(sequence) and positive(broker_job_id), 'exact terminal operation required')
         recovery = self._admit()  # Before reading the administrative registry.
@@ -65,7 +65,7 @@ class Finalizer:
                 fence['sequence'] == sequence and op['configuration_revision'] == before['configuration_revision'] and
                 op['deployment_digest'] == before['deployment_digest'], 'pending recovery configuration differs')
         read = lambda: self.registry.binding(check_software=False)
-        receipts = ActionsReceipts(self.authority, read, broker_job_id, self.clock, recovery=True)
+        receipts = ActionsReceipts._create(self.authority, read, broker_job_id, self.clock, recovery=True, admission=_admission)
         producer = receipts.terminal_job()
         locators = {kind: receipts.find_for_recovery(kind) for kind in ('not-submitted', 'dispatch', 'outcome')}
         positive_no_dispatch = locators['not-submitted'] is not None

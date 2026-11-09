@@ -29,32 +29,44 @@ def _same(binding, original):
 
 
 def preload(registry, source, authority, identities, job_id, locators, clock):
+    return _preload(registry, source, authority, identities, job_id, locators, clock)
+
+
+def _preload(registry, source, authority, identities, job_id, locators, clock, admission=None):
     binding = copy.deepcopy(registry.binding())
     d = validate_deployment(binding['deployment'])
     app_proofs.identity_record(d, identities)
     object_fields(locators, ('evidence', 'proofs', 'task', 'qualification'), 'broker evidence locators')
     op = binding['fence']['pending']
-    require(op is not None and op['kind'] == 'merge' and d['state'] == 'active', 'active pending merge required')
+    if admission is not None:
+        from trial_controller import authenticated
+        authenticated(admission, binding)
+    require(op is not None and op['kind'] == 'merge' and (admission is not None or d['state'] == 'active'), 'active pending merge required')
     ActionsReceipts(authority, registry.binding, job_id, clock).current_job()
     api = Readers(source, authority, d)
     s = current_snapshot(api, d, op['pr'], op['run_id'], op['attempt'])
-    broker_proofs.current_operation(binding, s)
+    broker_proofs._operation(binding, s, admission)
     evidence_locator = locators['evidence']
     require(isinstance(evidence_locator, dict) and evidence_locator.get('run_id') == op['run_id'] and
             evidence_locator.get('attempt') == op['attempt'],
             'verification belongs to another broker attempt')
     evidence = authenticated_document(authority, d, evidence_locator, 'evidence', s['pr'], clock())
     validate_evidence(evidence['document'], d, s, binding['configuration_revision'], evidence['job_id'], clock())
-    proofs = broker_proofs.read(authority, binding, identities, s, locators['proofs'], clock())
+    proofs = broker_proofs._read(authority, binding, identities, s, locators['proofs'], clock(), admission=admission)
     object_fields(locators['task'], ('task_id', 'locator'), 'protected task locator')
-    task = task_admission.read(source, authority, binding, identities, s,
-                               locators['task']['locator'], locators['task']['task_id'], clock())
-    qualification = authenticated_document(authority, d, locators['qualification'], 'qualification', None, clock())
+    task = (task_admission.read(source, authority, binding, identities, s,
+                               locators['task']['locator'], locators['task']['task_id'], clock()) if admission is None else
+            admission.task(binding, s, locators['task']['locator'], locators['task']['task_id']))
+    if admission is None:
+        qualification = authenticated_document(authority, d, locators['qualification'], 'qualification', None, clock())
     # Authenticate and validate the pinned summary now. Its comparison against
     # CURRENT controls is deliberately deferred until after the rendezvous.
-    value = qualification['document']
-    require(isinstance(value, dict) and 'controls_digest' in value, 'qualification summary required')
-    qualification_record.validate(value, binding, identities, qualification, value['controls_digest'], clock())
+        value = qualification['document']
+        require(isinstance(value, dict) and 'controls_digest' in value, 'qualification summary required')
+        qualification_record.validate(value, binding, identities, qualification, value['controls_digest'], clock())
+    else:
+        require(locators['qualification'] == admission.request['qualification'], 'exact native trial certificate required')
+        qualification = admission.qualification(binding)
     _same(registry.binding(), binding)
     return {'schema_version': 2, 'binding': binding, 'snapshot': s, 'job_id': job_id,
             'evidence': evidence, 'proofs': proofs, 'task': task, 'qualification': qualification}
@@ -116,21 +128,33 @@ def _additional_checks(source, d, snapshot, required):
 
 
 def finish(registry, source, authority, identities, prepared, request, control_locator, final_proof_locators, clock):
+    return _finish(registry, source, authority, identities, prepared, request, control_locator, final_proof_locators, clock)
+
+
+def _finish(registry, source, authority, identities, prepared, request, control_locator, final_proof_locators, clock, admission=None):
     binding = registry.binding()
     _same(binding, prepared['binding'])
     d, expected = binding['deployment'], prepared['snapshot']
-    op = broker_proofs.current_operation(binding, expected)
+    op = broker_proofs._operation(binding, expected, admission)
     ActionsReceipts(authority, registry.binding, prepared['job_id'], clock).current_job()
-    control_rendezvous.validate_ready(request, binding, prepared['job_id'], clock())
-    controls = control_rendezvous.read_response(authority, binding, request, control_locator, clock())
+    control_rendezvous._validate_ready(request, binding, prepared['job_id'], clock(), admission=admission)
+    controls = control_rendezvous._read_response(authority, binding, request, control_locator, clock(), admission)
     qualification = prepared['qualification']
-    qualification_record.validate(qualification['document'], binding, identities, qualification,
-                                  controls['document']['result']['controls_digest'], clock())
+    if admission is None:
+        qualification_record.validate(qualification['document'], binding, identities, qualification,
+                                      controls['document']['result']['controls_digest'], clock())
+    else:
+        require(qualification == admission.qualification(binding, controls['document']['result']['controls_digest']),
+                'trial certificate changed during broker collection')
     evidence, task = prepared['evidence'], prepared['task']
-    proofs = broker_proofs.read_final(authority, binding, identities, expected, request, final_proof_locators, clock())
+    proofs = broker_proofs._read_final(authority, binding, identities, expected, request, final_proof_locators, clock(), admission)
     validate_evidence(evidence['document'], d, expected, binding['configuration_revision'], evidence['job_id'], clock())
     task_proof = dict(task['provenance'], document=task['document'])
-    task_admission.validate(task['document'], binding, identities, expected, task_proof, clock())
+    if admission is None:
+        task_admission.validate(task['document'], binding, identities, expected, task_proof, clock())
+    else:
+        require(task == admission.task(binding, expected, admission.request['task']['locator'], admission.request['task']['task_id']),
+                'trial task changed during broker collection')
     api = Readers(source, authority, d)
     current = current_snapshot(api, d, op['pr'], op['run_id'], op['attempt'])
     require(current == expected, 'candidate changed before broker authorization')
@@ -146,7 +170,7 @@ def finish(registry, source, authority, identities, prepared, request, control_l
     require(pr['head']['sha'] == current['head'] and pr['base']['sha'] == current['base'], 'reviewed PR changed')
     reviews = independent_approval(source, d['policy'], pr, human=True)
     additional = _additional_checks(source, d, current, controls['document']['result']['required_checks'])
-    references = [evidence, qualification, task['provenance'],
+    references = [evidence, *([qualification] if admission is None else []), task['provenance'],
                   *prepared['proofs']['provenance'].values(), *proofs['provenance'].values(), controls['provenance']]
     artifact_digest = _artifact_readback(authority, d, references)
     commit = source.get(root + '/git/commits/' + current['merge'])
@@ -170,8 +194,8 @@ def finish(registry, source, authority, identities, prepared, request, control_l
         readback_completed=max(controls['readback_completed'], *(v['completed'] for v in proofs['documents'].values())),
         valid_until=valid_until,
         evidence_digest=coordinates['evidence_digest'], task_digest=task['task_digest'],
-        controls_digest=controls['controls_digest'], qualification_digest=d['qualification'],
+        controls_digest=controls['controls_digest'], qualification_digest=(d['qualification'] if admission is None else qualification['qualification_digest']),
         proofs_digest=digest(dict(capabilities=proofs['proofs_digest'], additional_checks=additional,
                                  artifact_readback=artifact_digest)), check_id=trusted_check['check_id'],
         review_ids=sorted(r['id'] for r in reviews))
-    return merge_window.validate(gate, binding, clock())
+    return merge_window._validate(gate, binding, clock(), admission, clock=clock)

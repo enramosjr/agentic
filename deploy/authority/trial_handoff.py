@@ -249,9 +249,6 @@ class Native:
 
     def _completion(self, prompt, source=None):
         """Shared exact CLOSED worker and Git readback; no activation or effects."""
-        import provenance
-        import submission
-        from trusted_ci_deployment import timestamp
         c = self.provision
         require(isinstance(c,Provision), 'actual native trial provision required')
         retained = c.store(c.root / 'trial-workflow').read()
@@ -260,6 +257,23 @@ class Native:
         require(record['execution'] == retained['value']['execution'] and digest(prompt) == record['prompt_digest'] and
                 c.completed() == record['pair'] and c.session._check() == origin and self.registry.binding() == record['trial'],
                 'native completion recovery binding differs')
+        completed = self._worker_completion(record, prompt, source)
+        require(read(c.session.registry,retained['value']['revision_bound'],c.clock())[0] == record and
+                self.registry.binding() == record['trial'] and c.store(c.root / 'trial-workflow').read() == retained and
+                c.completed() == record['pair'], 'native authorization changed during completion recovery')
+        return dict(completed, record=record, retained=retained)
+
+    def _worker_completion(self, record, prompt, source=None):
+        """Immutable CLOSED worker/Git reader, bracketed by its caller's live guard.
+
+        Native observation requires the original settled binding. A separately
+        authenticated case owner may bracket this same reader with its exact
+        retained fence transition instead; this reader grants no such authority.
+        """
+        import provenance
+        import submission
+        from trusted_ci_deployment import timestamp
+        c = self.provision
         task = dict(task_id=record['task_id'],run_id=record['execution']['handshake']['run_id'],attempt=1,
             deadline=min(record['expires'],record['execution']['credential']['expires']),purpose='qualification')
         d, api = record['trial']['deployment'], self.registry.api
@@ -308,11 +322,8 @@ class Native:
                 pr['base']['ref'] == p['target'] and pr['user']['id'] == submitted['bot_id'] and pr['user'].get('type') == 'Bot' and
                 '<!-- agentic-task:' + digest(submission_request) + ' -->' in pr.get('body','') and
                 submission.existing_ref(source,source_root,submitted['branch']) == submitted['head'], 'exact trial PR readback differs')
-        require(read(c.session.registry,retained['value']['revision_bound'],c.clock())[0] == record and
-                self.registry.binding() == record['trial'] and c.store(c.root / 'trial-workflow').read() == retained and
-                c.completed() == record['pair'], 'native authorization changed during completion recovery')
         result = dict(state='trial-complete',locator=location,submitted=copy.deepcopy(submitted),hosted_qualified=False,enforcement_active=False)
-        return dict(result=result, record=record, proof=proof, files=files, retained=retained)
+        return dict(result=result, proof=proof, files=files)
 
     def publish(self, prompt, approve):
         authority_release.authorize('protected-run')

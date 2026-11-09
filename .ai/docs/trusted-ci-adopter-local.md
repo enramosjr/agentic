@@ -132,11 +132,13 @@ Broker receipts also retain the existing create-only dispatch protection; no
 durable native full-inventory restart coordinator is supplied. Connected local
 fixtures execute the existing verification/publication and fresh-broker graph
 using synthetic active regression configurations and modeled host/OCI boundaries.
-They do not integrate initial-trial handoff/worker admission into those controllers,
-produce qualification receipts, qualify hosted isolation or activate anything.
+Those ordered libraries do not themselves integrate initial-trial handoff/worker
+admission into the controllers, produce qualification receipts, qualify hosted
+isolation or activate anything. The separate native one-candidate composition
+below now consumes an authenticated trial through the shared controller path.
 The separate native candidate preparer described below does not supply their
-completed case inputs. Trial admission into these controllers, full-inventory
-orchestration, receipt production and hosted qualification
+completed case inputs. Hosted trial handoff into these controllers, full-inventory
+orchestration, qualification receipt production and hosted qualification
 remain unfinished; external real candidate human review remains required.
 
 Administrative preparation reads independent review of the exact candidate head
@@ -413,14 +415,58 @@ expired controls and substituted identities fail closed. Partial candidates may
 remain on refusal, with their intent held; this is not transactional rollback.
 
 These are candidate reservations with the same worker tree, not completed host or
-broker case inputs: case-specific mutations, evidence, prior-success coordinates,
-external independent human review and trial admission through the real shared
-verification/publication/fresh-broker/final-control/purpose-proof/receipt/recovery
-controllers remain unfinished. Production admission remains ACTIVE-only and
-`qualification_record` remains a strict reader. No trial certificate, fabricated
-qualification receipt or active-state bridge is introduced. Local native-to-worker
-and candidate-submission fixtures do not establish hosted execution or isolation;
-the result explicitly reports no executed cases, qualification or enforcement.
+broker case inputs. Case-specific mutations, prior-success coordinates, ordered
+execution and external independent human review remain unfinished. The preparer
+itself supplies no trial certificate or qualification receipt; its result explicitly
+reports no executed cases, qualification or enforcement.
+
+The held `trial_controller.Native` library selects one exact reservation and
+consumes it through the actual shared preparation, verification, issuer publication,
+warm broker, final administrative controls, five final purpose proofs, immutable
+dispatch/outcome receipts and terminal finalizer. It starts from the authentic native
+handoff, CLOSED worker and complete unchanged candidate journal. A distinct native
+trial-task envelope binds that worker to this exact candidate's bytes, modes, branch
+and PR; it never relabels the worker receipt as a production receipt for another PR.
+
+The protected native certificate binds the original handoff, worker, candidate,
+unchanged unqualified deployment, independently observed controls, exact pending
+merge operation/sequence and original expiry. Intent is retained before authority
+effects. Only the exact retained conditional fence commit permits read-only
+lost-acknowledgement recovery; an absent effect never authorizes another write.
+Recovery requires the live original native authorization and retained journal;
+fresh recovery after their expiry or loss is not established by this slice.
+Native observation still requires the original settled trial binding. The case
+controller separately authenticates its owned pending fence transition and shares
+only immutable worker/Git readback with that observation path.
+
+The production entrypoints retain their ACTIVE state and existing-qualified-receipt
+admission. The separate internal trial entrypoint requires an actual authenticated
+native admission object; caller JSON, a certificate alone or a fabricated active
+deployment cannot select it. Both paths share the same controller implementations.
+Independent human review is observed before fencing and again by the final broker;
+the fixture may model authenticated host review but no coordinator submits or
+requests reviews. The final freshness, expiry, single-use and expected-head merge
+rules remain unchanged. Positive recovery authenticates the actual closed PR,
+merge parents and tree. Withdrawal or stale final readback refuses dispatch;
+genuine no-dispatch evidence can finalize, while uncertain effects remain pending
+until actual evidence resolves them. Known terminal cases cannot restart.
+
+This is a native source-local composition, not an implemented cross-job certificate
+handoff or new Actions mode. Native objects and journals are never sent to hosted
+jobs. The native object retains provisioning/session capabilities in its trusted
+process; this composition does not establish credential-isolated producer
+processes. Hosted producers will need a separately authenticated transport and
+their existing purpose-only credentials, not this native object. Terminal recovery
+consumes the existing explicitly configured finalization/recovery runtime pin.
+Local fixture execution drives authenticated job/closed-artifact readers,
+actual App proofs, verifier cleanup, effective controls and the actual merge
+request encoder, with GitHub/OCI/kernel/model boundaries modeled. It establishes
+neither hosted execution/isolation nor qualification. The one-candidate controller
+does not prepare the case-specific mutations or coordinate all sixteen probes.
+Hosted admission transport, ordered case recovery, qualification receipt production
+and final hosted qualification remain unfinished. Trial and original deployments
+stay unqualified; `qualification_record` remains a strict reader. No complete
+original requirement, trusted release, activation or enforcement is claimed.
 
 Local broker foundations include a durable operation fence on the independent
 registry branch, stable deployment-blob identity separate from branch CAS, scoped

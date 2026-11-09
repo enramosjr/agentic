@@ -3,6 +3,7 @@
 Authority coordinates come from the actual Actions execution, never dispatch
 inputs. All public producer roles remain release-held before reads or credentials.
 """
+import copy
 import json
 from contextlib import contextmanager
 import os
@@ -523,6 +524,10 @@ def _guard_binding(registry, before, clock):
 
 
 def _producer_request(request, binding, environment, clock):
+    return _bound_producer_request(request, binding, environment, clock)
+
+
+def _bound_producer_request(request, binding, environment, clock, admission=None):
     import broker_proofs
     object_fields(request, PRODUCER_FIELDS, 'prepared producer request')
     require(type(request['schema_version']) is int and request['schema_version'] == 2 and
@@ -530,7 +535,8 @@ def _producer_request(request, binding, environment, clock):
             request['deployment_digest'] == binding['deployment_digest'] and
             type(request['sequence']) is int and request['sequence'] == binding['fence']['sequence'],
             'prepared producer configuration differs')
-    op = broker_proofs.current_operation(binding, request['snapshot'])
+    op = broker_proofs._operation(binding, request['snapshot'], admission)
+    if admission is not None: require(request == admission.request, 'exact retained trial producer request required')
     require(request['operation_id'] == op['operation_id'] and str(op['run_id']) == environment.get('GITHUB_RUN_ID') and
             str(op['attempt']) == environment.get('GITHUB_RUN_ATTEMPT') and clock() < min(op['execution_deadline'], binding['deployment']['expires']),
             'prepared producer execution differs')
@@ -616,9 +622,13 @@ def _retained(authority, source, binding, identities, snapshot, clock):
 
 
 def _publication_observation(binding, snapshot, started, completed, facts):
+    return _bound_publication_observation(binding, snapshot, started, completed, facts)
+
+
+def _bound_publication_observation(binding, snapshot, started, completed, facts, admission=None):
     import broker_proofs
     import control_rendezvous
-    op = broker_proofs.current_operation(binding, snapshot)
+    op = broker_proofs._operation(binding, snapshot, admission)
     control_rendezvous.validate_facts(facts, binding)
     require(positive(started) and positive(completed) and op['created'] <= started <= completed <= started + 30,
             'fresh publication observation required')
@@ -629,9 +639,13 @@ def _publication_observation(binding, snapshot, started, completed, facts):
 
 
 def _validate_publication_observation(value, binding, snapshot, proof, now):
+    return _bound_validate_publication_observation(value, binding, snapshot, proof, now)
+
+
+def _bound_validate_publication_observation(value, binding, snapshot, proof, now, admission=None):
     object_fields(value, ('schema_version kind operation_id sequence configuration_revision deployment_digest snapshot '
                           'readback_started readback_completed result').split(), 'closed publication observation')
-    expected = _publication_observation(binding, snapshot, value['readback_started'], value['readback_completed'], value['result'])
+    expected = _bound_publication_observation(binding, snapshot, value['readback_started'], value['readback_completed'], value['result'], admission)
     require(value == expected and type(value['schema_version']) is int and type(value['sequence']) is int and
             proof['role'] == 'publication-controls' and proof['key'] == snapshot['pr'] and
             proof['run_id'] == snapshot['run_id'] and proof['attempt'] == snapshot['run_attempt'] and
@@ -678,6 +692,26 @@ def _prepare(environment, request, node=None, clock=None, api_factory=GitHub, ap
     job = admit_job(api, d, environment, 'prepare', clock())
     guard = lambda:_guard_binding(registry, before, clock)
     root = (app_factory or bootstrap.app_api)(d['apps']['admin'], environment.get('AGENTIC_ADMIN_PRIVATE_KEY'))
+    return _prepare_candidate(api, registry, before, identities, request, environment, job, root, clock, token_factory, guard)
+
+
+def _prepare_trial(admission, environment, root, token_factory=GitHub):
+    from trial_controller import authenticated
+    from provenance import admit_job
+    authenticated(admission)
+    admission.guard()
+    require(admission.value['phase'] == 'ready', 'trial fence already attempted; never replay preparation')
+    before, registry = admission.binding, admission.registry
+    api, d = registry.api, before['deployment']
+    job = admit_job(api,d,environment,'prepare',admission.clock())
+    return _prepare_candidate(api,registry,before,admission.record['pair']['identities'],
+        dict(pr=admission.candidate['submitted']['pr']),environment,job,root,admission.clock,token_factory,admission.guard,admission)
+
+
+def _prepare_candidate(api, registry, before, identities, request, environment, job, root, clock, token_factory, guard, admission=None):
+    from authority_github import Readers, current_snapshot
+    from trusted_ci_github import independent_approval
+    d, p = before['deployment'], before['deployment']['policy']
     with _source_token('admin', root, api, d, identities, before['configuration_revision'], clock, token_factory, guard) as source:
         readers = Readers(source, api, d)
         s = current_snapshot(readers, d, request['pr'], job['run_id'], int(environment['GITHUB_RUN_ATTEMPT']))
@@ -692,7 +726,12 @@ def _prepare(environment, request, node=None, clock=None, api_factory=GitHub, ap
         # Setup consent and cached check success cannot substitute for review.
         # Observe only; the coordinator never submits or requests a human review.
         reviewed()
-        task, qualification = _retained(api, source, before, identities, s, clock)
+        if admission is None:
+            task, qualification = _retained(api, source, before, identities, s, clock)
+        else:
+            task = dict(task_id=admission.candidate['submitted']['task_id'],locator=admission.value['worker']['locator'])
+            admission.task(before,s,task['locator'],task['task_id'])
+            qualification = None
         guard()
         require(current_snapshot(readers, d, s['pr'], s['run_id'], s['run_attempt']) == s, 'candidate moved before fencing')
         now = clock()
@@ -703,8 +742,15 @@ def _prepare(environment, request, node=None, clock=None, api_factory=GitHub, ap
             created=now, execution_deadline=min(now+3600,d['expires']), **{k:s[k] for k in ('pr','head','base','merge')})
         with _admin_authority(root, api, registry, before, identities, token_factory) as writer:
             reviewed()
-            after = writer.acquire_operation(before['branch_head'], before['configuration_revision'], op)
+            if admission is None:
+                after = writer.acquire_operation(before['branch_head'], before['configuration_revision'], op)
+            else:
+                from controls import observe
+                facts = observe(source,d)
+                reviewed()
+                after = admission.acquire(writer,before,op,s,task,facts)
     require(after['fence']['pending'] == op, 'prepared fence readback differs')
+    if admission is not None: return copy.deepcopy(admission.request)
     return dict(schema_version=2, configuration_revision=after['configuration_revision'], deployment_digest=after['deployment_digest'],
         operation_id=op['operation_id'], sequence=after['fence']['sequence'], snapshot=s, task=task, qualification=qualification)
 
@@ -749,6 +795,20 @@ def _verify_actions(source, d, snapshot, job_id, guard, clock, disk_factory=None
 
 def _producer(environment, request, node, role, clock=None, api_factory=GitHub, app_factory=None,
               token_factory=GitHub, uploader_factory=NodeUploader, verifier=None, sleeper=time.sleep):
+    return _produce(environment,request,node,role,clock,api_factory,app_factory,token_factory,uploader_factory,verifier,sleeper)
+
+
+def _trial_producer(admission, environment, request, node, role, clock=None, api_factory=GitHub, app_factory=None,
+                    token_factory=GitHub, uploader_factory=NodeUploader, verifier=None, sleeper=time.sleep):
+    from trial_controller import authenticated
+    authenticated(admission)
+    admission.guard()
+    require(role in ('verify','proof','publication-controls','publish','broker','controls','final-proof'), 'fixed trial controller role required')
+    return _produce(environment,request,node,role,admission.clock,api_factory,app_factory,token_factory,uploader_factory,verifier,sleeper,admission)
+
+
+def _produce(environment, request, node, role, clock=None, api_factory=GitHub, app_factory=None,
+             token_factory=GitHub, uploader_factory=NodeUploader, verifier=None, sleeper=time.sleep, admission=None):
     """Fixed candidate-free service roles; public dispatch remains release-held."""
     import bootstrap
     import broker_proofs
@@ -760,20 +820,23 @@ def _producer(environment, request, node, role, clock=None, api_factory=GitHub, 
     require(purpose in ('admin','reader','issuer','coding','merge'), 'fixed producer purpose required')
     _producer_environment(environment, purpose, broker=role == 'broker')
     clock = clock or (lambda:int(time.time()))
-    api, registry, before, identities = context(environment, api_factory)
-    op = _producer_request(request, before, environment, clock)
+    if admission is None:
+        api, registry, before, identities = context(environment, api_factory)
+    else:
+        api, registry, before, identities = admission.registry.api, admission.registry, admission.binding, admission.record['pair']['identities']
+    op = _bound_producer_request(request, before, environment, clock, admission)
     d, s = before['deployment'], request['snapshot']
     name = ('publication controls' if role == 'publication-controls' else 'final proof' if role == 'final-proof' else role)
     name += ' (' + (purpose if role in ('proof','final-proof') else str(op['pr'])) + ')'
     job = admit_job(api, d, environment, name, clock())
-    guard = lambda:_guard_binding(registry, before, clock)
+    guard = (lambda:_guard_binding(registry, before, clock)) if admission is None else admission.guard
     guard()
     root = (app_factory or bootstrap.app_api)(d['apps'][purpose], environment.get('AGENTIC_'+purpose.upper()+'_PRIVATE_KEY'))
     uploader = uploader_factory(node, environment)
     if role in ('proof','final-proof'):
         if role == 'final-proof':
-            broker, ready = _wait_broker_ready(api, registry, before, clock, guard, sleeper)
-            value = broker_proofs.refresh(root, api, registry, identities, purpose, environment, broker, ready, clock, token_factory)
+            broker, ready = _wait_broker_ready(api, registry, before, clock, guard, sleeper, admission)
+            value = broker_proofs._refresh(root, api, registry, identities, purpose, environment, broker, ready, clock, token_factory, admission)
         else:
             started = clock()
             result = app_proofs.prove(root, api, d, identities, purpose, before['configuration_revision'], started, token_factory)
@@ -790,7 +853,10 @@ def _producer(environment, request, node, role, clock=None, api_factory=GitHub, 
             require(current_snapshot(readers, d, op['pr'], op['run_id'], op['attempt']) == s, 'prepared candidate changed')
         if role == 'verify':
             import task_admission
-            task_admission.read(source, api, before, identities, s, request['task']['locator'], request['task']['task_id'], clock())
+            if admission is None:
+                task_admission.read(source, api, before, identities, s, request['task']['locator'], request['task']['task_id'], clock())
+            else:
+                admission.task(before,s,request['task']['locator'],request['task']['task_id'])
             result = (verifier or _verify_actions)(source, d, s, job['id'], guard, clock)
             document = dict(schema_version=2, kind='actions', registry_revision=before['configuration_revision'], result=result)
             validate_evidence(document, d, s, before['configuration_revision'], job['id'], clock())
@@ -799,13 +865,13 @@ def _producer(environment, request, node, role, clock=None, api_factory=GitHub, 
             started = clock()
             facts = observe(readers, d)
             require(current_snapshot(readers, d, op['pr'], op['run_id'], op['attempt']) == s, 'candidate moved during publication readback')
-            document = _publication_observation(before, s, started, clock(), facts)
+            document = _bound_publication_observation(before, s, started, clock(), facts, admission)
         elif role == 'controls':
             import control_rendezvous
-            broker, ready = _wait_broker_ready(api, registry, before, clock, guard, sleeper)
-            document = control_rendezvous.collect(readers, api, registry.binding, broker, ready, clock)
+            broker, ready = _wait_broker_ready(api, registry, before, clock, guard, sleeper, admission)
+            document = control_rendezvous._collect(readers, api, registry.binding, broker, ready, clock, admission)
         elif role == 'publish':
-            document = _publish(source, api, registry, before, identities, request, clock, guard)
+            document = _publish_bound(source, api, registry, before, identities, request, clock, guard, admission)
         elif role == 'broker':
             from broker_session import Session
             from merge_window import MergeSource
@@ -815,7 +881,7 @@ def _producer(environment, request, node, role, clock=None, api_factory=GitHub, 
             reader_root = (app_factory or bootstrap.app_api)(d['apps']['reader'], environment.get('AGENTIC_READER_PRIVATE_KEY'))
             with _source_token('reader', reader_root, api, d, identities, before['configuration_revision'], clock,
                                token_factory, guard) as reader:
-                return Session(registry, reader, api, identities, job['id'], locators, merger, uploader, clock, sleeper)._run()
+                return Session(registry, reader, api, identities, job['id'], locators, merger, uploader, clock, sleeper)._run(_admission=admission)
         else: raise Refusal('unsupported producer role')
     guard()
     if role == 'publish': return document
@@ -830,6 +896,10 @@ def _publication_locators(api, binding, request):
 
 
 def _publish(source, api, registry, binding, identities, request, clock, guard):
+    return _publish_bound(source, api, registry, binding, identities, request, clock, guard)
+
+
+def _publish_bound(source, api, registry, binding, identities, request, clock, guard, admission=None):
     import broker_proofs
     import checks
     import task_admission
@@ -840,25 +910,30 @@ def _publish(source, api, registry, binding, identities, request, clock, guard):
     locators = _publication_locators(api, binding, request)
     evidence = authenticated_document(api,d,locators['evidence'],'evidence',s['pr'],clock())
     validate_evidence(evidence['document'],d,s,binding['configuration_revision'],evidence['job_id'],clock())
-    broker_proofs.read(api,binding,identities,s,locators['proofs'],clock())
-    task = task_admission.read(source,api,binding,identities,s,locators['task']['locator'],locators['task']['task_id'],clock())
+    broker_proofs._read(api,binding,identities,s,locators['proofs'],clock(),admission=admission)
+    task = (task_admission.read(source,api,binding,identities,s,locators['task']['locator'],locators['task']['task_id'],clock())
+            if admission is None else admission.task(binding,s,locators['task']['locator'],locators['task']['task_id']))
     location = _locator(api,d,s['run_id'],s['run_attempt'],'publication-controls',s['pr'])
     controls = authenticated_document(api,d,location,'publication-controls',s['pr'],clock())
-    facts = _validate_publication_observation(controls['document'],binding,s,controls,clock())
-    qualification_record.read(api,binding,identities,locators['qualification'],facts['controls_digest'],clock())
+    facts = _bound_validate_publication_observation(controls['document'],binding,s,controls,clock(),admission)
+    if admission is None:
+        qualification_record.read(api,binding,identities,locators['qualification'],facts['controls_digest'],clock())
+    else:
+        require(locators['qualification'] == admission.request['qualification'], 'exact trial certificate required')
+        admission.qualification(binding,facts['controls_digest'])
     require(current_snapshot(Readers(source,api,d),d,s['pr'],s['run_id'],s['run_attempt']) == s, 'candidate changed before publication')
     coordinates = dict(configuration_revision=binding['configuration_revision'],operation=binding['fence']['pending'],
         sequence=binding['fence']['sequence'], issuer_installation_id=identities['apps']['issuer']['installation_id'],
         evidence_job_id=evidence['job_id'], evidence_digest=digest(evidence['document']), task_digest=task['task_digest'])
     guard()
-    _validate_publication_observation(controls['document'],binding,s,controls,clock())
+    _bound_validate_publication_observation(controls['document'],binding,s,controls,clock(),admission)
     body = checks.publication_body(d,s,evidence['document'],coordinates,clock())
     source.post('/repos/'+d['policy']['repository']+'/check-runs',body)
     guard()
     return checks.current(source,d,s,coordinates,clock())
 
 
-def _wait_broker_ready(api, registry, binding, clock, guard, sleeper):
+def _wait_broker_ready(api, registry, binding, clock, guard, sleeper, admission=None):
     from merge_receipts import ActionsReceipts
     op, p = binding['fence']['pending'], binding['deployment']['policy']
     deadline = min(clock()+120,op['execution_deadline']-60,binding['deployment']['expires']-60)
@@ -868,7 +943,7 @@ def _wait_broker_ready(api, registry, binding, clock, guard, sleeper):
         matches = [j for j in jobs if j['name'] == 'broker ('+str(op['pr'])+')']
         require(len(matches) <= 1, 'ambiguous warm broker')
         if matches:
-            store = ActionsReceipts(api, registry.binding, matches[0]['id'], clock)
+            store = ActionsReceipts._create(api, registry.binding, matches[0]['id'], clock, admission=admission)
             store.current_job()
             artifacts = store._matches('control-ready')
             require(len(artifacts) <= 1, 'ambiguous broker readiness')

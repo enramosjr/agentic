@@ -54,6 +54,7 @@ class TrialService(unittest.TestCase):
             with self.subTest(fault=fault): self.exercise(fault)
 
     def exercise(self, fault=None, latency=False, continuation=None):
+        continuation_base = None
         f = self.configured()
         native, registry, origin, clock, env, hint, model, proofs, delivery, jobs, artifacts = f
         api, d, events, receipts = registry.api, registry.read(), [], []
@@ -264,11 +265,11 @@ class TrialService(unittest.TestCase):
                     self.assertEqual(recovered['submitted']['head'],receipts[0]['submitted']['head'])
                     self.assertEqual(native_controller.observe('prompt',coding,lambda token:origin.reader),recovered)
                     if continuation is not None:
-                        continuation(native_controller, coding, origin, app_factory, token_factory, admin, artifacts)
+                        continuation_base = continuation(native_controller, coding, origin, app_factory, token_factory, admin, artifacts)
                     coding.prs[0]['head']['sha'] = '9' * 40
                     with self.assertRaises(Refusal): native_controller.observe('prompt',coding,lambda token:origin.reader)
         self.assertIsNone(native.store(Path('/fresh-actions-controls/worker')).read())
-        self.assertEqual(coding.refs['main'],base)
+        self.assertEqual(coding.refs['main'],continuation_base or base)
         for token in minted: self.assertIn(token,revoked)
         text = json.dumps([native.store(Path('/fresh-actions-worker/worker')).read(),receipts])
         for key in api.secrets.values(): self.assertNotIn(key,text)

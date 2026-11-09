@@ -31,7 +31,7 @@ def deployment(provision, pair, origin):
     resources = {k: r[k] for k in ('model_auth', 'model_id', 'codex_sha', 'codex_version', 'coding_image', 'bundle_sha')}
     resources.update(authority=pair['authority_repository'], operation_id=secrets.token_hex(16),
         identity_digest=digest(ids), identity_record=json.dumps(ids, sort_keys=True, separators=(',', ':')),
-        actions_resource=pair['authority_repository'], container_runtime='docker',
+        actions_resource='github-actions:' + pair['authority_repository'] + ':' + p['workflow'], container_runtime='docker',
         coding_slug=ids['apps']['coding']['slug'], coding_bot_id=str(ids['apps']['coding']['actor_id']))
     if origin['adapter'] != 'github-actions':
         import cloud

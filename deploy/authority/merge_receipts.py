@@ -39,12 +39,22 @@ class ActionsReceipts:
         require(positive(job_id) and type(recovery) is bool, 'exact broker job identity required')
         self.api, self.read_binding, self.job_id, self.clock = api, read_binding, job_id, clock
         self.uploader, self.recovery = uploader, recovery
+        self._admission = None
         self.binding = copy.deepcopy(read_binding())
         fence = validate_fence(self.binding['fence'])
         self.op, self.sequence = fence['pending'], fence['sequence']
         require(self.op is not None and self.op['kind'] == 'merge', 'pending merge operation required')
         self.policy = self.binding['deployment']['policy']
         self.root = '/repos/' + self.policy['authority_repository']
+
+    @classmethod
+    def _create(cls, api, read_binding, job_id, clock, uploader=None, recovery=False, admission=None):
+        if admission is not None:
+            from trial_controller import authenticated
+            authenticated(admission, read_binding())
+        result = cls(api, read_binding, job_id, clock, uploader, recovery)
+        result._admission = admission
+        return result
 
     def _owned(self):
         current = self.read_binding()
@@ -112,8 +122,8 @@ class ActionsReceipts:
                     value == expected, 'positive no-dispatch evidence differs')
             return value
         if kind == 'control-ready':
-            from control_rendezvous import validate_ready
-            return validate_ready(value, self.binding, self.job_id, self.clock(), historical=historical)
+            from control_rendezvous import _validate_ready
+            return _validate_ready(value, self.binding, self.job_id, self.clock(), historical=historical, admission=self._admission)
         if kind == 'gate':
             gate = value
         else:
@@ -132,8 +142,8 @@ class ActionsReceipts:
                 return value
             gate = value['gate']
             require(digest(gate) == value['gate_digest'], 'dispatch gate digest differs')
-        merge_window.validate(gate, self.binding,
-                              gate['readback_completed'] if historical else self.clock())
+        merge_window._validate(gate, self.binding,
+                               gate['readback_completed'] if historical else self.clock(), self._admission)
         return value
 
     def _locator(self, kind, artifact):
