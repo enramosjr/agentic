@@ -178,7 +178,7 @@ credentials or GitHub keys. Those URLs must stay out of logs and coding mounts.
 
 ## Verification limits and remaining work
 
-Initial qualification still lacks a bounded disposable-fixture admission path.
+Initial qualification still lacks a complete native execution coordinator.
 The qualification receipt reader validates an already active generation and its
 authenticated closed receipt; it cannot produce the first qualification. Task
 submission/admission and merge authorization also require active state, while
@@ -206,9 +206,31 @@ credentials, dispatch a task, submit a review or authorize a merge. This native
 composition is in the held bootstrap bundle, not an enabled installed qualification
 command. Local API fixtures exercise provisioning and recovery only.
 
-The execution coordinator still must admit those separately approved fixture
-scopes, retain exact configuration/fence bindings and exercise the actual
-verification/publication/broker paths. Setting a deployment to `active`, supplying
+The held `trial_admission.Admission` admits one exact candidate-free qualification
+parent and captures the frozen fixture source through the existing bounded Git
+object reader. It requires the completed private provisioning journal, an already
+configured independent disposable registry in unqualified `qualification`, current
+effective controls, five authenticated closed own-App proofs and a separately
+authenticated/decrypted qualification-purpose model lease. Critical coverage,
+reviewers and model/runtime pins match the approved origin; model authorization
+uses a distinct session. Exact execution consent is separate from setup consent.
+The retained admission contains public bindings, never a model token or key.
+Immutable software and closed evidence are authenticated once per admission or
+resume. Capture buffers exact Git bytes between live checks of the original
+origin fence, both configurations, source ref, effective controls, parent identity
+and expiry. No bytes return if the final check fails. It does not replay dispatch
+or mutation.
+`Provision.completed()` supplies read-only frozen-pair readback after the trial
+registry exists, without replaying initial installation or registration.
+
+This library admission does not configure the disposable registry/controls or
+stage its credentials, supply the native hosted-qualification workflow, admit a
+coding worker or produce case outcomes. Production task and broker eligibility
+still require active qualification. Local transport/crypto fixtures exercise
+admission, refusal, recovery and exact source capture, not hosted execution.
+The execution coordinator still must connect protected trial task/control jobs
+and exercise the actual verification/publication/broker paths. Setting a
+deployment to `active`, supplying
 a local receipt or treating setup consent as human review cannot resolve these
 missing producers. The full trial/case graph and hosted qualification remain
 unavailable.

@@ -56,6 +56,55 @@ class Provision:
     def _save(self, state):
         self.document = self.journal.write(self.document, state)
 
+    def completed(self):
+        """Read the exact completed pair without provisioning or installing again.
+
+        A configured trial has its own registry branch, so replaying initial
+        installation (which requires that branch absent) is not a readback API.
+        """
+        authority_release.authorize('bootstrap')
+        from repository import Repository
+        self.journal = self.store(self.root / 'trial')
+        self.document = self.journal.read()
+        require(self.document is not None, 'completed trial provisioning required')
+        state = self.document['value']
+        object_fields(state, ('schema_version', 'kind', 'preview', 'approval', 'fixture', 'connected'), 'retained trial provisioning')
+        require(type(state['schema_version']) is int and state['schema_version'] == 1 and
+                state['kind'] == 'private-qualification-fixture' and state['approval'] == digest(state['preview']) and
+                isinstance(state['fixture'], dict) and isinstance(state['connected'], dict),
+                'completed trial provisioning required')
+        self.preview = state['preview']
+        self._guard()
+        seed, connected = state['fixture'], state['connected']
+        for name, identity, revision, files in (
+                (self.preview['fixture']['repository'], seed['repository_id'], seed['revision'], self.fixture_files),
+                (self.preview['authority']['repository'], connected['authority_repository_id'],
+                 connected['software_revision'], self.authority_files)):
+            self._guard()
+            repo = self.api.get('/repos/' + name)
+            require(repo.get('id') == identity and repo.get('full_name') == name and repo.get('private') is True and
+                    repo.get('owner', {}).get('id') == self.preview['fixture']['owner_id'], 'trial repository identity changed')
+            release = setup.InitialAuthority(self.api, None, files, self.clock)._release()
+            preview = self.preview['fixture' if name == self.preview['fixture']['repository'] else 'authority']
+            require(preview['release'] == release, 'trial approved release changed')
+            installer = Repository(self.api, name, identity, repo['default_branch'])
+            observed = installer.inspect()
+            require(observed[0] == revision and observed[3]['files'] == release['files'], 'trial frozen software changed')
+            # inspect authenticates every owned blob against the release marker.
+        production = self.session._check()['deployment']
+        require(seed['repository_id'] != connected['authority_repository_id'] and
+                {seed['repository_id'], connected['authority_repository_id']}.isdisjoint(
+                    {production['policy']['repository_id'], production['policy']['authority_repository_id']}) and
+                set(v['id'] for v in connected['identities']['apps'].values()).isdisjoint(production['apps'].values()),
+                'trial must not borrow production resources or App identities')
+        self._guard()
+        return dict(state='fixture-provisioned', origin=copy.deepcopy(self.preview['origin']),
+            fixture_repository=self.preview['fixture']['repository'], fixture_repository_id=seed['repository_id'],
+            fixture_revision=seed['revision'], authority_repository=self.preview['authority']['repository'],
+            authority_repository_id=connected['authority_repository_id'], software_revision=connected['software_revision'],
+            identities=copy.deepcopy(connected['identities']), enforcement_active=False,
+            hosted_qualified=False, execution_admitted=False)
+
     def run(self, fixture, authority, approve):
         authority_release.authorize('bootstrap')
         origin = self._origin(fixture, authority)
