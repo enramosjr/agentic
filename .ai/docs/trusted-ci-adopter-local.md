@@ -80,6 +80,30 @@ an administrative job acquires one merge fence. No candidate number, command,
 policy or authority is selected by a dispatch input. Missing retained qualification
 blocks this path; the qualification producer remains unfinished.
 
+The held `qualification_cases.HostCases` library produces the ordered host-negative
+prefix from independently prepared, distinct PRs and heads: bad acceptance,
+replaced checks, forged records, spoofed source, missing approval, direct push,
+new head, new base, policy transition, human update and coding update. It
+authenticates closed verifier evidence, actual mutation bytes, prior issuer
+successes and exact stale coordinates before making each protected-update request.
+The human/coding update probes require current issuer success. App probes reuse
+the existing own-App authentication and source-only token mint/revocation path;
+only the separate human token uses the authenticated-user endpoint. Candidate
+reviews are observed, never submitted or requested.
+
+Each returned observation binds the PR/head/base/synthetic merge/tree, actor,
+exact request, HTTP denial and obligation, unchanged protected ref and evidence
+digest. A generic error, unavailable credential, skipped obligation, unrelated
+required check or moved ref cannot pass. The instance refuses another attempt
+after starting, including an uncertain response. This is not durable recovery
+across processes: native case orchestration and retained dispatch intents remain
+unfinished. Public invocation is held before network access. Local fixtures
+exercise verification, cleanup, closed artifacts and publication against existing
+synthetic active regression configurations; they do not establish initial trial
+qualification. Broker-refusal/positive case producers, the receipt producer and
+hosted qualification remain unfinished. Production active-state and existing
+qualification requirements are unchanged.
+
 Administrative preparation reads independent review of the exact candidate head
 before collecting retained evidence and again immediately before acquiring its
 merge fence. The API must identify the approved reviewer as a human `User`, with
