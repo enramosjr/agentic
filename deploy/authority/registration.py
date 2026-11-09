@@ -16,15 +16,21 @@ from trusted_ci_policy import digest, object_fields, positive, require, sha
 PURPOSES = ('admin', 'reader', 'issuer', 'coding', 'merge')
 
 
-def install(app, owner, repositories, seconds, installation=None):
+def install(app, owner, repositories, seconds, installation=None, before_call=None):
+    guard = before_call if before_call is not None else lambda: None
+    require(callable(guard), 'installation guard must be callable')
+    guard()
     if installation is None:
-        installation = bootstrap.await_installation(app, owner, seconds=seconds)
+        installation = bootstrap.await_installation(app, owner, seconds=seconds, before_call=before_call)
+    guard()
     api = bootstrap.app_api(app['id'], app['pem'])
+    guard()
     info = api.get('/app')
     require(info.get('id') == app['id'] and info.get('slug') == app['slug'] and
             info.get('owner', {}).get('id') == owner and
             app_proofs.normalized(info.get('permissions')) == app_proofs.normalized(app['permissions']),
             'registered App identity or domain changed')
+    guard()
     observed = api.get('/app/installations/' + str(installation))
     require(observed.get('app_id') == app['id'] and observed.get('account', {}).get('id') == owner and
             observed.get('repository_selection') == 'selected' and observed.get('suspended_at') is None and
@@ -33,19 +39,24 @@ def install(app, owner, repositories, seconds, installation=None):
     # Omit repository_ids deliberately: enumerating a token already narrowed to
     # the desired IDs would hide extra repositories granted to the installation.
     # Only contents:read is needed; some capabilities (workflows) have no read.
+    guard()
     result = api.post('/app/installations/' + str(installation) + '/access_tokens',
                       dict(permissions=dict(contents='read')))
     token = result.get('token')
     try:
+        guard()
         require(isinstance(token, str) and token and
                 app_proofs.normalized(result.get('permissions')) == dict(contents='read') and
                 sorted(item['id'] for item in result.get('repositories', [])) == sorted(repositories),
                 'complete registered installation scope differs')
         scoped = GitHub(token)
+        guard()
         visible = scoped.pages('/installation/repositories', 'repositories')
         require(sorted(item['id'] for item in visible) == sorted(repositories), 'installation reaches unexpected repositories')
+        guard()
         bot = scoped.get('/users/' + quote(app['slug'] + '[bot]', safe=''))
         require(positive(bot.get('id')) and bot.get('type') == 'Bot', 'registered App bot identity unavailable')
+        guard()
     finally:
         bootstrap.revoke_token(result)
     return dict(id=app['id'], slug=app['slug'], installation_id=installation, actor_id=bot['id'])

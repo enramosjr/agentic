@@ -222,17 +222,23 @@ def installation_token(api, installation, repositories, permissions):
     return result['token']
 
 
-def await_installation(registration, account_id, seconds=600):
+def await_installation(registration, account_id, seconds=600, before_call=None):
     """Human selects repositories in GitHub; polling avoids a permanent callback server."""
     require(positive(account_id), 'numeric installation owner required')
     require(registration.get('owner', {}).get('id') == account_id, 'App owner changed')
+    guard = before_call if before_call is not None else lambda: None
+    require(callable(guard), 'installation guard must be callable')
+    guard()
     require(webbrowser.open('https://github.com/apps/' + registration['slug'] + '/installations/new'),
             'could not open installation consent')
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
+        guard()
         api = app_api(registration['id'], registration['pem'])
+        guard()
         matches = [i for i in api.pages('/app/installations')
                    if i['account']['id'] == account_id and not i.get('suspended_at')]
+        guard()
         require(len(matches) <= 1, 'ambiguous App installation')
         if matches:
             return matches[0]['id']

@@ -184,7 +184,29 @@ authenticated closed receipt; it cannot produce the first qualification. Task
 submission/admission and merge authorization also require active state, while
 model leases separately permit qualification-purpose execution. Existing App
 registrations cover the approved source/authority scopes, not a new trial
-repository. A future trial coordinator must provision separately approved fixture
+repository. The held native `trial_setup.Provision` now provisions a separately
+approved disposable pair: a private fixture with frozen seed bytes and an
+independent private authority with frozen runtime bytes. It reuses initial
+installation and native five-App registration. The existing configuration session
+must own both exact `qualification-fixture` scopes while the production deployment
+is unqualified `qualification`; every setup API boundary rechecks that same
+configuration revision, digest and fence. Pair consent pins ownership, software,
+cost ownership and expiry; subsequent App consent pins the newly created numeric
+repository identities. All five Apps are newly registered for the disposable pair,
+with admin/reader scoped to both and coding/issuer/merge only to the fixture.
+Production installations are not extended or borrowed.
+
+Separate protected trial journals retain creation intent, prepared commits and
+captured registration responses. Unknown creation is never adopted by name or
+repeated; known prepared software and captured callbacks can resume under the
+original current consent/fence. The producer returns public identities and exact
+origin bindings with `execution_admitted`, `hosted_qualified` and
+`enforcement_active` all false. It does not configure trial controls, stage trial
+credentials, dispatch a task, submit a review or authorize a merge. This native
+composition is in the held bootstrap bundle, not an enabled installed qualification
+command. Local API fixtures exercise provisioning and recovery only.
+
+The execution coordinator still must admit those separately approved fixture
 scopes, retain exact configuration/fence bindings and exercise the actual
 verification/publication/broker paths. Setting a deployment to `active`, supplying
 a local receipt or treating setup consent as human review cannot resolve these

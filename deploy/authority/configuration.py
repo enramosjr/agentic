@@ -8,7 +8,7 @@ import copy
 from authority_protocol import fingerprint
 from trusted_ci_policy import digest, object_fields, positive, require, sha
 
-ACTIONS = ('rules', 'software', 'cloud-apply', 'cloud-destroy', 'registry', 'credentials')
+ACTIONS = ('rules', 'software', 'cloud-apply', 'cloud-destroy', 'registry', 'credentials', 'qualification-fixture')
 
 
 def require_session(session, action, scope):
