@@ -7,7 +7,7 @@ on:
       mode:
         description: Fixed credential or protected task producer path
         type: choice
-        options: [credentials, task, production, qualification]
+        options: [credentials, task, production, qualification, case]
         default: credentials
         required: true
       challenges:
@@ -30,6 +30,57 @@ concurrency:
   group: agentic-authority
   cancel-in-progress: false
 jobs:
+  trial_case_ready:
+    if: inputs.mode == 'case'
+    name: trial case ready
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: case-ready
+          task: ${{ inputs.handoff }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN }}
+  trial_case_handoff:
+    needs: [prepare]
+    if: inputs.mode == 'case'
+    name: trial case handoff
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: case-handoff
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN }}
   trial_handoff:
     if: inputs.mode == 'qualification'
     name: trial handoff
@@ -609,8 +660,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_READER_PRIVATE_KEY: ${{ secrets.AGENTIC_READER_PRIVATE_KEY }}
   prepare:
-    needs: [discover]
-    if: fromJSON(needs.discover.outputs.request).pr != null
+    needs: [discover, trial_case_ready]
+    if: always() && ((inputs.mode == 'production' && needs.discover.result == 'success' && fromJSON(needs.discover.outputs.request).pr != null) || (inputs.mode == 'case' && needs.trial_case_ready.result == 'success'))
     name: prepare
     outputs:
       request: ${{ steps.produce.outputs.request }}
@@ -632,13 +683,15 @@ jobs:
       - uses: ./deploy/authority/artifact_upload
         id: produce
         with:
-          role: prepare
-          task: ${{ needs.discover.outputs.request }}
+          role: ${{ inputs.mode == 'case' && 'case-prepare' || 'prepare' }}
+          task: ${{ inputs.mode == 'case' && inputs.handoff || needs.discover.outputs.request }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          AGENTIC_ADMIN_PRIVATE_KEY: ${{ secrets.AGENTIC_ADMIN_PRIVATE_KEY }}
+          AGENTIC_ADMIN_PRIVATE_KEY: ${{ inputs.mode == 'production' && secrets.AGENTIC_ADMIN_PRIVATE_KEY || '' }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   verify:
-    needs: [prepare]
+    needs: [prepare, trial_case_handoff]
+    if: always() && needs.prepare.result == 'success' && (inputs.mode == 'production' || needs.trial_case_handoff.result == 'success')
     name: verify (${{ fromJSON(needs.prepare.outputs.request).snapshot.pr }})
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -657,11 +710,12 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: ./deploy/authority/artifact_upload
         with:
-          role: verify
+          role: ${{ inputs.mode == 'case' && 'case-verify' || 'verify' }}
           task: ${{ needs.prepare.outputs.request }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_READER_PRIVATE_KEY: ${{ secrets.AGENTIC_READER_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   publication_controls:
     needs: [prepare, verify]
     name: publication controls (${{ fromJSON(needs.prepare.outputs.request).snapshot.pr }})
@@ -682,11 +736,12 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: ./deploy/authority/artifact_upload
         with:
-          role: publication-controls
+          role: ${{ inputs.mode == 'case' && 'case-publication-controls' || 'publication-controls' }}
           task: ${{ needs.prepare.outputs.request }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_ADMIN_PRIVATE_KEY: ${{ secrets.AGENTIC_ADMIN_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   admin_proof:
     needs: [prepare, verify]
     name: proof (admin)
@@ -707,11 +762,12 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: ./deploy/authority/artifact_upload
         with:
-          role: proof
+          role: ${{ inputs.mode == 'case' && 'case-proof' || 'proof' }}
           task: ${{ needs.prepare.outputs.request }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_ADMIN_PRIVATE_KEY: ${{ secrets.AGENTIC_ADMIN_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   reader_proof:
     needs: [prepare, verify]
     name: proof (reader)
@@ -732,11 +788,12 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: ./deploy/authority/artifact_upload
         with:
-          role: proof
+          role: ${{ inputs.mode == 'case' && 'case-proof' || 'proof' }}
           task: ${{ needs.prepare.outputs.request }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_READER_PRIVATE_KEY: ${{ secrets.AGENTIC_READER_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   issuer_proof:
     needs: [prepare, verify]
     name: proof (issuer)
@@ -757,11 +814,12 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: ./deploy/authority/artifact_upload
         with:
-          role: proof
+          role: ${{ inputs.mode == 'case' && 'case-proof' || 'proof' }}
           task: ${{ needs.prepare.outputs.request }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_ISSUER_PRIVATE_KEY: ${{ secrets.AGENTIC_ISSUER_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   coding_proof:
     needs: [prepare, verify]
     name: proof (coding)
@@ -782,11 +840,12 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: ./deploy/authority/artifact_upload
         with:
-          role: proof
+          role: ${{ inputs.mode == 'case' && 'case-proof' || 'proof' }}
           task: ${{ needs.prepare.outputs.request }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_CODING_PRIVATE_KEY: ${{ secrets.AGENTIC_CODING_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   merge_proof:
     needs: [prepare, verify]
     name: proof (merge)
@@ -807,11 +866,12 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: ./deploy/authority/artifact_upload
         with:
-          role: proof
+          role: ${{ inputs.mode == 'case' && 'case-proof' || 'proof' }}
           task: ${{ needs.prepare.outputs.request }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_MERGE_PRIVATE_KEY: ${{ secrets.AGENTIC_MERGE_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   publish:
     needs: [prepare, verify, publication_controls, admin_proof, reader_proof, issuer_proof, coding_proof, merge_proof]
     name: publish (${{ fromJSON(needs.prepare.outputs.request).snapshot.pr }})
@@ -832,11 +892,12 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: ./deploy/authority/artifact_upload
         with:
-          role: publish
+          role: ${{ inputs.mode == 'case' && 'case-publish' || 'publish' }}
           task: ${{ needs.prepare.outputs.request }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_ISSUER_PRIVATE_KEY: ${{ secrets.AGENTIC_ISSUER_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   broker:
     needs: [prepare, publish]
     if: always() && needs.prepare.result == 'success'
@@ -858,12 +919,13 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: ./deploy/authority/artifact_upload
         with:
-          role: broker
+          role: ${{ inputs.mode == 'case' && 'case-broker' || 'broker' }}
           task: ${{ needs.prepare.outputs.request }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_MERGE_PRIVATE_KEY: ${{ secrets.AGENTIC_MERGE_PRIVATE_KEY }}
           AGENTIC_READER_PRIVATE_KEY: ${{ secrets.AGENTIC_READER_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   controls:
     needs: [prepare, publish]
     name: controls (${{ fromJSON(needs.prepare.outputs.request).snapshot.pr }})
@@ -884,11 +946,12 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: ./deploy/authority/artifact_upload
         with:
-          role: controls
+          role: ${{ inputs.mode == 'case' && 'case-controls' || 'controls' }}
           task: ${{ needs.prepare.outputs.request }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_ADMIN_PRIVATE_KEY: ${{ secrets.AGENTIC_ADMIN_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   admin_final_proof:
     needs: [prepare, publish]
     name: final proof (admin)
@@ -909,11 +972,12 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: ./deploy/authority/artifact_upload
         with:
-          role: final-proof
+          role: ${{ inputs.mode == 'case' && 'case-final-proof' || 'final-proof' }}
           task: ${{ needs.prepare.outputs.request }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_ADMIN_PRIVATE_KEY: ${{ secrets.AGENTIC_ADMIN_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   reader_final_proof:
     needs: [prepare, publish]
     name: final proof (reader)
@@ -934,11 +998,12 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: ./deploy/authority/artifact_upload
         with:
-          role: final-proof
+          role: ${{ inputs.mode == 'case' && 'case-final-proof' || 'final-proof' }}
           task: ${{ needs.prepare.outputs.request }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_READER_PRIVATE_KEY: ${{ secrets.AGENTIC_READER_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   issuer_final_proof:
     needs: [prepare, publish]
     name: final proof (issuer)
@@ -959,11 +1024,12 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: ./deploy/authority/artifact_upload
         with:
-          role: final-proof
+          role: ${{ inputs.mode == 'case' && 'case-final-proof' || 'final-proof' }}
           task: ${{ needs.prepare.outputs.request }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_ISSUER_PRIVATE_KEY: ${{ secrets.AGENTIC_ISSUER_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   coding_final_proof:
     needs: [prepare, publish]
     name: final proof (coding)
@@ -984,11 +1050,12 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: ./deploy/authority/artifact_upload
         with:
-          role: final-proof
+          role: ${{ inputs.mode == 'case' && 'case-final-proof' || 'final-proof' }}
           task: ${{ needs.prepare.outputs.request }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_CODING_PRIVATE_KEY: ${{ secrets.AGENTIC_CODING_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   merge_final_proof:
     needs: [prepare, publish]
     name: final proof (merge)
@@ -1009,11 +1076,12 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: ./deploy/authority/artifact_upload
         with:
-          role: final-proof
+          role: ${{ inputs.mode == 'case' && 'case-final-proof' || 'final-proof' }}
           task: ${{ needs.prepare.outputs.request }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_MERGE_PRIVATE_KEY: ${{ secrets.AGENTIC_MERGE_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   finalize:
     needs: [prepare, broker, controls, admin_final_proof, reader_final_proof, issuer_final_proof, coding_final_proof, merge_final_proof]
     if: always() && needs.prepare.result == 'success'
@@ -1035,9 +1103,10 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: ./deploy/authority/artifact_upload
         with:
-          role: finalize
-          task: '{}'
+          role: ${{ inputs.mode == 'case' && 'case-finalize' || 'finalize' }}
+          task: ${{ inputs.mode == 'case' && needs.prepare.outputs.request || '{}' }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_ADMIN_PRIVATE_KEY: ${{ secrets.AGENTIC_ADMIN_PRIVATE_KEY }}
           AGENTIC_RECOVERY_PIN: ${{ vars.AGENTIC_FINALIZE_PIN }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}

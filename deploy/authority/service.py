@@ -343,6 +343,7 @@ def _task(environment, request, node, clock=None, api_factory=GitHub, app_factor
 PRODUCER_ROLES = ('discover', 'prepare', 'verify', 'publication-controls', 'publish',
                   'proof', 'broker', 'controls', 'final-proof', 'finalize')
 TRIAL_ROLES = ('trial-handoff', 'trial-prepare', 'trial-model', 'trial-proof', 'trial-worker', 'trial-controls')
+CASE_ROLES = tuple('case-'+r for r in ('ready','prepare','handoff','verify','proof','publication-controls','publish','broker','controls','final-proof','finalize'))
 
 
 def _trial_evidence(api, context):
@@ -695,7 +696,7 @@ def _prepare(environment, request, node=None, clock=None, api_factory=GitHub, ap
     return _prepare_candidate(api, registry, before, identities, request, environment, job, root, clock, token_factory, guard)
 
 
-def _prepare_trial(admission, environment, root, token_factory=GitHub):
+def _prepare_trial(admission, environment, root, token_factory=GitHub, launch=None):
     from trial_controller import authenticated
     from provenance import admit_job
     authenticated(admission)
@@ -704,8 +705,13 @@ def _prepare_trial(admission, environment, root, token_factory=GitHub):
     before, registry = admission.binding, admission.registry
     api, d = registry.api, before['deployment']
     job = admit_job(api,d,environment,'prepare',admission.clock())
+    guard=admission.guard
+    if launch is not None:
+        from trial_launch import Native
+        require(type(launch) is Native and launch.admission is admission,'actual native READY launch required')
+        guard=launch.guard
     return _prepare_candidate(api,registry,before,admission.record['pair']['identities'],
-        dict(pr=admission.candidate['submitted']['pr']),environment,job,root,admission.clock,token_factory,admission.guard,admission)
+        dict(pr=admission.candidate['submitted']['pr']),environment,job,root,admission.clock,token_factory,guard,admission)
 
 
 def _prepare_candidate(api, registry, before, identities, request, environment, job, root, clock, token_factory, guard, admission=None):
@@ -748,7 +754,7 @@ def _prepare_candidate(api, registry, before, identities, request, environment, 
                 from controls import observe
                 facts = observe(source,d)
                 reviewed()
-                after = admission.acquire(writer,before,op,s,task,facts)
+                after = admission.acquire(writer,before,op,s,task,facts,before_effect=guard)
     require(after['fence']['pending'] == op, 'prepared fence readback differs')
     if admission is not None: return copy.deepcopy(admission.request)
     return dict(schema_version=2, configuration_revision=after['configuration_revision'], deployment_digest=after['deployment_digest'],
@@ -812,11 +818,55 @@ def case_producer(environment, hint, node, role):
     return _case_producer(environment,hint,node,role)
 
 
+def _case_launch(environment,hint,node,role,clock=None,api_factory=GitHub,uploader_factory=NodeUploader,sleeper=time.sleep):
+    import provenance
+    import trial_launch
+    import trial_case
+    from registry import OPERATION
+    clock=clock or (lambda:int(time.time()))
+    object_fields(hint,('origin','revision'),'READY lookup hint')
+    require(role in ('ready','prepare'),'fixed case launch role required')
+    _producer_environment(environment,'reader')
+    require(not any(environment.get(k) for k in setup.CREDENTIAL_NAMES) and
+            not environment.get(setup.TrialReadStaging.NAME),'case launch inherited another purpose credential')
+    token=environment.get(trial_case.CaseReadStaging.NAME)
+    require(isinstance(token,str) and 0<len(token)<=16384,'pre-queue case delegation required')
+    api,registry,before,identities=context(environment,api_factory)
+    original=Registry(api_factory(token),hint['origin'])
+    if role=='ready':
+        value=trial_launch.consume(registry,original,environment,hint,clock)
+        artifact=_upload_document(uploader_factory(node,environment),'trial-case-ready-'+value['task_id']+'-1',value)
+        return dict(run_id=value['run_id'],attempt=1,job_id=value['job_id'],artifact_id=artifact)
+    ready,record=trial_launch.read(original,hint['revision'],clock)
+    require(digest(token)!=record['execution']['credential']['token_digest'] and
+            [v['id'] for v in original.api.pages('/installation/repositories','repositories')]==[original.coordinates['repository_id']],
+            'fresh original-only case delegation required')
+    provenance.admit_job(api,record['trial']['deployment'],environment,'prepare',clock())
+    deadline=time.monotonic()+min(300,record['expires']-clock())
+    while True:
+        original.unchanged(record['origin']['binding'])
+        require(time.monotonic()<deadline and clock()<record['expires'],'native pending case remains pending')
+        try:
+            revision=original.ref('agentic-trial-'+record['task_id']+'-case')
+            break
+        except HostRefusal as error:
+            require(error.status==404,'pending case observation unavailable')
+        sleeper(0.25)
+    value,loaded=trial_case.read(original,revision,clock)
+    require(loaded==record and value['launch'] is not None and value['launch']['revision']==hint['revision'] and
+            value['request']['snapshot']['run_id']==int(environment['GITHUB_RUN_ID']) and environment.get('GITHUB_RUN_ATTEMPT')=='1' and
+            value['launch']['credential']['token_digest']==digest(token),'pending case substituted READY execution')
+    trial_launch.authenticate(original,api,value['launch'],clock)
+    registry.authenticate_setup_progress(record['trial'],{OPERATION:value['pending']})
+    return dict(value['request'],handoff=dict(origin=hint['origin'],revision=revision))
+
+
 def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub, app_factory=None,
                    token_factory=GitHub, uploader_factory=NodeUploader, verifier=None, sleeper=time.sleep):
     """Reconstruct each job from authenticated data; never accept native objects."""
     import bootstrap
     import trial_case
+    from registry import OPERATION
     clock = clock or (lambda:int(time.time()))
     object_fields(hint, ('origin','revision'), 'case lookup hint')
     require(role in ('handoff','finalize','verify','proof','publication-controls','publish','broker','controls','final-proof'),
@@ -840,6 +890,25 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
         value = trial_case.consume(registry,origin_reader,environment,hint,clock)
         artifact = _upload_document(uploader_factory(node,environment),'trial-case-handoff-'+value['task_id']+'-1',value)
         return dict(run_id=value['run_id'],attempt=1,job_id=value['job_id'],artifact_id=artifact)
+    # Launched jobs receive the immutable pending lookup. Binding is a later
+    # native conditional publication, observed here without staging another secret.
+    original=Registry(origin_reader,hint['origin'])
+    initial,record=trial_case.read(original,hint['revision'],clock)
+    if initial['launch'] is not None and initial['execution'] is None:
+        deadline=time.monotonic()+min(300,initial['certificate']['expires']-clock())
+        while True:
+            require(time.monotonic()<deadline and clock()<initial['certificate']['expires'],'CLOSED case binding remains pending')
+            original.unchanged(record['origin']['binding'])
+            registry.authenticate_setup_progress(record['trial'],{OPERATION:initial['pending']})
+            try:
+                revision=original.ref('agentic-trial-'+record['task_id']+'-case-execution')
+                break
+            except HostRefusal as error:
+                require(error.status==404,'case execution observation unavailable')
+            sleeper(0.25)
+        bound,_=trial_case.read(original,revision,clock)
+        require(bound['execution']['publication_revision']==hint['revision'],'case execution substituted pending publication')
+        hint=dict(hint,revision=revision)
     # Authenticate scope, CLOSED consumption, exact pending fence and pinned job
     # before constructing a role root or minting its source credentials.
     admitted = trial_case.Hosted(registry,origin_reader,None,environment,hint,role,clock)
@@ -1058,15 +1127,23 @@ def _finalize(environment, request, node=None, clock=None, api_factory=GitHub, a
 
 def main():
     # Hold before stdin reads, API construction, root-key loading or SDK import.
-    require(len(sys.argv) == 3 and sys.argv[1] in ('credential', 'prepare-task', 'model-authorization', 'task', 'task-controls') + PRODUCER_ROLES + TRIAL_ROLES,
+    require(len(sys.argv) == 3 and sys.argv[1] in ('credential', 'prepare-task', 'model-authorization', 'task', 'task-controls') + PRODUCER_ROLES + TRIAL_ROLES + CASE_ROLES,
             'fixed authority role required')
     role = sys.argv[1]
     authority_release.authorize('bootstrap' if role == 'credential' else
-        'broker-merge' if role in PRODUCER_ROLES else 'protected-run')
+        'qualify-live' if role in CASE_ROLES else 'broker-merge' if role in PRODUCER_ROLES else 'protected-run')
     raw = sys.stdin.buffer.read(65537)
     require(0 < len(raw) <= 65536, 'bounded credential challenge required')
     request = loads(raw)
-    if role in TRIAL_ROLES:
+    if role in CASE_ROLES:
+        fixed=role.removeprefix('case-')
+        if fixed in ('ready','prepare'):
+            result=_case_launch(os.environ,request,sys.argv[2],fixed)
+            if fixed=='prepare': print(json.dumps(result,sort_keys=True,allow_nan=False))
+        else:
+            require(isinstance(request,dict) and 'handoff' in request,'fixed case lookup required')
+            _case_producer(os.environ,request['handoff'],sys.argv[2],fixed)
+    elif role in TRIAL_ROLES:
         result = _trial(os.environ, request, sys.argv[2], role)
         if role == 'trial-prepare': print(json.dumps(result, sort_keys=True, allow_nan=False))
     elif role in ('prepare-task','discover','prepare'):

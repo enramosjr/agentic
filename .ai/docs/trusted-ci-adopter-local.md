@@ -487,18 +487,50 @@ retains the original 60-second dispatch margin. Trial terminal effects recheck
 that live admission before every conditional Git write, including after blocking
 receipt reads; the ordinary production recovery path retains its existing rules.
 
-This supplies connected source/local-fixture producer entrypoints. It does not add
-an Actions dispatch mode or launch hosted jobs; the fixture explicitly models the
-pinned role executions and CLOSED artifact transport. Native objects and journals
-are never sent to those producer instances. The tests establish neither separate
-OS processes nor hosted credential isolation.
+The held `trial_launch.Native` supplies one-candidate launch coordination through
+the same registry, staging, dispatch and producer engines. It conditionally
+publishes a separate READY record while the disposable registry is still settled.
+That record binds the selected prepared candidate and original CLOSED worker;
+it contains no merge certificate or pending operation. The existing reader-App
+engine stages the fresh case capability before the single possible workflow
+dispatch. Retained publication, mint, secret and dispatch intents precede effects;
+unknown outcomes never authorize another write or POST.
+
+The fixed `case` workflow path first closes a `trial case ready` token consumer.
+Native coordination authenticates its exact revision, token fingerprint, numeric
+scope, pinned run/attempt/job and interval before preparing that real run through
+the shared candidate-review and conditional-fence path. The fresh capability's
+expiry guards native preparation and each fence write. Human candidate review
+is observed externally; the coordinator neither requests nor submits it.
+The waiting fixed preparation job then reads the exact pending case and emits
+its lookup with the authenticated request. A distinct CLOSED `trial case handoff`
+consumer binds that pending certificate, followed by native conditional execution
+publication. Producer jobs observe that binding and reconstruct fresh read-only
+admissions; no secret is staged after queueing, and the revoked worker capability
+cannot substitute for either consumption proof. Missing or ambiguous evidence
+leaves retained intent pending without redispatch.
+
+The workflow shares the existing verification, publication, concurrent broker /
+controls / five final proofs and independently pinned automatic finalizer jobs.
+The launcher passes only the fresh read capability and each role's existing
+purpose credentials; READY/preparation/consumer jobs receive no App root or model
+key. The terminal job can close a failed broker's genuine no-dispatch receipt or
+authenticate actual merge parents/tree after a lost merge acknowledgement.
+`trial_launch.revoke(provision, token_factory)` reconstructs native cleanup from
+the actual provisioning owner and protected launch/staging journals, using the
+same exact retained-token revocation engine after expiry or coordinator restart.
+It does not require a live case admission, mint, restage or dispatch. The
+source/local fixtures model queued jobs and CLOSED artifact
+transport. They do not establish separate hosted processes or credential isolation,
+and no real workflow is dispatched by this build.
 Local fixture execution drives authenticated job/closed-artifact readers,
 actual App proofs, verifier cleanup, effective controls and the actual merge
 request encoder, with GitHub/OCI/kernel/model boundaries modeled. It establishes
 neither hosted execution/isolation nor qualification. The one-candidate controller
 does not prepare the case-specific mutations or coordinate all sixteen probes.
-Hosted workflow dispatch/coordination, ordered case recovery, qualification receipt
-production and final hosted qualification remain unfinished. Trial and original deployments
+Full-inventory workflow coordination, case-specific mutations and ordering,
+qualification receipt production and final hosted qualification remain unfinished.
+Trial and original deployments
 stay unqualified; `qualification_record` remains a strict reader. No complete
 original requirement, trusted release, activation or enforcement is claimed.
 

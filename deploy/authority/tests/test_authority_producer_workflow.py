@@ -13,16 +13,18 @@ class ProducerWorkflowContracts(unittest.TestCase):
         self.jobs = dict(zip(parts[1::2], parts[2::2]))
 
     def test_preliminary_proofs_follow_verification_and_publication_has_own_admin_job(self):
-        self.assertIn('options: [credentials, task, production, qualification]', self.workflow)
+        self.assertIn('options: [credentials, task, production, qualification, case]', self.workflow)
         self.assertIn("if: inputs.mode == 'production'", self.jobs['discover'])
-        self.assertIn('needs: [discover]', self.jobs['prepare'])
-        self.assertIn('role: prepare', self.jobs['prepare'])
-        self.assertIn('needs: [prepare]', self.jobs['verify'])
+        self.assertIn('needs: [discover, trial_case_ready]', self.jobs['prepare'])
+        self.assertIn("inputs.mode == 'case' && 'case-prepare' || 'prepare'", self.jobs['prepare'])
+        self.assertIn("inputs.mode == 'production' && needs.discover.result == 'success'",self.jobs['prepare'])
+        self.assertIn('needs: [prepare, trial_case_handoff]', self.jobs['verify'])
+        self.assertIn("inputs.mode == 'production' || needs.trial_case_handoff.result == 'success'",self.jobs['verify'])
         for purpose in ('admin','reader','issuer','coding','merge'):
             self.assertIn('needs: [prepare, verify]', self.jobs[purpose+'_proof'])
         publication = self.jobs['publication_controls']
         self.assertIn('needs: [prepare, verify]', publication)
-        self.assertIn('role: publication-controls', publication)
+        self.assertIn("inputs.mode == 'case' && 'case-publication-controls' || 'publication-controls'", publication)
         self.assertNotIn('broker', publication)
         self.assertIn('publication_controls', self.jobs['publish'].split('name:',1)[0])
 
@@ -47,7 +49,7 @@ class ProducerWorkflowContracts(unittest.TestCase):
         self.assertIn('if: always() && needs.prepare.result ==',final)
         self.assertIn('broker',final.split('name:',1)[0])
         self.assertIn('AGENTIC_RECOVERY_PIN: ${{ vars.AGENTIC_FINALIZE_PIN }}',final)
-        self.assertIn('role: finalize',final)
+        self.assertIn("inputs.mode == 'case' && 'case-finalize' || 'finalize'",final)
         self.assertNotIn('contents: write',final)
         self.assertNotIn('AGENTIC_MERGE_PRIVATE_KEY',final)
         recovery = (ROOT / '.ai/trusted-ci/authority-v2-recovery.yml').read_text()

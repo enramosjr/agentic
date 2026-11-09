@@ -23,7 +23,7 @@ MAX_DOCUMENT = 512 * 1024
 
 
 def trial_reference(record):
-    suffix = '-case' if record.get('kind') == 'trial-case-handoff' else ''
+    suffix = '-case' if record.get('kind') == 'trial-case-handoff' else '-case-ready' if record.get('kind') == 'trial-case-ready' else ''
     return 'agentic-trial-' + record['task_id'] + suffix + ('-execution' if record['execution'] else '')
 
 

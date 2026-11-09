@@ -237,8 +237,12 @@ class Admission:
                 (controls_digest is None or controls_digest == certificate['controls_digest']), 'native trial certificate differs or controls moved')
         return dict(document=copy.deepcopy(certificate), qualification_digest=digest(certificate), expires=certificate['expires'])
 
-    def acquire(self, writer, before, op, snapshot, task, facts):
+    def acquire(self, writer, before, op, snapshot, task, facts, before_effect=None):
         self.guard(before)
+        def guard():
+            self.guard()
+            if before_effect is not None: before_effect()
+        guard()
         require(self.value['phase'] == 'ready', 'trial fence already attempted; never repeat writes')
         pending = copy.deepcopy(before['fence'])
         pending['sequence'] += 1; pending['pending'] = copy.deepcopy(op)
@@ -252,7 +256,7 @@ class Admission:
             qualification=dict(kind='native-trial-certificate',digest=digest(certificate)))
         self.value.update(phase='fencing',pending=pending,certificate=certificate,request=request)
         self._save()  # Intent precedes every authority effect, including Git objects.
-        after = writer.acquire_operation(before['branch_head'],before['configuration_revision'],op,before_effect=self.guard)
+        after = writer.acquire_operation(before['branch_head'],before['configuration_revision'],op,before_effect=guard)
         self.binding = self.registry.authenticate_setup_progress(before,{OPERATION:pending})
         require(after == self.binding, 'retained native fence differs')
         self.value['phase']='bound'; self._save(); self.guard()

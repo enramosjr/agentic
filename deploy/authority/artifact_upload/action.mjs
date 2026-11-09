@@ -10,6 +10,12 @@ const purposes = ['admin', 'reader', 'issuer', 'coding', 'merge', 'model_vault',
 export function launchParameters(environment, platform = process.platform) {
   const purpose = purposes.find(p => environment.GITHUB_JOB === `${p}_credential_proof`);
   const role = environment.INPUT_ROLE;
+  const caseRole = typeof role === 'string' && role.startsWith('case-') ? role.slice(5) : null;
+  const caseJobs = {ready:'trial_case_ready',prepare:'prepare',handoff:'trial_case_handoff',verify:'verify',
+    'publication-controls':'publication_controls',publish:'publish',broker:'broker',controls:'controls',finalize:'finalize'};
+  const caseProof = ['proof','final-proof'].includes(caseRole) && ['admin','reader','issuer','coding','merge'].find(
+    p=>environment.GITHUB_JOB === `${p}_${caseRole.replace('-','_')}`);
+  const caseProducer = Boolean(caseProof) || Object.hasOwn(caseJobs,caseRole) && caseJobs[caseRole] === environment.GITHUB_JOB;
   const credential = role === 'credential' && Boolean(purpose);
   const model = role === 'model-authorization' && environment.GITHUB_JOB === 'model_auth';
   const prepare = role === 'prepare-task' && environment.GITHUB_JOB === 'prepare_task';
@@ -26,11 +32,11 @@ export function launchParameters(environment, platform = process.platform) {
   const proof = ['proof','final-proof'].includes(role) && ['admin','reader','issuer','coding','merge'].find(
     p=>environment.GITHUB_JOB === `${p}_${role.replace('-','_')}`);
   const producer = Object.hasOwn(producers,role) && producers[role][0] === environment.GITHUB_JOB;
-  const privileged = task || role === 'verify' && producer || role === 'trial-worker' && trial;
+  const privileged = task || role === 'verify' && producer || role === 'trial-worker' && trial || caseProducer && caseRole === 'verify';
   const challenge = credential ? environment.INPUT_CHALLENGE : prepare
     ? JSON.stringify({prompt:environment.INPUT_PROMPT}) : role === 'trial-prepare' && trial
       ? JSON.stringify({handoff:JSON.parse(environment.INPUT_TASK),prompt:environment.INPUT_PROMPT}) : environment.INPUT_TASK;
-  if ((!credential && !model && !prepare && !task && !controls && !producer && !proof && !trial) ||
+  if ((!credential && !model && !prepare && !task && !controls && !producer && !proof && !trial && !caseProducer) ||
       privileged && platform !== 'linux' || typeof challenge !== 'string' ||
       Buffer.byteLength(challenge) === 0 || Buffer.byteLength(challenge) > 65536 ||
       typeof environment.pythonLocation !== 'string' || !isAbsolute(environment.pythonLocation)) {
@@ -40,7 +46,9 @@ export function launchParameters(environment, platform = process.platform) {
     role === 'trial-worker' ? ['AGENTIC_CODING_PRIVATE_KEY','AGENTIC_MODEL_DELIVERY_KEY'] :
     role === 'trial-controls' ? ['AGENTIC_ADMIN_PRIVATE_KEY'] :
     trialProof ? [`AGENTIC_${trialProof.toUpperCase()}_PRIVATE_KEY`] : [];
-  const secrets = trial ? ['AGENTIC_TRIAL_ORIGIN_TOKEN',...trialSecrets] : credential
+  const caseKeys = caseProof ? [caseProof.toUpperCase()] : caseRole === 'broker' ? ['MERGE','READER'] :
+    ['publication-controls','controls','finalize'].includes(caseRole) ? ['ADMIN'] : caseRole === 'publish' ? ['ISSUER'] : caseRole === 'verify' ? ['READER'] : [];
+  const secrets = caseProducer ? ['AGENTIC_TRIAL_CASE_ORIGIN_TOKEN',...caseKeys.map(p=>`AGENTIC_${p}_PRIVATE_KEY`)] : trial ? ['AGENTIC_TRIAL_ORIGIN_TOKEN',...trialSecrets] : credential
     ? [`AGENTIC_${purpose.toUpperCase()}_${purpose.startsWith('model_') ? 'KEY' : 'PRIVATE_KEY'}`]
     : model ? ['AGENTIC_MODEL_VAULT_KEY', 'AGENTIC_MODEL_DELIVERY_KEY']
     : prepare ? ['AGENTIC_READER_PRIVATE_KEY'] : controls ? ['AGENTIC_ADMIN_PRIVATE_KEY']
@@ -50,7 +58,7 @@ export function launchParameters(environment, platform = process.platform) {
   const childEnvironment = {};
   for (const [key, value] of Object.entries(environment)) {
     if (/^(GITHUB_|RUNNER_)[A-Z0-9_]+$/.test(key) || ['PATH', 'SystemRoot', 'SYSTEMROOT',
-        'ACTIONS_RUNTIME_TOKEN', 'ACTIONS_RESULTS_URL', ...(role === 'finalize' ? ['AGENTIC_RECOVERY_PIN'] : []), ...secrets].includes(key)) {
+        'ACTIONS_RUNTIME_TOKEN', 'ACTIONS_RESULTS_URL', ...(['finalize','case-finalize'].includes(role) ? ['AGENTIC_RECOVERY_PIN'] : []), ...secrets].includes(key)) {
       childEnvironment[key] = value;
     }
   }
@@ -93,22 +101,27 @@ export function producerOutput(raw, role) {
   if (/[\r\n]/.test(text)) throw new Error('single producer output required');
   const value = JSON.parse(text);
   if (!value || Array.isArray(value)) throw new Error('producer object required');
-  const expected = role === 'discover' ? 'pr' :
+  const expected = role === 'discover' ? 'pr' : role === 'case-prepare' ?
+    'configuration_revision,deployment_digest,handoff,operation_id,qualification,schema_version,sequence,snapshot,task' :
     'configuration_revision,deployment_digest,operation_id,qualification,schema_version,sequence,snapshot,task';
   if (Object.keys(value).sort().join() !== expected ||
       (role === 'discover' ? value.pr !== null && (!Number.isSafeInteger(value.pr) || value.pr <= 0) :
         value.schema_version !== 2 || !/^[0-9a-f]{32}$/.test(value.operation_id) ||
         !Number.isSafeInteger(value.sequence) || value.sequence <= 0)) throw new Error('closed producer output required');
+  if (role === 'case-prepare' && (!value.handoff || Array.isArray(value.handoff) ||
+      Object.keys(value.handoff).sort().join() !== 'origin,revision' || !/^[0-9a-f]{40}$/.test(value.handoff.revision))) {
+    throw new Error('closed case lookup required');
+  }
   return 'request='+text+'\n';
 }
 
 export function run(environment = process.env, launch = spawnSync) {
   try {
     const value = launchParameters(environment);
-    const prepare = ['prepare-task','discover','prepare','trial-prepare'].includes(environment.INPUT_ROLE);
+    const prepare = ['prepare-task','discover','prepare','trial-prepare','case-prepare'].includes(environment.INPUT_ROLE);
     const child = launch(value.executable, value.argv, {env: value.environment, cwd: root,
       input: value.input, stdio: ['pipe', prepare ? 'pipe' : 'ignore', 'ignore'],
-      timeout: environment.INPUT_ROLE === 'verify' ? 1800000 : ['task','task-controls','trial-worker','trial-controls'].includes(environment.INPUT_ROLE) ? 900000 : 300000,
+      timeout: ['verify','case-verify'].includes(environment.INPUT_ROLE) ? 1800000 : ['task','task-controls','trial-worker','trial-controls'].includes(environment.INPUT_ROLE) ? 900000 : 300000,
       maxBuffer: prepare ? 65537 : 1024});
     if (child.status !== 0 || child.error) return 1;
     if (prepare) {

@@ -30,6 +30,27 @@ for (const [role, job, keys] of [
   assert.throws(()=>launchParameters({...source,GITHUB_JOB:'candidate'}));
 }
 const result = launchParameters(env);
+for (const [role,job,keys] of [
+  ['ready','trial_case_ready',[]],['prepare','prepare',[]],['handoff','trial_case_handoff',[]],
+  ['verify','verify',['READER']],['proof','admin_proof',['ADMIN']],
+  ['publication-controls','publication_controls',['ADMIN']],['publish','publish',['ISSUER']],
+  ['broker','broker',['MERGE','READER']],['controls','controls',['ADMIN']],
+  ['final-proof','merge_final_proof',['MERGE']],['finalize','finalize',['ADMIN']]]) {
+  const source={...env,INPUT_ROLE:'case-'+role,GITHUB_JOB:job,INPUT_TASK:'{}',
+    AGENTIC_TRIAL_CASE_ORIGIN_TOKEN:'fresh-case',AGENTIC_TRIAL_ORIGIN_TOKEN:'revoked-worker',
+    AGENTIC_RECOVERY_PIN:'{"fixture":true}',AGENTIC_MODEL_VAULT_KEY:'must-not-cross',AGENTIC_MODEL_DELIVERY_KEY:'must-not-cross'};
+  for(const p of ['ADMIN','READER','ISSUER','CODING','MERGE']) source[`AGENTIC_${p}_PRIVATE_KEY`]='synthetic';
+  const params=launchParameters(source,'linux');
+  assert.equal(params.argv.at(-2),'case-'+role);
+  assert.equal(params.environment.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN,'fresh-case');
+  assert.equal(params.environment.AGENTIC_TRIAL_ORIGIN_TOKEN,undefined);
+  assert.equal(params.environment.AGENTIC_MODEL_VAULT_KEY,undefined);
+  assert.equal(params.environment.AGENTIC_MODEL_DELIVERY_KEY,undefined);
+  for(const p of ['ADMIN','READER','ISSUER','CODING','MERGE']) assert.equal(Boolean(params.environment[`AGENTIC_${p}_PRIVATE_KEY`]),keys.includes(p));
+  assert.equal(params.executable==='/usr/bin/sudo',role==='verify');
+  assert.equal(Boolean(params.environment.AGENTIC_RECOVERY_PIN),role==='finalize');
+  assert.throws(()=>launchParameters({...source,GITHUB_JOB:'candidate'},'linux'));
+}
 for (const [role,job,expected] of [
   ['trial-handoff','trial_handoff',[]], ['trial-prepare','trial_prepare',[]],
   ['trial-model','trial_model_auth',['AGENTIC_MODEL_VAULT_KEY','AGENTIC_MODEL_DELIVERY_KEY']],
@@ -131,6 +152,21 @@ try {
   assert.equal(run(prepareEnv,launch),0);
   assert.equal(invoked,1);
   assert.equal(readFileSync(output,'utf8'),'existing=keep\nrequest='+request+'\n');
+  const caseRequest=JSON.stringify({schema_version:2,configuration_revision:'a'.repeat(40),deployment_digest:'b'.repeat(64),
+    operation_id:'c'.repeat(32),sequence:1,snapshot:{pr:7},task:{},qualification:{},
+    handoff:{origin:{schema_version:2,repository:'owner/original',repository_id:701,registry_branch:'agentic-registry'},revision:'d'.repeat(40)}});
+  const caseEnv={...env,INPUT_ROLE:'case-prepare',GITHUB_JOB:'prepare',INPUT_TASK:'{}',
+    AGENTIC_TRIAL_CASE_ORIGIN_TOKEN:'fresh-case',GITHUB_OUTPUT:output};
+  assert.equal(run(caseEnv,(_exe,argv,options)=>{
+    assert.equal(argv.at(-2),'case-prepare');
+    assert.equal(options.env.AGENTIC_ADMIN_PRIVATE_KEY,undefined);
+    assert.equal(options.env.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN,'fresh-case');
+    return {status:0,stdout:Buffer.from(caseRequest+'\n')};
+  }),0);
+  assert.equal(readFileSync(output,'utf8'),'existing=keep\nrequest='+request+'\nrequest='+caseRequest+'\n');
+  for(const bad of [JSON.stringify({...JSON.parse(caseRequest),handoff:null}),caseRequest+'\nextra=value']) {
+    assert.throws(()=>producerOutput(bad,'case-prepare'));
+  }
   const before = readFileSync(output);
   assert.equal(run(prepareEnv,()=>({status:0,stdout:Buffer.from(request+'\nforged=output')})),1);
   assert.deepEqual(readFileSync(output),before);

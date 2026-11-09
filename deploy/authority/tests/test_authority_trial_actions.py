@@ -8,7 +8,7 @@ class TrialActions(unittest.TestCase):
     setUp = tasks.TaskWorkflowContracts.setUp
 
     def test_trial_mode_has_handshake_then_native_binding_before_producers(self):
-        self.assertIn('options: [credentials, task, production, qualification]', self.workflow)
+        self.assertIn('options: [credentials, task, production, qualification, case]', self.workflow)
         self.assertIn("if: inputs.mode == 'qualification'", self.jobs['trial_handoff'])
         self.assertIn('needs: [trial_handoff]', self.jobs['trial_prepare'])
         self.assertIn('name: trial preparation', self.jobs['trial_prepare'])
