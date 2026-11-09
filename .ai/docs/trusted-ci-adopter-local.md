@@ -46,19 +46,68 @@ the independently approved deployment before the worker imports code. Candidate
 bytes have their own per-job digest and a separate extraction/mount tree. An
 archive checksum alone does not establish a trusted release origin.
 
-The held `.ai/trusted-ci/authority-v2.yml` has two dispatch modes. The default
+The held `.ai/trusted-ci/authority-v2.yml` has three dispatch modes. The default
 `credentials` mode retains the seven independent setup consumers. The `task`
 mode prepares one request with the reader identity, authorizes its model lease
 in a separate job, then runs coding and administrative controls concurrently.
 Only the prepared request flows through job outputs; the controls job receives
 the admin key, while coding receives only its coding and model-delivery keys.
-Only model authorization has a write-capable authority token for its encrypted
-auth-state journal; the other jobs retain read-only authority access. Before
+Only model authorization has a write-capable workflow token for its encrypted
+auth-state journal. Administrative preparation and recovery borrow a separate,
+authority-only admin App token for fenced CAS; other workflow tokens stay read-only. Before
 loading the source coding key, the task host pulls the authenticated registry's
 digest-pinned formatter and coding images with a credential-free engine environment.
 Every job checks out the authority revision, never candidate-selected code.
 The existing release holds stop all these service roles before input reads or
 authentication. Workflow wiring does not qualify execution or activate a service.
+
+The `production` mode discovers one ready protected-task PR and independently
+reads its current synthetic merge, retained task and pinned qualification before
+an administrative job acquires one merge fence. No candidate number, command,
+policy or authority is selected by a dispatch input. Missing retained qualification
+blocks this path; the qualification producer remains unfinished.
+
+For the GitHub Actions adapter, verification pulls the approved digest-pinned
+image and uses the existing bounded disk, sandbox and host-side controller.
+Evidence uploads only after sandbox, disk and temporary-input cleanup succeeds.
+It requires a Linux runner with noninteractive root host setup, Docker, cgroup
+support, ext4/loop-device tools and sufficient disk. These prerequisites have not
+been qualified on hosted runners. AWS/Azure service promotion remains held;
+the existing provider modules are not silently substituted for this path.
+
+After verification, five own-App proof jobs and a distinct administrative
+`publication controls (PR)` job run separately. Publication authenticates their
+closed successful artifacts, task/evidence/qualification bindings and current
+refs before the issuer writes its exact check. Its administrative observation
+takes at most 30 seconds and remains usable for at most 300 seconds, matching the
+preliminary proof lifetime. It cannot be replaced by final broker controls.
+This provisional publication window does not extend the final broker's 30-second
+readback bound.
+
+After publication, broker, final controls and five final proof jobs start
+concurrently. The producers wait for the live broker's authenticated immutable
+readiness request. The existing broker session revalidates the completed final
+round and dispatches once within its original freshness budgets. Its reader key
+supplies source/check reads; its separate merger key supplies only the source
+merge token. Neither has authority write access, admin or issuer keys.
+
+The main graph's separate administrative `finalize` job runs after terminal broker
+and final producers, including failure paths. It uses `vars.AGENTIC_FINALIZE_PIN`
+for its independently approved runtime coordinates. A denied publication still
+runs the broker's positive no-dispatch path, so authenticated terminal evidence
+can finalize the attempt without a merge or blind retry. Missing positive evidence
+remains pending.
+
+The runtime archive also contains `.github/workflows/authority-v2-recovery.yml`.
+Its separately dispatched `finalize` job reads `vars.AGENTIC_RECOVERY_PIN`, an
+independently approved JSON object with `authority_repository`, numeric
+`authority_repository_id`, `workflow` (the recovery workflow path) and immutable
+`workflow_sha` (the recovery runtime revision). This is trusted configuration,
+never a dispatch input or a pin inferred from today's default branch. The job
+authenticates itself before reading the pending registry and can recover after
+software drift or deployment expiry. It never dispatches a merge or retries an
+uncertain request. Missing/contradictory terminal proof preserves the fence.
+The native setup journey does not yet provision these runtime pins automatically.
 
 ## Provider components implemented locally
 
@@ -120,8 +169,9 @@ closed workflow producer contract remain unqualified. A fresh eligibility collec
 and broker session now compose authenticated task/qualification/evidence artifacts,
 current checks/reviews/refs and readiness-bound administrative controls plus all
 five final own-App proofs. Cached App proofs cannot authorize the final dispatch.
-The separated workflow graph and administrative recovery wiring remain missing,
-so this is not a functioning hosted merge service.
+The held workflow and service now connect these producers and a separate terminal
+recovery entrypoint. Local API/OCI fixtures exercise the composition; this is not
+a functioning or qualified hosted merge service.
 
 The terminal recovery helper accepts only positive no-dispatch evidence from a
 terminal pinned broker, or an authenticated historical dispatch plus the exact
@@ -155,7 +205,8 @@ container, producer integration and hosted model access remain unqualified.
 Check-body construction requires the full validated parent execution/cleanup
 envelope. Readback requires a unique exact issuer App/context/intent/merge SHA
 success within the pending operation's interval. These helpers do not authenticate
-the parent artifacts by themselves and never publish a check.
+the parent artifacts by themselves. The separate held service issuer authenticates
+those artifacts and its own closed administrative publication observation first.
 
 Local contracts, clean installed-client checks, extracted-runtime checks and
 offline SDK tests do not prove live API semantics, IAM/RBAC, hosted containers
@@ -164,7 +215,7 @@ or real cleanup.
 Remaining integration includes resumable registration recovery; connecting the
 independent policy/release registry, separated Actions jobs and all adapter
 operations into the complete onboarding/lifecycle journey; protected-harness
-admission and submission integration; broker receipt/runtime wiring,
+admission and submission qualification; hosted producer/runtime qualification,
 host-transition workflow integration; automatic real qualification fixtures; and final acceptance
 convergence/review. The new repository software installer does not itself complete
 that journey or revoke registered Apps/cloud resources.

@@ -47,12 +47,12 @@ def admit_job(api, d, environment, name, now):
     p = d['policy']
     require(environment.get('GITHUB_REPOSITORY_ID') == str(p['authority_repository_id']) and
             environment.get('GITHUB_SHA') == p['workflow_sha'], 'not the pinned authority environment')
-    key = {'discover': 'discover', 'hosted qualification': 'qualification',
+    key = {'discover': 'discover', 'prepare': 'prepare', 'hosted qualification': 'qualification',
            'model authorization': 'model_auth', 'prepare task': 'prepare_task'}.get(name)
-    matrix = re.fullmatch(r'(verify|controls|publish) \([1-9][0-9]{0,19}\)', name)
+    matrix = re.fullmatch(r'(verify|controls|publish|broker|publication controls) \([1-9][0-9]{0,19}\)', name)
     proof = re.fullmatch(r'(proof|final proof) \((admin|reader|issuer|coding|merge)\)', name)
     if matrix:
-        key = matrix.group(1)
+        key = matrix.group(1).replace(' ', '_')
     elif proof:
         key = proof.group(2) + ('_final_proof' if proof.group(1) == 'final proof' else '_proof')
     elif credential:
@@ -126,12 +126,12 @@ def _authenticated_document(api, d, locator, role, key, now, live=False):
     object_fields(locator, ('run_id', 'attempt', 'job_id', 'artifact_id'), 'authority artifact locator')
     require(all(positive(v) for v in locator.values()) and type(now) is int and 0 < now < d['expires'],
             'current authority artifact coordinates required')
-    require(role in ('evidence', 'controls', 'proof', 'final-proof', 'task', 'task-ready', 'task-controls',
+    require(role in ('evidence', 'controls', 'publication-controls', 'proof', 'final-proof', 'task', 'task-ready', 'task-controls',
                     'model-lease', 'qualification', 'credential-proof') and live == (role == 'task-ready'),
             'unknown authority producer role')
-    if role in ('evidence', 'controls'):
+    if role in ('evidence', 'controls', 'publication-controls'):
         require(positive(key), 'numeric candidate producer required')
-        job_name = ('verify' if role == 'evidence' else role) + ' (' + str(key) + ')'
+        job_name = ('verify' if role == 'evidence' else role.replace('-', ' ')) + ' (' + str(key) + ')'
         prefix = role + '-' + str(key)
     elif role in ('proof', 'final-proof'):
         require(key in ('admin', 'reader', 'issuer', 'coding', 'merge'), 'unknown App proof producer')

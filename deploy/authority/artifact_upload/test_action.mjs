@@ -3,7 +3,7 @@ import {resolve} from 'node:path';
 import {join} from 'node:path';
 import {mkdtempSync,readFileSync,writeFileSync,unlinkSync,rmdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
-import {launchParameters, preparedOutput, run} from './action.mjs';
+import {launchParameters, preparedOutput, producerOutput, run} from './action.mjs';
 
 const env = {INPUT_ROLE: 'credential', INPUT_CHALLENGE: '{"fixture":true}',
   pythonLocation: '/opt/hostedtoolcache/Python/3.13.9/x64', GITHUB_TOKEN: 'synthetic-reader',
@@ -12,7 +12,29 @@ const env = {INPUT_ROLE: 'credential', INPUT_CHALLENGE: '{"fixture":true}',
   ACTIONS_RESULTS_URL: 'https://results-receiver.actions.githubusercontent.com',
   PYTHONPATH: '/hostile', LD_PRELOAD: '/hostile', OPENAI_API_KEY: 'must-not-cross',
   AWS_ACCESS_KEY_ID: 'must-not-cross', PATH: '/usr/bin:/bin'};
+for (const [role, job, keys] of [
+  ['discover','discover',['READER']], ['prepare','prepare',['ADMIN']], ['verify','verify',['READER']],
+  ['publication-controls','publication_controls',['ADMIN']], ['publish','publish',['ISSUER']],
+  ['broker','broker',['MERGE','READER']], ['controls','controls',['ADMIN']],
+  ['proof','coding_proof',['CODING']], ['final-proof','issuer_final_proof',['ISSUER']],
+  ['finalize','finalize',['ADMIN']]]) {
+  const source = {...env,INPUT_ROLE:role,GITHUB_JOB:job,INPUT_TASK:'{}',AGENTIC_RECOVERY_PIN:'{"fixture":true}'};
+  for(const purpose of ['ADMIN','READER','ISSUER','CODING','MERGE']) source[`AGENTIC_${purpose}_PRIVATE_KEY`] = 'synthetic';
+  const params = launchParameters(source,'linux');
+  assert.equal(params.argv.at(-2),role);
+  for(const purpose of ['ADMIN','READER','ISSUER','CODING','MERGE']) {
+    assert.equal(Boolean(params.environment[`AGENTIC_${purpose}_PRIVATE_KEY`]),keys.includes(purpose));
+  }
+  assert.equal(Boolean(params.environment.AGENTIC_RECOVERY_PIN),role === 'finalize');
+  if(role === 'verify') assert.equal(params.executable,'/usr/bin/sudo');
+  assert.throws(()=>launchParameters({...source,GITHUB_JOB:'candidate'}));
+}
 const result = launchParameters(env);
+assert.equal(producerOutput('{"pr":7}\n','discover'),'request={"pr":7}\n');
+assert.equal(producerOutput('{"pr":null}','discover'),'request={"pr":null}\n');
+for(const bad of ['{"pr":true}','{"pr":0}','{"pr":7,"key":"secret"}','{"pr":7}\nextra=value']) {
+  assert.throws(()=>producerOutput(bad,'discover'));
+}
 assert.equal(result.executable, resolve('/opt/hostedtoolcache/Python/3.13.9/x64', 'bin/python3'));
 assert.equal(result.argv[0], '-I');
 assert.equal(result.argv[1], '-B');

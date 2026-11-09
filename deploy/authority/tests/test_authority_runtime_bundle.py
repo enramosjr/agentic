@@ -26,7 +26,7 @@ class RuntimeBundleContracts(unittest.TestCase):
             for name in ('deploy/authority/service.py', 'deploy/authority/registration.py',
                          'deploy/authority/coding_stdio.py', 'deploy/authority/artifact_upload/action.mjs',
                          'deploy/authority/cloud.py', 'deploy/authority/cloud_execution.py',
-                         '.github/workflows/authority-v2.yml'):
+                         '.github/workflows/authority-v2.yml', '.github/workflows/authority-v2-recovery.yml'):
                 self.assertIn(name, manifest['files'])
             for name, fingerprint in manifest['files'].items():
                 self.assertEqual(hashlib.sha256((target / name).read_bytes()).hexdigest(), fingerprint)
@@ -44,6 +44,8 @@ class RuntimeBundleContracts(unittest.TestCase):
                                      ('service.py', ['model-authorization', str(Path(sys.executable).resolve())]),
                                      ('service.py', ['task', str(Path(sys.executable).resolve())]),
                                      ('service.py', ['task-controls', str(Path(sys.executable).resolve())]),
+                                     *[('service.py', [role, str(Path(sys.executable).resolve())]) for role in
+                                       ('discover','prepare','verify','publication-controls','publish','proof','broker','controls','final-proof','finalize')],
                                      ('coding_stdio.py', ['--stdio'])]:
                 held = subprocess.run([sys.executable, '-I', str(target / 'deploy/authority' / entrypoint), *args],
                     input=b'not a challenge', capture_output=True, cwd=folder, timeout=15)

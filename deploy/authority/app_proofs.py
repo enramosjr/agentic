@@ -84,11 +84,10 @@ def denial(api, installation, repos, permissions, category, token_factory):
         require(False, 'App minted a forbidden capability')
 
 
-def prove(api, authority_reader, d, identities, purpose, registry_revision, now, token_factory=GitHub):
-    """API is THIS App's JWT only. Never pass another purpose's root credential."""
+def authenticate(api, authority_reader, d, identities, purpose):
+    """Authenticate the own-App domain, also for terminal-only expired recovery."""
     identity_record(d, identities)
-    require(purpose in PERMISSIONS and sha(registry_revision) and type(now) is int and
-            0 < now < d['expires'], 'current App proof coordinates required')
+    require(purpose in PERMISSIONS, 'fixed own-App purpose required')
     record, p = identities['apps'][purpose], d['policy']
     owner = identities['owner_id']
     info = api.get('/app')
@@ -109,6 +108,15 @@ def prove(api, authority_reader, d, identities, purpose, registry_revision, now,
                 installation['account']['id'] == owner and installation.get('suspended_at') is None and
                 installation.get('repository_selection') == 'selected' and
                 normalized(installation['permissions']) == PERMISSIONS[purpose], 'App installation domain changed')
+
+
+def prove(api, authority_reader, d, identities, purpose, registry_revision, now, token_factory=GitHub):
+    """API is THIS App's JWT only. Never pass another purpose's root credential."""
+    require(sha(registry_revision) and type(now) is int and 0 < now < d['expires'],
+            'current App proof coordinates required')
+    authenticate(api, authority_reader, d, identities, purpose)
+    record, p, owner = identities['apps'][purpose], d['policy'], identities['owner_id']
+    repositories = [p['repository_id']] + ([p['authority_repository_id']] if purpose in ('admin','reader') else [])
     permissions = TOKEN_PERMISSIONS[purpose]
     result = api.post('/app/installations/' + str(record['installation_id']) + '/access_tokens',
                       {'repository_ids': repositories, 'permissions': permissions})

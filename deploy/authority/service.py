@@ -1,7 +1,7 @@
-"""Pinned candidate-free credential and encrypted model-delivery entrypoints.
+"""Pinned authority producer roles; candidate execution stays inside the sandbox.
 
 Authority coordinates come from the actual Actions execution, never dispatch
-inputs. Other authority operations are not exposed until their producers exist.
+inputs. All public producer roles remain release-held before reads or credentials.
 """
 import json
 from contextlib import contextmanager
@@ -12,6 +12,7 @@ import secrets
 import subprocess
 import sys
 import time
+import tempfile
 from urllib.parse import quote
 
 sys.path[:0] = [str(Path(__file__).resolve().parent),
@@ -22,7 +23,7 @@ import authority_release
 from registry import Registry
 import setup
 from trusted_ci_github import GitHub
-from trusted_ci_policy import Refusal, loads, object_fields, positive, require, sha
+from trusted_ci_policy import Refusal, digest, loads, object_fields, positive, require, sha
 
 
 def context(environment, api_factory=GitHub):
@@ -124,8 +125,9 @@ def _authorize_task_request(environment, request, node, clock=None, api_factory=
 
 
 @contextmanager
-def _source_token(purpose, root, authority, deployment, identities, revision, clock, token_factory=GitHub, guard=lambda:None):
-    require(purpose in ('coding', 'reader', 'admin'), 'fixed task source credential purpose required')
+def _source_token(purpose, root, authority, deployment, identities, revision, clock, token_factory=GitHub, guard=lambda:None,
+                  recovery=False):
+    require(purpose in ('coding', 'reader', 'admin', 'issuer', 'merge'), 'fixed source credential purpose required')
     # Preserve mint responses until their cleanup finally: a post-response guard
     # must not discard a newly issued token before it can be revoked.
     class AdmittedRoot:
@@ -136,11 +138,15 @@ def _source_token(purpose, root, authority, deployment, identities, revision, cl
             guard()
             return root.post(path, body)
     admitted = AdmittedRoot()
-    app_proofs.prove(admitted, authority, deployment, identities, purpose, revision, clock(), token_factory)
+    if recovery:
+        require(purpose == 'admin', 'only terminal administrator may borrow expired source access')
+        app_proofs.authenticate(admitted, authority, deployment, identities, purpose)
+    else:
+        app_proofs.prove(admitted, authority, deployment, identities, purpose, revision, clock(), token_factory)
     guard()
     record = identities['apps'][purpose]
-    permissions = (dict(administration='write', contents='read', repository_hooks='read') if purpose == 'admin' else
-                   app_proofs.TOKEN_PERMISSIONS['coding'] if purpose == 'coding' else {'contents':'read'})
+    permissions = (dict(administration='write', contents='read', pull_requests='read', repository_hooks='read')
+                   if purpose == 'admin' else app_proofs.TOKEN_PERMISSIONS[purpose])
     result = admitted.post('/app/installations/' + str(record['installation_id']) + '/access_tokens',
         dict(repository_ids=[deployment['policy']['repository_id']], permissions=permissions))
     try:
@@ -333,17 +339,413 @@ def _task(environment, request, node, clock=None, api_factory=GitHub, app_factor
     return result
 
 
+PRODUCER_ROLES = ('discover', 'prepare', 'verify', 'publication-controls', 'publish',
+                  'proof', 'broker', 'controls', 'final-proof', 'finalize')
+PRODUCER_FIELDS = ('schema_version configuration_revision deployment_digest operation_id sequence snapshot task qualification').split()
+
+
+def _guard_binding(registry, before, clock):
+    current = registry.binding()
+    require(all(current[k] == before[k] for k in ('deployment', 'configuration_revision', 'deployment_digest', 'fence')),
+            'producer configuration or operation changed')
+    op = before['fence']['pending']
+    require(clock() < min(before['deployment']['expires'], op['execution_deadline'] if op else before['deployment']['expires']),
+            'producer configuration or operation expired')
+
+
+def _producer_request(request, binding, environment, clock):
+    import broker_proofs
+    object_fields(request, PRODUCER_FIELDS, 'prepared producer request')
+    require(type(request['schema_version']) is int and request['schema_version'] == 2 and
+            request['configuration_revision'] == binding['configuration_revision'] and
+            request['deployment_digest'] == binding['deployment_digest'] and
+            type(request['sequence']) is int and request['sequence'] == binding['fence']['sequence'],
+            'prepared producer configuration differs')
+    op = broker_proofs.current_operation(binding, request['snapshot'])
+    require(request['operation_id'] == op['operation_id'] and str(op['run_id']) == environment.get('GITHUB_RUN_ID') and
+            str(op['attempt']) == environment.get('GITHUB_RUN_ATTEMPT') and clock() < min(op['execution_deadline'], binding['deployment']['expires']),
+            'prepared producer execution differs')
+    object_fields(request['task'], ('task_id', 'locator'), 'prepared task locator')
+    return op
+
+
+def _producer_environment(environment, purpose, broker=False):
+    names = {'AGENTIC_' + purpose.upper() + '_PRIVATE_KEY'}
+    if broker: names.add('AGENTIC_READER_PRIVATE_KEY')
+    forbidden = set(setup.CREDENTIAL_NAMES) - names | {'GH_TOKEN', 'OPENAI_API_KEY', 'AWS_ACCESS_KEY_ID',
+        'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'AZURE_CLIENT_SECRET', 'ARM_CLIENT_SECRET'}
+    require(not any(environment.get(k) for k in forbidden), 'producer inherited another purpose credential')
+
+
+@contextmanager
+def _admin_authority(root, authority, registry, binding, identities, token_factory):
+    """Only source-free administrative jobs borrow authority CAS rights."""
+    record = identities['apps']['admin']
+    result = root.post('/app/installations/' + str(record['installation_id']) + '/access_tokens',
+        dict(repository_ids=[binding['deployment']['policy']['authority_repository_id']],
+             permissions={'contents':'write', 'actions':'read'}))
+    try:
+        expected = binding['deployment']['policy']['authority_repository_id']
+        require(result.get('token') and app_proofs.normalized(result.get('permissions')) == {'contents':'write','actions':'read'} and
+                [r['id'] for r in result.get('repositories', [])] == [expected], 'administrative authority token scope differs')
+        scoped = token_factory(result['token'])
+        require([r['id'] for r in scoped.pages('/installation/repositories', 'repositories')] == [expected],
+                'administrative authority token reaches another repository')
+        yield Registry(scoped, registry.coordinates)
+    finally:
+        app_proofs.revoke(result, token_factory)
+
+
+def _locator(authority, d, run_id, attempt, role, key):
+    from provenance import execution_job
+    prefix = role if key is None else role + '-' + str(key)
+    name = ('verify' if role == 'evidence' else 'publication controls' if role == 'publication-controls' else
+            'hosted qualification' if role == 'qualification' else role)
+    if key is not None: name += ' (' + str(key) + ')'
+    job = execution_job(authority, d, run_id, attempt, name, completed=True)
+    items = authority.pages('/repos/' + d['policy']['authority_repository'] + '/actions/runs/' + str(run_id) + '/artifacts', 'artifacts')
+    matches = [a for a in items if a['name'] == prefix + '-' + str(attempt)]
+    require(len(matches) == 1 and positive(matches[0]['id']), 'missing or ambiguous producer artifact')
+    return dict(run_id=run_id, attempt=attempt, job_id=job['id'], artifact_id=matches[0]['id'])
+
+
+def _retained(authority, source, binding, identities, snapshot, clock):
+    """Inventory supplies hints only; closed producer/domain validators decide."""
+    from provenance import authenticated_document
+    import task_admission
+    import qualification_record
+    d = binding['deployment']
+    pr = source.get('/repos/' + d['policy']['repository'] + '/pulls/' + str(snapshot['pr']))
+    match = re.fullmatch(r'agentic/task-([0-9a-f]{32})', pr['head']['ref'])
+    require(match is not None, 'candidate is not a protected task branch')
+    task_id = match.group(1)
+    inventory = authority.pages('/repos/' + d['policy']['authority_repository'] + '/actions/artifacts', 'artifacts')
+    require(isinstance(inventory, list) and len(inventory) <= 10000, 'bounded retained producer inventory required')
+    found = {'task':[], 'qualification':[]}
+    for artifact in inventory:
+        name = artifact.get('name', '')
+        role = 'task' if re.fullmatch('task-' + task_id + r'-[1-9][0-9]{0,19}', name) else (
+            'qualification' if re.fullmatch(r'qualification-[1-9][0-9]{0,19}', name) else None)
+        if role is None or artifact.get('expired') is not False: continue
+        execution = artifact.get('workflow_run', {})
+        if any(execution.get(k) != expected for k, expected in (
+            ('head_sha',d['policy']['workflow_sha']),('repository_id',d['policy']['authority_repository_id']),
+            ('head_repository_id',d['policy']['authority_repository_id']))): continue
+        run_id, attempt = artifact['workflow_run']['id'], int(name.rsplit('-',1)[1])
+        location = _locator(authority, d, run_id, attempt, role, task_id if role == 'task' else None)
+        proof = authenticated_document(authority, d, location, role, task_id if role == 'task' else None, clock())
+        value = proof['document']
+        if role == 'qualification':
+            if digest(value) != d['qualification']: continue
+            qualification_record.validate(value, binding, identities, proof, value.get('controls_digest'), clock())
+        else:
+            if value.get('submitted',{}).get('head') != snapshot['head']: continue
+            task_admission.read(source, authority, binding, identities, snapshot, location, task_id, clock())
+        found[role].append(location)
+    require(all(len(v) == 1 for v in found.values()), 'exact retained task and qualification required')
+    return dict(task_id=task_id, locator=found['task'][0]), found['qualification'][0]
+
+
+def _publication_observation(binding, snapshot, started, completed, facts):
+    import broker_proofs
+    import control_rendezvous
+    op = broker_proofs.current_operation(binding, snapshot)
+    control_rendezvous.validate_facts(facts, binding)
+    require(positive(started) and positive(completed) and op['created'] <= started <= completed <= started + 30,
+            'fresh publication observation required')
+    return dict(schema_version=2, kind='publication-observation', operation_id=op['operation_id'],
+        sequence=binding['fence']['sequence'], configuration_revision=binding['configuration_revision'],
+        deployment_digest=binding['deployment_digest'], snapshot=snapshot,
+        readback_started=started, readback_completed=completed, result=facts)
+
+
+def _validate_publication_observation(value, binding, snapshot, proof, now):
+    object_fields(value, ('schema_version kind operation_id sequence configuration_revision deployment_digest snapshot '
+                          'readback_started readback_completed result').split(), 'closed publication observation')
+    expected = _publication_observation(binding, snapshot, value['readback_started'], value['readback_completed'], value['result'])
+    require(value == expected and type(value['schema_version']) is int and type(value['sequence']) is int and
+            proof['role'] == 'publication-controls' and proof['key'] == snapshot['pr'] and
+            proof['run_id'] == snapshot['run_id'] and proof['attempt'] == snapshot['run_attempt'] and
+            proof['job_started'] <= value['readback_started'] <= value['readback_completed'] <=
+            proof['artifact_created'] <= proof['job_completed'] <= now and now - value['readback_started'] <= 300,
+            'publication observation is stale or from another closed producer')
+    return value['result']
+
+
+def _discover(environment, request, node=None, clock=None, api_factory=GitHub, app_factory=None, token_factory=GitHub):
+    import bootstrap
+    from provenance import admit_job
+    object_fields(request, (), 'discovery request')
+    _producer_environment(environment, 'reader')
+    clock = clock or (lambda:int(time.time()))
+    api, registry, before, identities = context(environment, api_factory)
+    d, p = before['deployment'], before['deployment']['policy']
+    require(d['state'] == 'active' and before['fence']['pending'] is None, 'discovery requires active settled authority')
+    admit_job(api, d, environment, 'discover', clock())
+    guard = lambda:_guard_binding(registry, before, clock)
+    root = (app_factory or bootstrap.app_api)(d['apps']['reader'], environment.get('AGENTIC_READER_PRIVATE_KEY'))
+    with _source_token('reader', root, api, d, identities, before['configuration_revision'], clock, token_factory, guard) as source:
+        prs = source.pages('/repos/' + p['repository'] + '/pulls?state=open&base=' + quote(p['target'],safe=''))
+        require(isinstance(prs, list) and len(prs) <= 1000, 'bounded candidate inventory required')
+        eligible = [v['number'] for v in prs if v.get('draft') is False and v['base']['ref'] == p['target'] and
+            v['head']['repo']['id'] == p['repository_id'] and v['user']['id'] == identities['apps']['coding']['actor_id'] and
+            re.fullmatch(r'agentic/task-[0-9a-f]{32}', v['head']['ref']) and positive(v['number'])]
+    guard()
+    return dict(pr=min(eligible) if eligible else None)
+
+
+def _prepare(environment, request, node=None, clock=None, api_factory=GitHub, app_factory=None, token_factory=GitHub):
+    import bootstrap
+    from authority_github import Readers, current_snapshot
+    from provenance import admit_job
+    object_fields(request, ('pr',), 'discovered candidate')
+    require(positive(request['pr']), 'one discovered candidate required')
+    _producer_environment(environment, 'admin')
+    clock = clock or (lambda:int(time.time()))
+    api, registry, before, identities = context(environment, api_factory)
+    d, p = before['deployment'], before['deployment']['policy']
+    require(d['state'] == 'active' and before['fence']['pending'] is None, 'preparation requires active settled authority')
+    job = admit_job(api, d, environment, 'prepare', clock())
+    guard = lambda:_guard_binding(registry, before, clock)
+    root = (app_factory or bootstrap.app_api)(d['apps']['admin'], environment.get('AGENTIC_ADMIN_PRIVATE_KEY'))
+    with _source_token('admin', root, api, d, identities, before['configuration_revision'], clock, token_factory, guard) as source:
+        readers = Readers(source, api, d)
+        s = current_snapshot(readers, d, request['pr'], job['run_id'], int(environment['GITHUB_RUN_ATTEMPT']))
+        task, qualification = _retained(api, source, before, identities, s, clock)
+        guard()
+        require(current_snapshot(readers, d, s['pr'], s['run_id'], s['run_attempt']) == s, 'candidate moved before fencing')
+        now = clock()
+        require(d['expires'] - now >= p['limits']['seconds'] + 300, 'insufficient configuration lifetime for verification')
+        op = dict(kind='merge', operation_id=secrets.token_hex(16), scope_digest=None,
+            repository_id=p['repository_id'], target=p['target'], configuration_revision=before['configuration_revision'],
+            deployment_digest=before['deployment_digest'], workflow_sha=p['workflow_sha'], run_id=s['run_id'], attempt=s['run_attempt'],
+            created=now, execution_deadline=min(now+3600,d['expires']), **{k:s[k] for k in ('pr','head','base','merge')})
+        with _admin_authority(root, api, registry, before, identities, token_factory) as writer:
+            guard()
+            after = writer.acquire_operation(before['branch_head'], before['configuration_revision'], op)
+    require(after['fence']['pending'] == op, 'prepared fence readback differs')
+    return dict(schema_version=2, configuration_revision=after['configuration_revision'], deployment_digest=after['deployment_digest'],
+        operation_id=op['operation_id'], sequence=after['fence']['sequence'], snapshot=s, task=task, qualification=qualification)
+
+
+def _upload_document(uploader, name, document):
+    artifact = uploader(name, json.dumps(document, sort_keys=True, allow_nan=False).encode())
+    require(positive(artifact), 'producer upload acknowledgement unavailable')
+    return artifact
+
+
+def _verify_actions(source, d, snapshot, job_id, guard, clock, disk_factory=None, box_factory=None,
+                    controller=None, image_loader=None):
+    from cloud_worker import unpack
+    from disk import WorkDisk
+    from trusted_ci_sandbox import Sandbox
+    from trusted_ci_controller import verify
+    from coding_transport import ENGINE_ENVIRONMENT
+    require(d['adapter'] == 'github-actions', 'cloud producer promotion remains held')
+    guard()
+    if image_loader is None:
+        result = subprocess.run(['docker','pull','--',d['policy']['image']], env=ENGINE_ENVIRONMENT,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120, check=False)
+        require(result.returncode == 0, 'approved verification image unavailable')
+    else: image_loader(d, guard)
+    guard()
+    raw = source.fetch('/repos/' + d['policy']['repository'] + '/tarball/' + snapshot['merge'], binary=True, limit=64*1024*1024)
+    with tempfile.TemporaryDirectory(prefix='agentic-verify-') as folder:
+        candidate = unpack(raw, Path(folder)/'candidate')
+        candidate.chmod(0o755)
+        for path in candidate.rglob('*'):
+            if path.is_dir(): path.chmod(0o755)
+        guard()
+        with (disk_factory or WorkDisk)('agentic-'+secrets.token_hex(12), d['policy']['limits']['disk_mb'], formatter_image=d['policy']['image']) as disk:
+            with (box_factory or Sandbox)(candidate, d['policy'], runtime='docker', work_volume=disk.name) as box:
+                report = (controller or verify)(box, d['policy'], snapshot, capture_failure=True)
+    guard()
+    return dict(schema_version=2, report=dict(schema_version=2, deployment_digest=digest(d), generation=d['generation'],
+        snapshot=snapshot, adapter=d['adapter'], execution=dict(run_id=snapshot['run_id'], attempt=snapshot['run_attempt'],
+        job_id=job_id, account=d['account'], resource=d['resources'].get('actions_resource')), outcomes=report['outcomes']),
+        cleanup_complete=True, enforcement_active=False)
+
+
+def _producer(environment, request, node, role, clock=None, api_factory=GitHub, app_factory=None,
+              token_factory=GitHub, uploader_factory=NodeUploader, verifier=None, sleeper=time.sleep):
+    """Fixed candidate-free service roles; public dispatch remains release-held."""
+    import bootstrap
+    import broker_proofs
+    from authority_github import Readers, current_snapshot
+    from provenance import admit_job, authenticated_document, validate_evidence
+    purpose = ('admin' if role in ('publication-controls','controls') else 'issuer' if role == 'publish' else
+               'merge' if role == 'broker' else environment.get('GITHUB_JOB','').split('_',1)[0]
+               if role in ('proof','final-proof') else 'reader')
+    require(purpose in ('admin','reader','issuer','coding','merge'), 'fixed producer purpose required')
+    _producer_environment(environment, purpose, broker=role == 'broker')
+    clock = clock or (lambda:int(time.time()))
+    api, registry, before, identities = context(environment, api_factory)
+    op = _producer_request(request, before, environment, clock)
+    d, s = before['deployment'], request['snapshot']
+    name = ('publication controls' if role == 'publication-controls' else 'final proof' if role == 'final-proof' else role)
+    name += ' (' + (purpose if role in ('proof','final-proof') else str(op['pr'])) + ')'
+    job = admit_job(api, d, environment, name, clock())
+    guard = lambda:_guard_binding(registry, before, clock)
+    guard()
+    root = (app_factory or bootstrap.app_api)(d['apps'][purpose], environment.get('AGENTIC_'+purpose.upper()+'_PRIVATE_KEY'))
+    uploader = uploader_factory(node, environment)
+    if role in ('proof','final-proof'):
+        if role == 'final-proof':
+            broker, ready = _wait_broker_ready(api, registry, before, clock, guard, sleeper)
+            value = broker_proofs.refresh(root, api, registry, identities, purpose, environment, broker, ready, clock, token_factory)
+        else:
+            started = clock()
+            result = app_proofs.prove(root, api, d, identities, purpose, before['configuration_revision'], started, token_factory)
+            value = dict(schema_version=2, kind='broker-purpose-proof', operation_id=op['operation_id'],
+                sequence=before['fence']['sequence'], configuration_revision=before['configuration_revision'],
+                deployment_digest=before['deployment_digest'], snapshot=s, issued=started, completed=clock(),
+                expires=min(result['expires'], op['execution_deadline']), result=result)
+        guard()
+        return _upload_document(uploader, role+'-'+purpose+'-'+str(op['attempt']), value)
+    # Borrowed source credentials never reach the artifact child or candidate.
+    with _source_token(purpose, root, api, d, identities, before['configuration_revision'], clock, token_factory, guard) as source:
+        readers = Readers(source, api, d)
+        if role != 'broker':
+            require(current_snapshot(readers, d, op['pr'], op['run_id'], op['attempt']) == s, 'prepared candidate changed')
+        if role == 'verify':
+            import task_admission
+            task_admission.read(source, api, before, identities, s, request['task']['locator'], request['task']['task_id'], clock())
+            result = (verifier or _verify_actions)(source, d, s, job['id'], guard, clock)
+            document = dict(schema_version=2, kind='actions', registry_revision=before['configuration_revision'], result=result)
+            validate_evidence(document, d, s, before['configuration_revision'], job['id'], clock())
+        elif role == 'publication-controls':
+            from controls import observe
+            started = clock()
+            facts = observe(readers, d)
+            require(current_snapshot(readers, d, op['pr'], op['run_id'], op['attempt']) == s, 'candidate moved during publication readback')
+            document = _publication_observation(before, s, started, clock(), facts)
+        elif role == 'controls':
+            import control_rendezvous
+            broker, ready = _wait_broker_ready(api, registry, before, clock, guard, sleeper)
+            document = control_rendezvous.collect(readers, api, registry.binding, broker, ready, clock)
+        elif role == 'publish':
+            document = _publish(source, api, registry, before, identities, request, clock, guard)
+        elif role == 'broker':
+            from broker_session import Session
+            from merge_window import MergeSource
+            # Resolve closed inputs inside Session's positive no-dispatch path.
+            locators = lambda:_publication_locators(api, before, request)
+            merger = MergeSource(source.token, d['policy']['repository'], d['policy']['repository_id'])
+            reader_root = (app_factory or bootstrap.app_api)(d['apps']['reader'], environment.get('AGENTIC_READER_PRIVATE_KEY'))
+            with _source_token('reader', reader_root, api, d, identities, before['configuration_revision'], clock,
+                               token_factory, guard) as reader:
+                return Session(registry, reader, api, identities, job['id'], locators, merger, uploader, clock, sleeper)._run()
+        else: raise Refusal('unsupported producer role')
+    guard()
+    if role == 'publish': return document
+    return _upload_document(uploader, role.replace('verify','evidence')+'-'+str(op['pr'])+'-'+str(op['attempt']), document)
+
+
+def _publication_locators(api, binding, request):
+    d, s = binding['deployment'], request['snapshot']
+    return dict(evidence=_locator(api,d,s['run_id'],s['run_attempt'],'evidence',s['pr']),
+        proofs={p:_locator(api,d,s['run_id'],s['run_attempt'],'proof',p) for p in ('admin','reader','issuer','coding','merge')},
+        task=request['task'], qualification=request['qualification'])
+
+
+def _publish(source, api, registry, binding, identities, request, clock, guard):
+    import broker_proofs
+    import checks
+    import task_admission
+    import qualification_record
+    from authority_github import Readers, current_snapshot
+    from provenance import authenticated_document, validate_evidence
+    d, s = binding['deployment'], request['snapshot']
+    locators = _publication_locators(api, binding, request)
+    evidence = authenticated_document(api,d,locators['evidence'],'evidence',s['pr'],clock())
+    validate_evidence(evidence['document'],d,s,binding['configuration_revision'],evidence['job_id'],clock())
+    broker_proofs.read(api,binding,identities,s,locators['proofs'],clock())
+    task = task_admission.read(source,api,binding,identities,s,locators['task']['locator'],locators['task']['task_id'],clock())
+    location = _locator(api,d,s['run_id'],s['run_attempt'],'publication-controls',s['pr'])
+    controls = authenticated_document(api,d,location,'publication-controls',s['pr'],clock())
+    facts = _validate_publication_observation(controls['document'],binding,s,controls,clock())
+    qualification_record.read(api,binding,identities,locators['qualification'],facts['controls_digest'],clock())
+    require(current_snapshot(Readers(source,api,d),d,s['pr'],s['run_id'],s['run_attempt']) == s, 'candidate changed before publication')
+    coordinates = dict(configuration_revision=binding['configuration_revision'],operation=binding['fence']['pending'],
+        sequence=binding['fence']['sequence'], issuer_installation_id=identities['apps']['issuer']['installation_id'],
+        evidence_job_id=evidence['job_id'], evidence_digest=digest(evidence['document']), task_digest=task['task_digest'])
+    guard()
+    _validate_publication_observation(controls['document'],binding,s,controls,clock())
+    body = checks.publication_body(d,s,evidence['document'],coordinates,clock())
+    source.post('/repos/'+d['policy']['repository']+'/check-runs',body)
+    guard()
+    return checks.current(source,d,s,coordinates,clock())
+
+
+def _wait_broker_ready(api, registry, binding, clock, guard, sleeper):
+    from merge_receipts import ActionsReceipts
+    op, p = binding['fence']['pending'], binding['deployment']['policy']
+    deadline = min(clock()+120,op['execution_deadline']-60,binding['deployment']['expires']-60)
+    while clock() < deadline:
+        guard()
+        jobs = api.pages('/repos/'+p['authority_repository']+'/actions/runs/'+str(op['run_id'])+'/attempts/'+str(op['attempt'])+'/jobs','jobs')
+        matches = [j for j in jobs if j['name'] == 'broker ('+str(op['pr'])+')']
+        require(len(matches) <= 1, 'ambiguous warm broker')
+        if matches:
+            store = ActionsReceipts(api, registry.binding, matches[0]['id'], clock)
+            store.current_job()
+            artifacts = store._matches('control-ready')
+            require(len(artifacts) <= 1, 'ambiguous broker readiness')
+            if artifacts:
+                location = store._locator('control-ready',artifacts[0])
+                store.authenticate(location)
+                return matches[0]['id'], location
+        sleeper(1)
+    raise Refusal('broker readiness unavailable; fence remains pending')
+
+
+def _finalize(environment, request, node=None, clock=None, api_factory=GitHub, app_factory=None, token_factory=GitHub):
+    import bootstrap
+    from broker_finalize import Finalizer
+    object_fields(request, (), 'terminal recovery request')
+    _producer_environment(environment, 'admin')
+    clock = clock or (lambda:int(time.time()))
+    # This pin is trusted recovery workflow configuration, never dispatch data or
+    # inferred from the current default branch/deployment being recovered.
+    pin = loads(environment.get('AGENTIC_RECOVERY_PIN', ''))
+    api = api_factory(environment.get('GITHUB_TOKEN', ''))
+    Finalizer(None, api, None, pin, environment, clock)._admit()
+    registry = Registry(api, dict(schema_version=2,repository=pin['authority_repository'],
+        repository_id=pin['authority_repository_id'],registry_branch='agentic-registry'))
+    before = registry.binding(check_software=False)
+    d, op = before['deployment'], before['fence']['pending']
+    require(op is not None and op['kind'] == 'merge', 'pending terminal merge operation required')
+    identities = app_proofs.load_identities(d)
+    root = (app_factory or bootstrap.app_api)(d['apps']['admin'], environment.get('AGENTIC_ADMIN_PRIVATE_KEY'))
+    def guard():
+        require(registry.binding(check_software=False) == before, 'terminal recovery binding changed')
+    jobs = api.pages('/repos/'+d['policy']['authority_repository']+'/actions/runs/'+str(op['run_id'])+
+        '/attempts/'+str(op['attempt'])+'/jobs','jobs')
+    brokers = [j for j in jobs if j['name'] == 'broker ('+str(op['pr'])+')']
+    require(len(brokers) == 1 and positive(brokers[0]['id']), 'exact terminal broker required; preserve fence')
+    with _source_token('admin',root,api,d,identities,before['configuration_revision'],clock,token_factory,guard,recovery=True) as source:
+        with _admin_authority(root,api,registry,before,identities,token_factory) as writer:
+            guard()
+            return Finalizer(writer,api,source,pin,environment,clock)._finalize(op['operation_id'],before['fence']['sequence'],brokers[0]['id'])
+
+
 def main():
     # Hold before stdin reads, API construction, root-key loading or SDK import.
-    require(len(sys.argv) == 3 and sys.argv[1] in ('credential', 'prepare-task', 'model-authorization', 'task', 'task-controls'),
+    require(len(sys.argv) == 3 and sys.argv[1] in ('credential', 'prepare-task', 'model-authorization', 'task', 'task-controls') + PRODUCER_ROLES,
             'fixed authority role required')
     role = sys.argv[1]
-    authority_release.authorize('bootstrap' if role == 'credential' else 'protected-run')
+    authority_release.authorize('bootstrap' if role == 'credential' else
+        'broker-merge' if role in PRODUCER_ROLES else 'protected-run')
     raw = sys.stdin.buffer.read(65537)
     require(0 < len(raw) <= 65536, 'bounded credential challenge required')
     request = loads(raw)
-    if role == 'prepare-task':
-        print(json.dumps(_prepare_task(os.environ,request),sort_keys=True,allow_nan=False))
+    if role in ('prepare-task','discover','prepare'):
+        handler = {'prepare-task':_prepare_task,'discover':_discover,'prepare':_prepare}[role]
+        print(json.dumps(handler(os.environ,request),sort_keys=True,allow_nan=False))
+    elif role == 'finalize':
+        _finalize(os.environ,request,sys.argv[2])
+    elif role in PRODUCER_ROLES:
+        _producer(os.environ,request,sys.argv[2],role)
     else:
         handler = {'credential':_credential,'model-authorization':_authorize_task_request,'task':_task,'task-controls':_task_controls}[role]
         handler(os.environ,request,sys.argv[2])

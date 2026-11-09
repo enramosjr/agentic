@@ -47,10 +47,11 @@ def archive(root):
         raw = path.read_bytes()
         require(len(raw) <= 1024 * 1024, 'runtime source exceeds limit')
         inputs[name] = raw
-    workflow = root / '.ai/trusted-ci/authority-v2.yml'
-    require(workflow.is_file() and not workflow.is_symlink() and workflow.resolve().is_relative_to(root),
-            'plain fixed v2 workflow required')
-    inputs['.github/workflows/authority-v2.yml'] = workflow.read_bytes()
+    for name in ('authority-v2.yml', 'authority-v2-recovery.yml'):
+        workflow = root / '.ai/trusted-ci' / name
+        require(workflow.is_file() and not workflow.is_symlink() and workflow.resolve().is_relative_to(root),
+                'plain fixed v2 workflow required')
+        inputs['.github/workflows/' + name] = workflow.read_bytes()
     manifest = {'schema_version': 2, 'kind': 'held-authority-runtime', 'enforcement_active': False,
                 'files': {name: hashlib.sha256(raw).hexdigest() for name, raw in inputs.items()}}
     inputs['runtime-manifest.json'] = (json.dumps(manifest, sort_keys=True) + '\n').encode()

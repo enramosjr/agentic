@@ -106,8 +106,9 @@ class Session:
         # queue time cannot consume a readback window that has not begun.
         self._wait(min(self.clock() + 120, op['execution_deadline'] - 60,
                        self.binding['deployment']['expires'] - 60), warm=True)
+        locators = self.locators() if callable(self.locators) else self.locators
         prepared = broker_evidence.preload(self.registry, self.source, self.authority, self.identities,
-                                           self.job_id, self.locators, self.clock)
+                                           self.job_id, locators, self.clock)
         self._guard()
         request = control_rendezvous.ready(self.binding, self.job_id, secrets.token_hex(16), self.clock())
         self.receipts.append('control-ready', request)
