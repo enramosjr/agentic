@@ -132,9 +132,11 @@ Broker receipts also retain the existing create-only dispatch protection; no
 durable native full-inventory restart coordinator is supplied. Connected local
 fixtures execute the existing verification/publication and fresh-broker graph
 using synthetic active regression configurations and modeled host/OCI boundaries.
-They do not integrate initial-trial handoff/worker admission, prepare native case
-PRs, produce qualification receipts, qualify hosted isolation or activate anything.
-Native trial scoping/orchestration, receipt production and hosted qualification
+They do not integrate initial-trial handoff/worker admission into those controllers,
+produce qualification receipts, qualify hosted isolation or activate anything.
+The separate native candidate preparer described below does not supply their
+completed case inputs. Trial admission into these controllers, full-inventory
+orchestration, receipt production and hosted qualification
 remain unfinished; external real candidate human review remains required.
 
 Administrative preparation reads independent review of the exact candidate head
@@ -390,6 +392,35 @@ qualification; no state flip or caller JSON can replace those missing producers.
 All public operations remain release-held, with no trusted bootstrap release or
 enabled installed qualification command. The full case graph and hosted
 qualification remain unavailable.
+
+The held `trial_candidates.Prepare` native library reuses `Native.observe`'s exact
+CLOSED worker/Git authentication and original-token cleanup, then prepares sixteen
+distinct PR/head candidates in the fixed host-prefix/broker-suffix order. It copies
+only the authenticated exported worker bytes and executable modes, through the
+existing source-only own-App proof/token and shared submission controller. The
+native administrator observes the existing effective controls before each case;
+every mutation retains that observation's original 30-second wall/monotonic budget
+and rechecks the original configuration fence, immutable handoff, disposable pair,
+trial binding and unchanged seed target. Neither original nor trial registry is
+changed, and no review submission or solicitation occurs.
+
+Protected native storage retains the exact handoff/artifact/export binding, ordered
+submission requests and per-case pending intent before writes. Resume authenticates
+completed candidates read-only. A lost PR acknowledgement can recover the exact
+existing PR; an absent branch/PR or unknown intermediate effect cannot authorize a
+repeated source write. Missing/changed CLOSED worker evidence, moved bindings,
+expired controls and substituted identities fail closed. Partial candidates may
+remain on refusal, with their intent held; this is not transactional rollback.
+
+These are candidate reservations with the same worker tree, not completed host or
+broker case inputs: case-specific mutations, evidence, prior-success coordinates,
+external independent human review and trial admission through the real shared
+verification/publication/fresh-broker/final-control/purpose-proof/receipt/recovery
+controllers remain unfinished. Production admission remains ACTIVE-only and
+`qualification_record` remains a strict reader. No trial certificate, fabricated
+qualification receipt or active-state bridge is introduced. Local native-to-worker
+and candidate-submission fixtures do not establish hosted execution or isolation;
+the result explicitly reports no executed cases, qualification or enforcement.
 
 Local broker foundations include a durable operation fence on the independent
 registry branch, stable deployment-blob identity separate from branch CAS, scoped

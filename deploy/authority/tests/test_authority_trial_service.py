@@ -53,7 +53,7 @@ class TrialService(unittest.TestCase):
         for fault in ('cleanup', 'nonce', 'lost-pr'):
             with self.subTest(fault=fault): self.exercise(fault)
 
-    def exercise(self, fault=None, latency=False):
+    def exercise(self, fault=None, latency=False, continuation=None):
         f = self.configured()
         native, registry, origin, clock, env, hint, model, proofs, delivery, jobs, artifacts = f
         api, d, events, receipts = registry.api, registry.read(), [], []
@@ -99,16 +99,23 @@ class TrialService(unittest.TestCase):
                 return super().get(route)
             def pages(self, route, collection=None):
                 if '/rulesets?' in route or '/rules/branches/' in route: return api.pages(route, collection)
+                if '/pulls?' in route:
+                    from urllib.parse import parse_qs, urlsplit
+                    branch = parse_qs(urlsplit(route).query)['head'][0].split(':',1)[1]
+                    return copy.deepcopy([pr for pr in self.prs if pr['head']['ref'] == branch])
                 return super().pages(route, collection)
             def fetch(self, route, method='GET', **kwargs):
                 if method == 'GET' and '/git/blobs/' in route: return self.get(route)
                 return super().fetch(route, method=method, **kwargs)
             def post(self, route, body):
                 outer.assertTrue({'disk-cleaned','box-cleaned','relay-revoked'} <= set(events))
-                value = super().post(route, body)
+                try:
+                    value = super().post(route, body)
+                finally:
+                    if route.endswith('/pulls') and self.prs:
+                        self.prs[-1]['user']['id'] = bot
+                        for side in ('head','base'): self.prs[-1][side]['repo']['id'] = 701
                 if route.endswith('/pulls'):
-                    self.prs[-1]['user']['id'] = bot
-                    for side in ('head','base'): self.prs[-1][side]['repo']['id'] = 701
                     value = copy.deepcopy(self.prs[-1])
                     if fault == 'lost-pr': raise OSError('lost exact PR acknowledgement')
                 return value
@@ -256,6 +263,8 @@ class TrialService(unittest.TestCase):
                     recovered = native_controller.observe('prompt',coding,lambda token:origin.reader)
                     self.assertEqual(recovered['submitted']['head'],receipts[0]['submitted']['head'])
                     self.assertEqual(native_controller.observe('prompt',coding,lambda token:origin.reader),recovered)
+                    if continuation is not None:
+                        continuation(native_controller, coding, origin, app_factory, token_factory, admin, artifacts)
                     coding.prs[0]['head']['sha'] = '9' * 40
                     with self.assertRaises(Refusal): native_controller.observe('prompt',coding,lambda token:origin.reader)
         self.assertIsNone(native.store(Path('/fresh-actions-controls/worker')).read())

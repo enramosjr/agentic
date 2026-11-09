@@ -240,11 +240,18 @@ class Native:
     def observe(self, prompt, source=None, token_factory=None):
         """Read-only exact completion recovery; absence is never proof of failure."""
         authority_release.authorize('protected-run')
+        from trusted_ci_github import GitHub
+        from setup import TrialReadStaging
+        completed = self._completion(prompt, source)
+        record = completed['record']
+        TrialReadStaging(self.provision,self.registry,record['execution']['publication_revision'],None,token_factory or GitHub).revoke()
+        return completed['result']
+
+    def _completion(self, prompt, source=None):
+        """Shared exact CLOSED worker and Git readback; no activation or effects."""
         import provenance
         import submission
-        from trusted_ci_github import GitHub
         from trusted_ci_deployment import timestamp
-        from setup import TrialReadStaging
         c = self.provision
         require(isinstance(c,Provision), 'actual native trial provision required')
         retained = c.store(c.root / 'trial-workflow').read()
@@ -304,8 +311,8 @@ class Native:
         require(read(c.session.registry,retained['value']['revision_bound'],c.clock())[0] == record and
                 self.registry.binding() == record['trial'] and c.store(c.root / 'trial-workflow').read() == retained and
                 c.completed() == record['pair'], 'native authorization changed during completion recovery')
-        TrialReadStaging(c,self.registry,record['execution']['publication_revision'],None,token_factory or GitHub).revoke()
-        return dict(state='trial-complete',locator=location,submitted=copy.deepcopy(submitted),hosted_qualified=False,enforcement_active=False)
+        result = dict(state='trial-complete',locator=location,submitted=copy.deepcopy(submitted),hosted_qualified=False,enforcement_active=False)
+        return dict(result=result, record=record, proof=proof, files=files, retained=retained)
 
     def publish(self, prompt, approve):
         authority_release.authorize('protected-run')
