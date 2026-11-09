@@ -46,6 +46,19 @@ the independently approved deployment before the worker imports code. Candidate
 bytes have their own per-job digest and a separate extraction/mount tree. An
 archive checksum alone does not establish a trusted release origin.
 
+The installed stdlib route for `connect` and `setup` selects only a release pin
+embedded in an independently reviewed client. It authenticates the GitHub
+repository's numeric identity and immutable revision, then verifies the archive
+and exact selected file inventory before extracting into native owner-only
+storage. It creates an isolated optional Python environment and invokes the
+acquired native entry point with fixed command arguments. Candidate deployment
+paths, environment overrides and local `deploy/` fallbacks are refused. This
+build has no designated trusted bootstrap release, and its operational holds
+still run before release retrieval or authentication. A modifying checkout's
+client is not a trusted bootstrap: the frozen client and OS context must already
+be outside coding-agent access. Protected storage does not establish same-user
+coding isolation.
+
 The held `.ai/trusted-ci/authority-v2.yml` has three dispatch modes. The default
 `credentials` mode retains the seven independent setup consumers. The `task`
 mode prepares one request with the reader identity, authorizes its model lease
@@ -107,7 +120,10 @@ never a dispatch input or a pin inferred from today's default branch. The job
 authenticates itself before reading the pending registry and can recover after
 software drift or deployment expiry. It never dispatches a merge or retries an
 uncertain request. Missing/contradictory terminal proof preserves the fence.
-The native setup journey does not yet provision these runtime pins automatically.
+The held native setup coordinator now provisions both runtime pins through its
+exact approved configuration session. Each value is explicit in the consent
+preview and retained before its one possible write. Resume reads back uncertain
+writes without repeating them; existing unowned values and drift require repair.
 
 ## Provider components implemented locally
 
@@ -118,7 +134,13 @@ The native setup journey does not yet provision these runtime pins automatically
   new-resource creation and exact initial software publication in protected local
   storage. Unknown creation cannot be adopted by name; prepared recovery remains
   bound to the original approved release. API-fixture tests cover lost
-  acknowledgements. Full guided setup and credential staging remain unfinished.
+  acknowledgements. The native operator composes initial installation and
+  resumable registration, policy/account selection, scoped configuration fencing,
+  existing cloud provisioning, model consent, runtime pins, dispatch locking,
+  seven credential consumers and additive source protections. It completes the
+  configuration fence only after effective source-control readback, leaving the
+  deployment in `qualification`, with enforcement inactive. Real qualification
+  and an independently released bootstrap remain unavailable.
 - AWS: exact job-scoped STS session policies and presigned S3 capabilities, pinned
   EC2 launch/readback, rejection of unsupported AMI disk mappings, encrypted root
   deletion, lost-launch-response recovery and authenticated owned-volume cleanup.
@@ -188,8 +210,9 @@ explicitly does not establish task admission. The controlled Codex app-server
 helper receives a task capability for a worker-local relay, validates exact
 thread/turn completion and retains `model_execution_qualified: false`. The parent
 supervisor composes cleanup, readiness and separate administrative readback before
-submission. Guided onboarding, initial ChatGPT-plan consent and hosted task
-qualification remain unfinished. Encrypted vault/access leases, signature-verified identity,
+submission. Native onboarding now connects initial ChatGPT-plan consent and
+credential-consumer verification; live consent and hosted task qualification
+remain unqualified. Encrypted vault/access leases, signature-verified identity,
 separate Git auth-state CAS and dedicated-job refresh management have local
 fixture evidence. Unknown refresh outcomes remain pending rather than retrying a
 grant. No login, credential export or model call occurred.
@@ -212,9 +235,9 @@ Local contracts, clean installed-client checks, extracted-runtime checks and
 offline SDK tests do not prove live API semantics, IAM/RBAC, hosted containers
 or real cleanup.
 
-Remaining integration includes resumable registration recovery; connecting the
-independent policy/release registry, separated Actions jobs and all adapter
-operations into the complete onboarding/lifecycle journey; protected-harness
+Remaining integration includes publishing an independently approved bootstrap
+release; complete status/drift/repair/upgrade/destroy and automation migration;
+cloud producer promotion; protected-harness
 admission and submission qualification; hosted producer/runtime qualification,
 host-transition workflow integration; automatic real qualification fixtures; and final acceptance
 convergence/review. The new repository software installer does not itself complete

@@ -36,6 +36,15 @@ class BundleContracts(unittest.TestCase):
             self.assertEqual(refused.returncode, 1)
             self.assertEqual(json.loads(refused.stderr)['state'], 'blocked')
             self.assertFalse(json.loads(refused.stderr)['enforcement_active'])
+            native = executable.with_name('operator_setup.py')
+            native_help = subprocess.run([sys.executable, str(native), '--help'], cwd=folder,
+                env=env, capture_output=True, text=True, timeout=10)
+            self.assertEqual(native_help.returncode, 0, native_help.stderr)
+            for command in ('connect', 'setup'):
+                held = subprocess.run([sys.executable, str(native), command], cwd=folder,
+                    env=env, capture_output=True, text=True, timeout=10)
+                self.assertEqual(held.returncode, 1, held.stderr)
+                self.assertEqual(json.loads(held.stderr)['state'], 'blocked')
 
     def test_frozen_bundle_is_deterministic_and_records_each_source_digest(self):
         with tempfile.TemporaryDirectory() as folder:

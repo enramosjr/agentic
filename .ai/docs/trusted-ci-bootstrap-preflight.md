@@ -17,8 +17,10 @@ The existing unrestricted coding session remains unverified.
 The bundle is a candidate, not a signed release. The original
 `authority-bootstrap-preflight.zip` predates the operational holds and is obsolete;
 do not execute it. Newly exported held bundles include `authority_release.py`.
-A future published installer must select and verify the approved release
-automatically; this maintainer preflight does not establish that installed path.
+The installed resolver now implements fixed-origin, immutable-revision and
+archive/file verification before loading the optional native coordinator. No
+bootstrap release is designated by this unfinished build; these exported
+candidates do not become trusted merely because their checksums match.
 
 ## Resources and consent
 
@@ -37,10 +39,22 @@ overbroad installation. Select only the named repository for each purpose.
 No target branch rule or AWS/Azure resource is changed, and no enforcement is
 activated. GitHub storage usage belongs to the selected account and its plan.
 
-This early stage does not yet implement interrupted-run recovery, upgrade or
-teardown. An interrupted operation must remain unverified; keep its resources for
-trusted recovery rather than rerunning against or adopting an existing repository.
-These missing lifecycle operations block completion of the overall feature.
+The legacy `bootstrap_stage.py` preflight does not implement interrupted-run
+recovery, upgrade or teardown. The newer held `operator_setup.py` composes the
+protected initial-installation and registration journals instead. Unknown
+resource creation or registration exchange is never adopted or repeated.
+Prepared software and captured registrations resume through authenticated
+readback. Complete upgrade/repair/teardown remain separate unfinished work.
+
+The native `connect` and `setup` commands retain account/repository choices and
+exact consent outside the coding checkout. Existing controllers perform model
+consent, provider provisioning, separated secret staging and seven independent
+credential-consumption proofs. An uncertain secret write is never overwritten:
+the remaining intents can proceed, but the consumer must prove the retained exact
+value. Separate finalization/recovery pins are included in configuration consent.
+Source protections are additive and read back before configuration completes.
+The resulting state is `qualification`, never active enforcement. These paths
+have local fixture coverage; no browser/provider/hosted qualification is claimed.
 
 ## Future trusted preflight
 

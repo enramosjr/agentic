@@ -208,6 +208,21 @@ class SetupCredentialContracts(unittest.TestCase):
         with self.assertRaises(Refusal): self.controller._stage()
         self.assertEqual(len(self.writes), 1)
 
+    def test_native_consumer_staging_continues_other_intents_without_replaying_unknown_write(self):
+        from unittest.mock import patch
+        self.gh.lose_ack = True
+        with self.assertRaises(Refusal): self.controller._stage()
+        first = self.writes[0]
+        self.gh.lose_ack = False
+        with patch.object(authority_release, 'authorize'):
+            result = self.controller.stage_for_consumers()
+        self.assertEqual(len(self.writes), len(NAMES))
+        self.assertEqual(self.writes.count(first), 1)
+        self.assertEqual(self.journal.read()['value']['entries'][first]['phase'], 'unknown')
+        self.assertEqual(result['verified'], [])
+        self.assertEqual(result['state'], 'awaiting-consumer-verification')
+        self.assertFalse(result['enforcement_active'])
+
     def test_unowned_secret_cli_identity_and_scope_changes_refuse_without_writes(self):
         self.reader_names.add(NAMES[0])
         with self.assertRaises(Refusal): self.controller._stage()

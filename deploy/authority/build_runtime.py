@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / '.ai/scripts'))
 from trusted_ci_policy import Refusal, require
 
 FILES = (
-    '.ai/scripts/authority_release.py', '.ai/scripts/authority_jobs.py',
+    '.ai/scripts/authority_release.py', '.ai/scripts/authority_jobs.py', '.ai/scripts/authority_private.py',
     '.ai/scripts/authority_protocol.py', '.ai/scripts/authority_github.py',
     '.ai/scripts/trusted_ci_policy.py', '.ai/scripts/trusted_ci_github.py',
     '.ai/scripts/trusted_ci_deployment.py', '.ai/scripts/trusted_ci_qualification.py',

@@ -118,6 +118,14 @@ class Reconciler:
             else:
                 identity = operation['id']
             d = self.save({operation['kind'] + '_rule': str(identity)})
+        controls_digest = self.readback()
+        d = self.save({}, state='qualification')
+        return {'state': 'qualification', 'enforcement_active': False,
+                'deployment_digest': digest(d), 'controls_digest': controls_digest}
+
+    def readback(self):
+        d = validate_deployment(self.journal.read())
+        root = '/repos/' + d['policy']['repository']
         effective = self.api.pages(root + '/rules/branches/' + d['policy']['target'])
         ids = {r['ruleset_id'] for r in effective}
         owned = []
@@ -132,6 +140,11 @@ class Reconciler:
             owned.append(item)
         require(len(owned) == 2 and {r['id'] for r in owned} <= ids, 'effective owned controls unavailable')
         check_rules(d, owned)
-        d = self.save({}, state='qualification')
-        return {'state': 'qualification', 'enforcement_active': False,
-                'deployment_digest': digest(d), 'controls_digest': digest(owned)}
+        for rule in owned:
+            def semantics(item):
+                return {'type': item['type'], 'parameters': item.get('parameters', {})}
+            observed = [semantics(item) for item in effective if item['ruleset_id'] == rule['id']]
+            expected = [semantics(item) for item in rule['rules']]
+            require(sorted(observed, key=digest) == sorted(expected, key=digest),
+                    'effective owned rule semantics differ from the approved gate')
+        return digest(owned)

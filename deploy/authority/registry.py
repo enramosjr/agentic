@@ -203,6 +203,32 @@ class Registry:
         operation_fence.validate(fence)
         return self._replace(before, {OPERATION: fence}, terminal_only=True)
 
+    def authenticate_setup_progress(self, before, documents):
+        """Authenticate one retained native CAS intent, never arbitrary latest state."""
+        require(isinstance(documents, dict) and documents and set(documents) <= {DOCUMENT, OPERATION},
+                'exact retained native registry documents required')
+        old, revision = self.blob(before['branch_head'], DOCUMENT)
+        require(revision == before['configuration_revision'] and old == before['deployment'] and
+                digest(old) == before['deployment_digest'] and
+                self.blob(before['branch_head'], OPERATION)[0] == before['fence'],
+                'retained native registry parent differs')
+        current = self.binding(check_software=False)
+        require(current['deployment'] == documents.get(DOCUMENT, before['deployment']) and
+                current['fence'] == documents.get(OPERATION, before['fence']) and
+                current['software_revision'] == before['software_revision'], 'native registry progress differs')
+        commit = self.api.get(self.root + '/git/commits/' + current['branch_head'])
+        require(commit.get('sha') == current['branch_head'] and
+                [p['sha'] for p in commit['parents']] == [before['branch_head']] and
+                commit['message'] == 'AGENTIC conditional registry ' + digest(documents),
+                'native registry progress is not the retained conditional commit')
+        _, old_entries = self.tree(before['branch_head'])
+        _, new_entries = self.tree(current['branch_head'])
+        def unrelated(entries):
+            return {name: entry for name, entry in entries.items() if name not in documents and
+                    not any(path.startswith(name + '/') for path in documents)}
+        require(unrelated(old_entries) == unrelated(new_entries), 'unrelated native registry data changed')
+        return current
+
     def authenticate_transition_write(self, before_head, configuration_revision, old_digest, value,
                                       before_fence, expected_fence):
         """Read-only lost-ack proof of our exact single registry commit, not a retry."""

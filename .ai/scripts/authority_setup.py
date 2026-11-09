@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Installed stdlib authority client. This build permits only local operations."""
+"""Installed stdlib authority client; native operations remain release-held."""
 from __future__ import annotations
 
 import argparse
@@ -55,7 +55,10 @@ def main(argv=None):
     try:
         if args.command in held:
             release.authorize(held[args.command])
-            raise Refusal('remote authority coordinator is not implemented in this build')
+            from authority_remote import route
+            require(args.deployment is None and args.adapter is None,
+                    'native setup selects its inputs outside the coding checkout')
+            return route(args.command, [])
         else:
             release.authorize('verify-local' if args.command == 'verify-local' else 'inspect-local')
         d = read_document(args.deployment) if args.deployment else None

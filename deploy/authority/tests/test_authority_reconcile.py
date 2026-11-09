@@ -52,6 +52,22 @@ class Host:
 
 
 class ReconcileContracts(unittest.TestCase):
+    def test_readback_requires_effective_rule_semantics_not_only_owned_ids(self):
+        with tempfile.TemporaryDirectory() as folder:
+            journal = Journal(Path(folder) / 'operation.json')
+            journal.write(None, deployment())
+            host = Host()
+            engine = reconcile.Reconciler(host, journal, now=lambda: 1000, session=backend_test_support.LocalSession(journal))
+            engine.apply(digest(engine.preview()))
+            pages = host.pages
+            def incomplete(path, collection=None):
+                rows = pages(path, collection)
+                if '/rules/branches/' in path:
+                    return [dict(ruleset_id=r['ruleset_id'], type='deletion') for r in rows]
+                return rows
+            host.pages = incomplete
+            with self.assertRaises(Refusal): engine.readback()
+
     def test_interruption_recovers_without_duplicate_rules_or_weakening_foreign_controls(self):
         with tempfile.TemporaryDirectory() as folder:
             journal = Journal(Path(folder) / 'operation.json')

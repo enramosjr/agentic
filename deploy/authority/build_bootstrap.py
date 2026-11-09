@@ -11,16 +11,16 @@ import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / '.ai' / 'scripts'))
 from trusted_ci_policy import Refusal, require
+import build_runtime
 
-FILES = (
-    '.ai/scripts/authority_release.py',
-    '.ai/scripts/trusted_ci_policy.py',
-    '.ai/scripts/trusted_ci_github.py',
-    'deploy/authority/bootstrap.py',
+FILES = tuple(dict.fromkeys(build_runtime.FILES + (
+    'deploy/authority/operator_setup.py',
+    'deploy/authority/build_runtime.py',
     'deploy/authority/bootstrap_stage.py',
-    'deploy/authority/requirements-auth.txt',
+    '.ai/trusted-ci/authority-v2.yml',
+    '.ai/trusted-ci/authority-v2-recovery.yml',
     '.ai/docs/trusted-ci-bootstrap-preflight.md',
-)
+)))
 
 
 def build(root, output):

@@ -1,6 +1,10 @@
 """Operational holds for this unqualified build, not remote authorization proof."""
 from trusted_ci_policy import Refusal
 
+# Set only by an independently reviewed release, never environment/CLI input.
+# This unfinished source candidate is deliberately not a bootstrap release.
+BOOTSTRAP_RELEASE = None
+
 LOCAL_OPERATIONS = frozenset(('render', 'inspect-local', 'verify-local', 'export'))
 HELD_OPERATIONS = frozenset(('bootstrap', 'provision', 'hosted-execute', 'qualify-live',
                              'publish', 'activate', 'protected-run', 'broker-merge'))

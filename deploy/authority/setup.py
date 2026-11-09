@@ -196,6 +196,108 @@ CREDENTIAL_NAMES = tuple('AGENTIC_' + p.upper() + '_PRIVATE_KEY' for p in PURPOS
     'AGENTIC_MODEL_VAULT_KEY', 'AGENTIC_MODEL_DELIVERY_KEY')
 
 
+class RuntimePins:
+    """Initial, exactly approved finalization/recovery variables, never activation.
+
+    An uncertain POST is observed on resume, never repeated. Existing variables
+    cannot be adopted, even if their bytes happen to match the proposed values.
+    """
+    NAMES = {'AGENTIC_FINALIZE_PIN': '.github/workflows/authority-v2.yml',
+             'AGENTIC_RECOVERY_PIN': '.github/workflows/authority-v2-recovery.yml'}
+
+    def __init__(self, session, gh, journal):
+        self.session, self.gh, self.journal = session, gh, journal
+        self.document = None
+
+    def run(self):
+        authority_release.authorize('bootstrap')
+        return self._run()
+
+    def _guard(self):
+        from configuration import SetupConfigurationSession
+        require(isinstance(self.session, SetupConfigurationSession), 'native runtime-pin setup session required')
+        repository = self.session.preview['authority_repository']
+        current = None
+        for name in self.NAMES:
+            observed = self.session.require_effect('credentials', repository + ':variable:' + name)
+            require(current is None or current == observed, 'runtime-pin configuration changed')
+            current = observed
+        require(current['deployment']['state'] == 'setup', 'initial runtime-pin setup required')
+        actor = self.gh.api('/user')
+        require(actor.get('type') == 'User' and actor.get('id') == self.session.owner['setup']['operator_id'],
+                'runtime-pin writer differs from approved native operator')
+        require(self.session._check() == current and self.journal.read() == self.document,
+                'runtime-pin authorization or private journal changed')
+        return current
+
+    def _pins(self, current):
+        pins = self.session.preview['changes']['protections'].get('runtime_pins')
+        object_fields(pins, tuple(self.NAMES), 'approved runtime pins')
+        policy = current['deployment']['policy']
+        for name, value in pins.items():
+            object_fields(value, ('authority_repository', 'authority_repository_id', 'workflow', 'workflow_sha'),
+                          'approved immutable runtime pin')
+            require(value['authority_repository'] == policy['authority_repository'] and
+                    positive(value['authority_repository_id']) and
+                    value['authority_repository_id'] == policy['authority_repository_id'] and
+                    value['workflow'] == self.NAMES[name] and sha(value['workflow_sha']),
+                    'runtime pin differs from approved authority or workflow')
+        require(pins['AGENTIC_FINALIZE_PIN']['workflow_sha'] == policy['workflow_sha'],
+                'finalization pin must match the approved main runtime')
+        return copy.deepcopy(pins)
+
+    def _inventory(self):
+        self._guard()
+        repository = self.session.preview['authority_repository']
+        rows = self.session.operator_api.pages('/repos/' + repository + '/actions/variables', 'variables')
+        require(isinstance(rows, list) and len(rows) <= 10000 and all(isinstance(v, dict) and
+                isinstance(v.get('name'), str) and isinstance(v.get('value'), str) for v in rows),
+                'bounded authenticated runtime variable inventory required')
+        values = {v['name'].upper(): v['value'] for v in rows}
+        require(len(values) == len(rows), 'ambiguous runtime variable inventory')
+        self._guard()
+        return values
+
+    def _save(self, state):
+        self._guard()
+        self.document = self.journal.write(self.document, state)
+
+    def _run(self):
+        import json
+        self.document = self.journal.read()
+        current = self._guard()
+        pins = self._pins(current)
+        binding = _credential_binding(current)
+        values = {name: json.dumps(value, sort_keys=True, separators=(',', ':')) for name, value in pins.items()}
+        if self.document is None:
+            require(not set(self._inventory()) & set(self.NAMES), 'existing runtime pin requires explicit owned repair')
+            self._save(dict(schema_version=1, kind='runtime-pin-setup', binding=binding, pins=pins,
+                            phase='writing', started=[]))
+        state = copy.deepcopy(self.document['value'])
+        object_fields(state, ('schema_version', 'kind', 'binding', 'pins', 'phase', 'started'), 'private runtime-pin setup')
+        require(type(state['schema_version']) is int and state['schema_version'] == 1 and
+                state['kind'] == 'runtime-pin-setup' and state['binding'] == binding and state['pins'] == pins and
+                state['phase'] in ('writing', 'verified') and isinstance(state['started'], list) and
+                len(state['started']) == len(set(state['started'])) and set(state['started']) <= set(self.NAMES),
+                'retained runtime-pin approval differs')
+        for name, value in values.items():
+            inventory = self._inventory()
+            if name not in state['started']:
+                require(name not in inventory and state['phase'] == 'writing', 'unowned runtime variable appeared')
+                state['started'].append(name)
+                self._save(state)  # Durable before the one possible POST.
+                self._guard()
+                self.gh.api('/repos/' + pins[name]['authority_repository'] + '/actions/variables', 'POST',
+                            dict(name=name, value=value))
+                inventory = self._inventory()
+            require(inventory.get(name) == value, 'runtime-pin write unknown or drifted; no automatic retry')
+        require(all(self._inventory().get(n) == v for n, v in values.items()), 'runtime-pin final readback differs')
+        if state['phase'] != 'verified':
+            state['phase'] = 'verified'
+            self._save(state)
+        return dict(state='runtime-pins-configured', pins=pins, enforcement_active=False)
+
+
 class CredentialStaging:
     """Retain exact values before writes; acknowledgements never prove consumption.
 
@@ -328,7 +430,11 @@ class CredentialStaging:
                     'retained credential value or phase differs')
         return current, state
 
-    def _stage(self):
+    def stage_for_consumers(self):
+        authority_release.authorize('bootstrap')
+        return self._stage(allow_unknown=True)
+
+    def _stage(self, allow_unknown=False):
         current, state = self._prepare()
         policy = current['deployment']['policy']
         for name in CREDENTIAL_NAMES:
@@ -336,6 +442,9 @@ class CredentialStaging:
             if entry['phase'] in ('acknowledged', 'verified'): continue
             self._guard(name)
             present = name in self._inventory()
+            if allow_unknown and entry['phase'] in ('write-started', 'unknown'):
+                require(present, 'unknown credential write is absent; no automatic retry')
+                continue  # A consumer must still prove the retained exact value.
             require(not present, 'present unverified secret requires authenticated consumer evidence; do not overwrite')
             entry.update(phase='write-started', started=self.clock())
             self._save(state)  # Exact value and intent are durable before native writer invocation.

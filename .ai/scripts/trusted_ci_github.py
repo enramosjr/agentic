@@ -68,6 +68,8 @@ class GitHub:
                 with self.opener.open(request.Request(url, body, headers, method=method), timeout=30) as response:
                     raw = response.read(limit + 1)
                     require(len(raw) <= limit, 'API response exceeds limit')
+                    if not binary and not raw and response.status == 204:
+                        return None
                     return raw if binary else loads(raw)
             except error.HTTPError as exc:
                 if binary and method == 'GET' and exc.code in (301, 302, 303, 307):
