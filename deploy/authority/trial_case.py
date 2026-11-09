@@ -16,14 +16,19 @@ from trusted_ci_policy import digest, object_fields, require, sha
 
 
 def baseline(original, registry, record, history, clock):
-    """Compose only the bounded direct-push terminal prerequisite, never latest state."""
-    require(isinstance(history,list) and len(history)<=1, 'bounded native progression history required')
+    """Compose the two exact native host predecessors, never latest state."""
+    require(isinstance(history,list) and len(history)<=2, 'bounded native progression history required')
     before=copy.deepcopy(record['trial'])
-    if not history: return before
-    entry=history[0]
+    for index in range(len(history)):
+        before=_predecessor(original,registry,record,history,index,before,clock)
+    return before
+
+
+def _predecessor(original,registry,record,history,index,before,clock):
+    entry=history[index]
     object_fields(entry,('revision','terminal'),'prior native case')
     prior,loaded=read(original,entry['revision'],clock)
-    require(loaded==record and prior['history']==[] and prior['candidate']['name']=='direct-push' and
+    require(loaded==record and prior['history']==history[:index] and prior['candidate']['name']==('direct-push','coding-update')[index] and
             prior['execution'] is not None and prior['launch'] is not None, 'exact first executed host case required')
     from types import SimpleNamespace
     Admission._retained(SimpleNamespace(binding=before,record=record,value=prior,candidate=prior['candidate']))
@@ -48,9 +53,10 @@ def baseline(original, registry, record, history, clock):
 
 def case_baseline(original,registry,record,value,clock):
     history=value['history']
-    require((value['candidate']['name']=='coding-update') == bool(history), 'case progression identity differs')
-    if history:
-        prior,_=read(original,history[0]['revision'],clock)
+    require(isinstance(history,list) and len(history)=={'coding-update':1,'missing-approval':2}.get(value['candidate']['name'],0),
+            'case progression identity differs')
+    for entry in history:
+        prior,_=read(original,entry['revision'],clock)
         require(value['worker']==prior['worker'] and all(value['candidate']['submitted'][k]!=prior['candidate']['submitted'][k]
                 for k in ('pr','head','task_id')), 'distinct reserved case from the same worker required')
     return baseline(original,registry,record,history,clock)
@@ -58,15 +64,24 @@ def case_baseline(original,registry,record,value,clock):
 
 def fresh_capability(original,value,record,token,clock):
     require(digest(token)!=record['execution']['credential']['token_digest'], 'original worker capability is revoked')
-    if value['history']:
-        prior,_=read(original,value['history'][0]['revision'],clock)
+    for entry in value['history']:
+        prior,_=read(original,entry['revision'],clock)
         require(digest(token)!=prior['execution']['credential']['token_digest'], 'prior case capability cannot authorize progression')
 
 
 def history_guard(original,record,history):
-    if history:
-        prior=dict(kind='trial-case-handoff',task_id=record['task_id'],execution=True)
-        require(original.ref(trial_reference(prior))==history[0]['revision'], 'authenticated prior case reference moved')
+    require(isinstance(history,list) and len(history)<=2,'bounded native progression history required')
+    for index,entry in enumerate(history):
+        # The immutable execution document was authenticated at admission. Keep
+        # all its exact publication pointers fixed across later blocking reads.
+        prior=original.blob(entry['revision'],TRIAL)[0]
+        require(prior['task_id']==record['task_id'] and prior['candidate']['name']==('direct-push','coding-update')[index] and
+                prior['history']==history[:index] and prior['execution'] is not None and prior['launch'] is not None,
+                'authenticated prior case identity changed')
+        require(original.ref(trial_reference(prior))==entry['revision'] and
+                original.ref(trial_reference(dict(prior,execution=None)))==prior['execution']['publication_revision'] and
+                original.ref(trial_reference(dict(prior,kind='trial-case-ready',execution=None)))==prior['launch']['revision'],
+                'authenticated prior case reference moved')
 
 
 def read(original, revision, clock, _initial=False):

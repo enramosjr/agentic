@@ -104,18 +104,21 @@ class Staging(TrialReadStaging):
             require(journal.read()==document and c.session.registry.ref(trial_reference(value))==self.revision,
                     'READY staging ownership changed')
             if previous_document is not None:
-                require(c.store(c.root/Staging.JOURNAL).read()==previous_document, 'owned revoked predecessor changed')
-        previous=Staging.JOURNAL if a.value['history'] else None
+                require(c.store(c.root/previous).read()==previous_document, 'owned revoked predecessor changed')
+        previous=None
+        if a.value['history']:
+            predecessor='direct-push' if a.candidate['name']=='coding-update' else 'coding-update'
+            previous=case_journal(Staging.JOURNAL,dict(name=predecessor))
         if previous is not None:
             from trial_case import read as read_case
-            prior,_=read_case(c.session.registry,a.value['history'][0]['revision'],c.clock)
+            prior,_=read_case(c.session.registry,a.value['history'][-1]['revision'],c.clock)
             staged=c.store(c.root/previous).read()
             require(staged is not None and staged['value']['credential'] is not None and
                     staged['value']['revision']==prior['launch']['revision'] and
                     digest(staged['value']['credential']['token'])==prior['execution']['credential']['token_digest'],
                     'owned predecessor capability differs')
             self.native.guard()
-            revoke(c,self.token_factory)
+            revoke(c,self.token_factory,name=predecessor)
             self.native.guard()
             previous_document=c.store(c.root/previous).read()
             require(previous_document['value']['phase']=='revoked', 'owned predecessor cleanup remains pending')

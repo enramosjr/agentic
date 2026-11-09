@@ -16,7 +16,7 @@ from trusted_ci_policy import digest, object_fields, require
 
 
 def case_journal(base, candidate):
-    return base + ('-coding-update' if candidate['name']=='coding-update' else '')
+    return base + ('-'+candidate['name'] if candidate['name'] in ('coding-update','missing-approval') else '')
 
 
 def authenticated(value, binding=None):
@@ -57,7 +57,7 @@ class Native:
         native=self.candidates.native
         retained=native.provision.store(native.provision.root/case_journal('trial-controller',dict(name=name))).read()
         require(retained is not None and retained['value']['prompt_digest']==digest(prompt) and retained['value']['name']==name and
-                name in ('direct-push','coding-update'),
+                name in ('direct-push','coding-update','missing-approval'),
                 'exact native host case terminal observation required')
         admission=Admission(native,source or native.provision.api,terminal_locator=locator,name=name)
         completed=native._worker_completion(admission.record,prompt,admission.source)
@@ -83,20 +83,26 @@ class Native:
         document = journal.read()
         if document is None:
             history=[]
-            if name=='coding-update':
-                previous=c.store(c.root/'trial-controller').read()
+            if name in ('coding-update','missing-approval'):
+                predecessor='direct-push' if name=='coding-update' else 'coding-update'
+                previous=c.store(c.root/case_journal('trial-controller',dict(name=predecessor))).read()
                 require(previous is not None and previous['value']['phase']=='terminal' and
-                        previous['value']['name']=='direct-push' and previous['value']['prompt_digest']==digest(prompt) and
+                        previous['value']['name']==predecessor and previous['value']['prompt_digest']==digest(prompt) and
                         'locator' in previous['value']['terminal'], 'owned independently observed first terminal required')
                 prior=previous['value']
-                publication=c.store(c.root/'trial-case-publication').read()
+                publication=c.store(c.root/case_journal('trial-case-publication',dict(name=predecessor))).read()
                 require(publication is not None and publication['value']['phase']=='bound' and
                         publication['value']['initial']['request']==prior['request'] and
                         publication['value']['initial']['certificate']==prior['certificate'], 'owned first execution publication required')
-                history=[dict(revision=publication['value']['revision_bound'],terminal=prior['terminal']['locator'])]
+                history=copy.deepcopy(prior['history'])+[dict(revision=publication['value']['revision_bound'],terminal=prior['terminal']['locator'])]
                 from trial_case import baseline
                 settled=baseline(c.session.registry,native.registry,prior['record'],history,c.clock)
                 require(settled==prior['terminal']['binding'], 'owned first native completion differs')
+                if predecessor=='coding-update':
+                    first=c.store(c.root/'trial-controller').read()
+                    require(first==prior['previous'] and first['value']['phase']=='terminal', 'owned first native completion changed')
+                    require(baseline(c.session.registry,native.registry,prior['record'],history[:1],c.clock)==first['value']['terminal']['binding'],
+                            'owned first native terminal differs')
                 native.registry.unchanged(settled)
                 candidates=c.store(c.root/'trial-candidates').read()
                 require(candidates==prior['candidates'] and c.store(c.root/'trial-workflow').read()==prior['workflow'] and
@@ -156,7 +162,7 @@ class Admission:
         self.baseline=case_baseline(c.session.registry,self.registry,self.record,self.value,self.clock)
         self.binding = copy.deepcopy(self.baseline)
         if terminal_locator is not None:
-            require(not recover_terminal and self.value['phase']=='bound' and self.candidate['name'] in ('direct-push','coding-update'),
+            require(not recover_terminal and self.value['phase']=='bound' and self.candidate['name'] in ('direct-push','coding-update','missing-approval'),
                     'only an owned bound host case can observe a terminal producer')
             self._retained()
             from provenance import authenticated_document
@@ -261,10 +267,14 @@ class Admission:
         require(self.record == self.value['record'] and self.candidate == self.value['candidate'] and
                 self.request == self.value['request'], 'native case object changed')
         if self.value['history']:
-            require(c.store(c.root/'trial-controller').read()==self.value['previous'] and
+            predecessor='direct-push' if self.candidate['name']=='coding-update' else 'coding-update'
+            require(c.store(c.root/case_journal('trial-controller',dict(name=predecessor))).read()==self.value['previous'] and
                     self.value['previous']['value']['phase']=='terminal' and
                     self.value['previous']['value']['terminal']['binding']==self.baseline,
                     'owned prior native completion changed')
+            if predecessor=='coding-update':
+                require(c.store(c.root/'trial-controller').read()==self.value['previous']['value']['previous'],
+                        'owned first native completion changed')
         launch=c.store(c.root/case_journal('trial-case-launch',self.candidate)).read()
         if launch is not None and self.value['phase'] in ('bound','closing'):
             from trial_case import CaseReadStaging

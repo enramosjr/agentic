@@ -221,6 +221,10 @@ class HostCases:
         expected = 'protected_update' if direct else 'required_review' if name == 'missing-approval' else 'required_check'
         def send(scoped):
             before_send(copy.deepcopy(request))
+            if name == 'missing-approval':
+                # Minting and durable intent may block. Approval must still be
+                # absent, with current success/obligations, at the host attempt.
+                self._prerequisites(case)
             require(snapshot() == s and self.source.get(root + '/git/ref/heads/' +
                     quote(p['target'], safe=''))['object']['sha'] == before, 'host case moved during credential admission')
             self._guard()

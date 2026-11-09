@@ -97,7 +97,7 @@ digest. A generic error, unavailable credential, skipped obligation, unrelated
 required check or moved ref cannot pass. The instance refuses another attempt
 after starting, including an uncertain response. This is not durable recovery
 across processes: full-prefix native orchestration and retained dispatch intents
-remain unfinished. The separate bounded native direct-push/coding-update
+remain unfinished. The separate bounded native direct-push/coding-update/missing-approval
 composition below owns durable case intents. Public invocation is held before network access. Local fixtures
 exercise verification, cleanup, closed artifacts and publication against existing
 synthetic active regression configurations; they do not establish initial trial
@@ -513,15 +513,30 @@ leaves retained intent pending without redispatch.
 
 The workflow shares the existing verification, publication, concurrent broker /
 controls / five final proofs and independently pinned automatic finalizer jobs.
-The native host-negatives, `direct-push` and the distinct reserved `coding-update`, follow successful
+The native host-negatives, `direct-push`, the distinct reserved `coding-update`
+and then `missing-approval`, follow successful
 publication with a separate `trial host denial` job. Only that job receives the
-coding App key. It uses the same `HostCases` probe as the complete ordered prefix,
+selected App key (coding for the first two, merger for `missing-approval`).
+The typed scheduling case name must match authenticated case data before App
+construction or token minting; scheduling input alone grants no credential authority.
+It uses the same `HostCases` probe as the complete ordered prefix,
 with actual closed verifier evidence, the exact issuer check, effective obligations
 and externally observed independent human review. No human token is needed for
 these coding-identity cases. A create-only intent precedes the scoped PATCH of the
 protected target to the exact synthetic merge SHA (`force=false`). Unknown effects,
 changed target/candidate or any denial other than `protected_update` leave the
 fence pending and cannot replay the request.
+
+The missing-approval case still requires independent human approval during normal
+preparation and publication. Its later host probe instead requires current approval
+to be absent, together with CLOSED successful verifier evidence, the exact current
+issuer check and all other effective check obligations. Local connected fixtures
+model an external withdrawal after publication; the coordinator never creates,
+submits, dismisses or withdraws real reviews. The shared probe rereads these
+prerequisites after retaining intent, before sending the scoped merger-App
+`PUT /pulls/{pr}/merge` with the exact candidate head and `merge_method=merge`.
+Only HTTP 403/405/422 with `required_review`, no denied obligation, and unchanged
+candidate/target establishes this negative. It never enters broker merge dispatch.
 
 The closed successful host job retains its exact request, identity, source,
 candidate, certificate and denial observation. The broker authenticates that
@@ -531,7 +546,7 @@ controls/final-proof rendezvous. The existing independently pinned finalizer
 reauthenticates the closed host outcome and broker receipt before recording a
 `not-submitted` terminal fence. Production entrypoints reject this receipt without
 authenticated trial admission. The complete eleven-case `HostCases.run` contract
-remains unchanged. No other native host-negative is coordinated by this slice.
+remains unchanged. This three-case progression is not that complete ordered prefix.
 The automatic finalizer emits a separate `trial-case-terminal` artifact. After
 that same-run job closes successfully, the held native
 `trial_controller.Native.observe_terminal(prompt,name,locator)` authenticates its
@@ -558,16 +573,20 @@ The second handoff retains its predecessor's exact execution revision and
 terminal locator. Fresh native and producer contexts authenticate both conditional
 transitions, from the original settled baseline to the first pending fence and
 then its terminal state, before admitting the second case. Current state cannot
-replace that original baseline. Both terminal entries remain in fence history.
+replace that original baseline. The third distinct reserved `missing-approval`
+candidate requires both exact predecessor histories and their owned native CLOSED
+completions. Both pending/terminal transitions are authenticated from the original
+baseline, with distinct journals and immutable READY/pending/execution refs for
+all three cases. All three terminal entries remain in fence history.
 
-Before the second queue operation, the same credential engine authenticates and
-revokes the owned first case capability, then mints and stages a fresh capability
+Before each subsequent queue operation, the same credential engine authenticates
+and revokes the exact owned predecessor capability, then mints and stages a fresh capability
 in its separate protected journal. Both READY and pending-case consumers must
 close for that exact token/candidate/run/job/interval. Neither the revoked worker
-token nor a prior case token can authorize the second case. Original ownership,
+token nor either prior case token can authorize the third case. Original ownership,
 expiry and total deadline still bound all effects; progression never renews them.
-`trial_launch.revoke(provision, token_factory, name='coding-update')` reconstructs
-exact second-token cleanup after expiry or restart. This two-case progression is
+`trial_launch.revoke(provision, token_factory, name='missing-approval')` reconstructs
+exact third-token cleanup after expiry or restart. This three-case progression is
 a bounded prerequisite, not the complete ordered host prefix or qualification.
 The launcher passes only the fresh read capability and each role's existing
 purpose credentials; READY/preparation/consumer jobs receive no App root or model

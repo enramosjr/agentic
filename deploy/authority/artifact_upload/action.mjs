@@ -46,8 +46,14 @@ export function launchParameters(environment, platform = process.platform) {
     role === 'trial-worker' ? ['AGENTIC_CODING_PRIVATE_KEY','AGENTIC_MODEL_DELIVERY_KEY'] :
     role === 'trial-controls' ? ['AGENTIC_ADMIN_PRIVATE_KEY'] :
     trialProof ? [`AGENTIC_${trialProof.toUpperCase()}_PRIVATE_KEY`] : [];
+  // Scheduling data selects which single key survives this launcher. Python
+  // authenticates the exact case before constructing that App or minting tokens.
+  const hostCase = caseProducer && caseRole === 'host-denial' ? JSON.parse(challenge).host_case : null;
+  if(caseProducer && caseRole === 'host-denial' && !['direct-push','coding-update','missing-approval'].includes(hostCase)) {
+    throw new Error('exact host case scheduling identity required');
+  }
   const caseKeys = caseProof ? [caseProof.toUpperCase()] : caseRole === 'broker' ? ['MERGE','READER'] :
-    ['publication-controls','controls','finalize'].includes(caseRole) ? ['ADMIN'] : caseRole === 'host-denial' ? ['CODING'] : caseRole === 'publish' ? ['ISSUER'] : caseRole === 'verify' ? ['READER'] : [];
+    ['publication-controls','controls','finalize'].includes(caseRole) ? ['ADMIN'] : caseRole === 'host-denial' ? [hostCase==='missing-approval'?'MERGE':'CODING'] : caseRole === 'publish' ? ['ISSUER'] : caseRole === 'verify' ? ['READER'] : [];
   const secrets = caseProducer ? ['AGENTIC_TRIAL_CASE_ORIGIN_TOKEN',...caseKeys.map(p=>`AGENTIC_${p}_PRIVATE_KEY`)] : trial ? ['AGENTIC_TRIAL_ORIGIN_TOKEN',...trialSecrets] : credential
     ? [`AGENTIC_${purpose.toUpperCase()}_${purpose.startsWith('model_') ? 'KEY' : 'PRIVATE_KEY'}`]
     : model ? ['AGENTIC_MODEL_VAULT_KEY', 'AGENTIC_MODEL_DELIVERY_KEY']
@@ -108,7 +114,7 @@ export function producerOutput(raw, role) {
       (role === 'discover' ? value.pr !== null && (!Number.isSafeInteger(value.pr) || value.pr <= 0) :
         value.schema_version !== 2 || !/^[0-9a-f]{32}$/.test(value.operation_id) ||
         !Number.isSafeInteger(value.sequence) || value.sequence <= 0)) throw new Error('closed producer output required');
-  if (role === 'case-prepare' && (typeof value.host_case !== 'boolean' || !value.handoff || Array.isArray(value.handoff) ||
+  if (role === 'case-prepare' && (!['none','direct-push','coding-update','missing-approval'].includes(value.host_case) || !value.handoff || Array.isArray(value.handoff) ||
       Object.keys(value.handoff).sort().join() !== 'origin,revision' || !/^[0-9a-f]{40}$/.test(value.handoff.revision))) {
     throw new Error('closed case lookup required');
   }

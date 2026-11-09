@@ -861,11 +861,13 @@ def _case_launch(environment,hint,node,role,clock=None,api_factory=GitHub,upload
     trial_launch.authenticate(original,api,value['launch'],clock)
     trial_case.fresh_capability(original,value,record,token,clock)
     registry.authenticate_setup_progress(trial_case.case_baseline(original,registry,record,value,clock),{OPERATION:value['pending']})
-    return dict(value['request'],handoff=dict(origin=hint['origin'],revision=revision),host_case=value['candidate']['name'] in ('direct-push','coding-update'))
+    name=value['candidate']['name']
+    return dict(value['request'],handoff=dict(origin=hint['origin'],revision=revision),
+                host_case=name if name in ('direct-push','coding-update','missing-approval') else 'none')
 
 
 def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub, app_factory=None,
-                   token_factory=GitHub, uploader_factory=NodeUploader, verifier=None, sleeper=time.sleep):
+                   token_factory=GitHub, uploader_factory=NodeUploader, verifier=None, sleeper=time.sleep, host_case=None):
     """Reconstruct each job from authenticated data; never accept native objects."""
     import bootstrap
     import trial_case
@@ -880,7 +882,7 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
     if role == 'handoff':
         _producer_environment(environment,purpose)
         require(not any(environment.get(k) for k in setup.CREDENTIAL_NAMES), 'case consumer inherited another purpose credential')
-    else:
+    elif role != 'host-denial':
         _producer_environment(environment,purpose,broker=role == 'broker')
     token = environment.get(trial_case.CaseReadStaging.NAME)
     require(isinstance(token,str) and 0 < len(token) <= 16384, 'fresh staged case read capability required')
@@ -916,6 +918,13 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
     # Authenticate scope, CLOSED consumption, exact pending fence and pinned job
     # before constructing a role root or minting its source credentials.
     admitted = trial_case.Hosted(registry,origin_reader,None,environment,hint,role,clock)
+    if role == 'host-denial':
+        require(host_case in ('direct-push','coding-update','missing-approval') and host_case==admitted.candidate['name'],
+                'host scheduling identity differs from authenticated case')
+        purpose='merge' if admitted.candidate['name']=='missing-approval' else 'coding'
+        _producer_environment(environment,purpose)
+        require(isinstance(environment.get('AGENTIC_'+purpose.upper()+'_PRIVATE_KEY'),str) and
+                bool(environment['AGENTIC_'+purpose.upper()+'_PRIVATE_KEY']), 'selected host App root required')
     read_purpose = 'reader' if role == 'broker' else purpose
     root = (app_factory or bootstrap.app_api)(before['deployment']['apps'][read_purpose],environment.get('AGENTIC_'+read_purpose.upper()+'_PRIVATE_KEY'))
     with _source_token(read_purpose,root,api,before['deployment'],identities,before['configuration_revision'],clock,token_factory,admitted.guard) as source:
@@ -1162,7 +1171,7 @@ def main():
             if fixed=='prepare': print(json.dumps(result,sort_keys=True,allow_nan=False))
         else:
             require(isinstance(request,dict) and 'handoff' in request,'fixed case lookup required')
-            _case_producer(os.environ,request['handoff'],sys.argv[2],fixed)
+            _case_producer(os.environ,request['handoff'],sys.argv[2],fixed,host_case=request.get('host_case'))
     elif role in TRIAL_ROLES:
         result = _trial(os.environ, request, sys.argv[2], role)
         if role == 'trial-prepare': print(json.dumps(result, sort_keys=True, allow_nan=False))

@@ -41,6 +41,7 @@ for (const [role,job,keys] of [
     AGENTIC_TRIAL_CASE_ORIGIN_TOKEN:'fresh-case',AGENTIC_TRIAL_ORIGIN_TOKEN:'revoked-worker',
     AGENTIC_RECOVERY_PIN:'{"fixture":true}',AGENTIC_MODEL_VAULT_KEY:'must-not-cross',AGENTIC_MODEL_DELIVERY_KEY:'must-not-cross'};
   for(const p of ['ADMIN','READER','ISSUER','CODING','MERGE']) source[`AGENTIC_${p}_PRIVATE_KEY`]='synthetic';
+  if(role==='host-denial') source.INPUT_TASK=JSON.stringify({host_case:'direct-push'});
   const params=launchParameters(source,'linux');
   assert.equal(params.argv.at(-2),'case-'+role);
   assert.equal(params.environment.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN,'fresh-case');
@@ -51,6 +52,16 @@ for (const [role,job,keys] of [
   assert.equal(params.executable==='/usr/bin/sudo',role==='verify');
   assert.equal(Boolean(params.environment.AGENTIC_RECOVERY_PIN),role==='finalize');
   assert.throws(()=>launchParameters({...source,GITHUB_JOB:'candidate'},'linux'));
+}
+for(const [name,key] of [['direct-push','CODING'],['coding-update','CODING'],['missing-approval','MERGE']]) {
+  const source={...env,INPUT_ROLE:'case-host-denial',GITHUB_JOB:'trial_host_denial',INPUT_TASK:JSON.stringify({host_case:name}),
+    AGENTIC_CODING_PRIVATE_KEY:'coding',AGENTIC_MERGE_PRIVATE_KEY:'merge'};
+  const child=launchParameters(source).environment;
+  assert.equal(child[`AGENTIC_${key}_PRIVATE_KEY`],key==='MERGE'?'merge':'coding');
+  assert.equal(child[`AGENTIC_${key==='MERGE'?'CODING':'MERGE'}_PRIVATE_KEY`],undefined);
+  for(const value of [true,false,null,'none','human-update',{}]) {
+    assert.throws(()=>launchParameters({...source,INPUT_TASK:JSON.stringify({host_case:value})}));
+  }
 }
 for (const [role,job,expected] of [
   ['trial-handoff','trial_handoff',[]], ['trial-prepare','trial_prepare',[]],
@@ -155,7 +166,7 @@ try {
   assert.equal(readFileSync(output,'utf8'),'existing=keep\nrequest='+request+'\n');
   const caseRequest=JSON.stringify({schema_version:2,configuration_revision:'a'.repeat(40),deployment_digest:'b'.repeat(64),
     operation_id:'c'.repeat(32),sequence:1,snapshot:{pr:7},task:{},qualification:{},
-    host_case:true,handoff:{origin:{schema_version:2,repository:'owner/original',repository_id:701,registry_branch:'agentic-registry'},revision:'d'.repeat(40)}});
+  host_case:'missing-approval',handoff:{origin:{schema_version:2,repository:'owner/original',repository_id:701,registry_branch:'agentic-registry'},revision:'d'.repeat(40)}});
   const caseEnv={...env,INPUT_ROLE:'case-prepare',GITHUB_JOB:'prepare',INPUT_TASK:'{}',
     AGENTIC_TRIAL_CASE_ORIGIN_TOKEN:'fresh-case',GITHUB_OUTPUT:output};
   assert.equal(run(caseEnv,(_exe,argv,options)=>{
@@ -164,7 +175,7 @@ try {
     assert.equal(options.env.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN,'fresh-case');
     return {status:0,stdout:Buffer.from(caseRequest+'\n')};
   }),0);
-  assert.equal(readFileSync(output,'utf8'),'existing=keep\nrequest='+request+'\nrequest='+caseRequest+'\nhost_case=true\n');
+  assert.equal(readFileSync(output,'utf8'),'existing=keep\nrequest='+request+'\nrequest='+caseRequest+'\nhost_case=missing-approval\n');
   for(const bad of [JSON.stringify({...JSON.parse(caseRequest),handoff:null}),caseRequest+'\nextra=value']) {
     assert.throws(()=>producerOutput(bad,'case-prepare'));
   }

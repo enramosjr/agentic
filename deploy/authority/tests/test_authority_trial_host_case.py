@@ -23,26 +23,31 @@ class HostFixture(launch_fixture.Launched):
         def factory(token):
             scoped=tokens(token); fetch=scoped.fetch
             def send(path,*pos,**kw):
-                if path.endswith('/git/refs/heads/main'):
+                if path.endswith('/git/refs/heads/main') or path.endswith('/merge'):
                     self.owner.assertTrue(any(a['name'].startswith('trial-host-intent-') for a in self.remote.artifacts))
                     self.attempts.append((path,pos,kw))
-                    self.owner.assertEqual(kw,dict(method='PATCH',data=dict(sha=self.admission.request['snapshot']['merge'],force=False)))
+                    missing=self.admission.candidate['name']=='missing-approval'
+                    self.owner.assertEqual(kw,dict(method='PUT',data=dict(sha=self.admission.request['snapshot']['head'],merge_method='merge')) if missing else
+                                           dict(method='PATCH',data=dict(sha=self.admission.request['snapshot']['merge'],force=False)))
                     if getattr(self,'fault',None)=='unknown': raise OSError('unknown host effect')
                     if getattr(self,'fault',None)=='changed': self.source.refs['main']='0'*40
-                    raise HostRefusal(403,'required_check' if getattr(self,'fault',None)=='wrong-denial' else 'protected_update',None)
+                    raise HostRefusal(403,'required_check' if getattr(self,'fault',None)=='wrong-denial' else 'required_review' if missing else 'protected_update',None)
                 return fetch(path,*pos,**kw)
             scoped.fetch=send
             return scoped
         self.tokens=factory
 
-    def host(self):
+    def host(self, change=None, selected=None, app_factory=None):
         env=self.job('trial host denial','trial_host_denial')
+        purpose='merge' if self.admission.candidate['name']=='missing-approval' else 'coding'
         env.update(GITHUB_REPOSITORY=self.p['authority_repository'],GITHUB_TOKEN='case-actions-read',
-            AGENTIC_CODING_PRIVATE_KEY=self.api.secrets['AGENTIC_CODING_PRIVATE_KEY'],
+            **{'AGENTIC_'+purpose.upper()+'_PRIVATE_KEY':self.api.secrets['AGENTIC_'+purpose.upper()+'_PRIVATE_KEY']},
             **{__import__('trial_case').CaseReadStaging.NAME:self.case_token})
+        if change: change(env)
         result=service._case_producer(env,self.hint,'fixture-node','host-denial',clock=lambda:self.clock[0],
             api_factory=lambda token:self.api if token=='case-actions-read' else self.origin_factory(token),
-            app_factory=self.apps,token_factory=self.tokens,uploader_factory=lambda *a:self.upload)
+            app_factory=app_factory or self.apps,token_factory=self.tokens,uploader_factory=lambda *a:self.upload,
+            host_case=selected or self.admission.candidate['name'])
         self.remote.jobs[-1].update(status='completed',conclusion='success',completed_at=stamp(self.clock[0]))
         return result
 
@@ -105,11 +110,11 @@ class Sequential(HostFixture):
         location=dict(run_id=self.remote.run['id'],attempt=1,job_id=job['id'],artifact_id=artifact['id'])
         return trial_controller.Native(self.preparer)._observe_terminal('prompt',self.admission.candidate['name'],location,self.source)
 
-    def second(self):
+    def second(self, name='coding-update', run=103, token='fresh-second-case'):
         from test_authority_broker_evidence import AuthorityAPI
         previous=self.remote
         self.remote=AuthorityAPI(self.d,self.clock)
-        self.remote.run=copy.deepcopy(previous.run); self.remote.run['id']=103
+        self.remote.run=copy.deepcopy(previous.run); self.remote.run['id']=run
         def replace(identity,value,member):
             import io,json,zipfile,hashlib
             stream=io.BytesIO()
@@ -117,9 +122,21 @@ class Sequential(HostFixture):
             raw=stream.getvalue(); self.remote.raw[identity]=raw
             next(a for a in self.remote.artifacts if a['id']==identity)['digest']='sha256:'+hashlib.sha256(raw).hexdigest()
         self.remote.replace=replace
-        self.runs[103]=self.remote
-        self.ready(name='coding-update',token='fresh-second-case')
+        self.runs[run]=self.remote
+        self.ready(name=name,token=token)
         next(v for v in self.source.prs if v['number']==self.admission.candidate['submitted']['pr'])['mergeable']=True
+
+    def through_second(self):
+        self.prepared_host(); self.host(); self.run('broker'); self.finalize(); self.observe()
+        self.second()
+        with self.owner.assertRaisesRegex(Refusal,'pending'): self.coordinate()
+        self.close_handoff(); self.published(); self.host(); self.run('broker'); self.finalize(); self.observe()
+
+    def third(self):
+        self.through_second()
+        self.second('missing-approval',105,'fresh-third-case')
+        with self.owner.assertRaisesRegex(Refusal,'pending'): self.coordinate()
+        self.close_handoff(); self.published()
 
 
 @unittest.skipIf(getattr(launch_fixture.Launch,'__unittest_skip__',False),'optional cryptography required')
@@ -130,6 +147,231 @@ class NativeHost(unittest.TestCase):
     configured=launch_fixture.Launch.configured
     exercise=launch_fixture.Launch.exercise
     prepare=launch_fixture.Launch.prepare
+
+    def test_three_native_cases_close_missing_approval_through_merger_host(self):
+        def check(*args):
+            import trial_controller,trial_case,trial_launch
+            f=Sequential(self,args); f.prepared_host()
+            origin=f.origin.binding(); original=copy.deepcopy(f.admission.record)
+            retained=[]; tokens=[]; candidates=[]
+            with patch.object(merge_transport,'isolated',side_effect=AssertionError('host negative dispatched')):
+                for index,name in enumerate(('direct-push','coding-update','missing-approval')):
+                    if index:
+                        f.second(name,103 if index==1 else 105,'fresh-case-'+name)
+                        with self.assertRaisesRegex(Refusal,'pending'): f.coordinate()
+                        f.admission=trial_controller.Native(f.preparer)._open('prompt',name,f.source)
+                        f.launch=trial_launch.Native(f.admission,f.launch.reader,f.origin_factory)
+                        request=f.close_handoff()
+                        self.assertEqual(request['host_case'],name)
+                        f.published()
+                    if index==2:
+                        self.assertTrue(f.reviews)  # Genuine independent preparation/publication first.
+                        f.reviews=[]  # External withdrawal is confined to the local host-negative fixture.
+                    tokens.append(f.case_token); candidates.append(copy.deepcopy(f.admission.candidate))
+                    f.host(); self.assertEqual(f.run('broker')['state'],'host-denied')
+                    terminal=f.finalize(); self.assertEqual(f.observe()['binding'],terminal)
+                    retained.append((f.remote.run['id'],copy.deepcopy(f.remote.raw),
+                        f.native.provision.store(f.native.provision.root/trial_controller.case_journal('trial-controller',f.admission.candidate)).read()))
+                self.assertEqual(len(f.attempts),3)
+                self.assertEqual(f.attempts[-1][0],'/repos/'+f.p['repository']+'/pulls/'+str(candidates[-1]['submitted']['pr'])+'/merge')
+                self.assertEqual(f.merges,[])
+                self.assertEqual(f.admission.record,original)
+                self.assertEqual(f.origin.binding(),origin)
+                self.assertEqual(len(f.admission.value['history']),2)
+                self.assertEqual(len(f.admission.value['candidates']['value']['candidates']),16)
+                self.assertEqual(f.native.provision.store(f.native.provision.root/'trial-read-staging').read()['value']['phase'],'revoked')
+                self.assertEqual(len({c['submitted']['head'] for c in candidates}),3)
+                self.assertEqual(len({c['submitted']['pr'] for c in candidates}),3)
+                self.assertEqual(len(set(tokens)),3)
+                self.assertTrue(set(tokens[:2])<=f.revoked)
+                for i,(run,raw,journal) in enumerate(retained):
+                    self.assertEqual(f.runs[run].raw,raw)
+                    self.assertEqual(f.native.provision.store(f.native.provision.root/trial_controller.case_journal('trial-controller',candidates[i])).read(),journal)
+                    if i<2:
+                        prior,record=trial_case.read(f.origin,f.admission.value['history'][i]['revision'],lambda:f.clock[0])
+                        self.assertEqual(prior['candidate'],candidates[i]); self.assertEqual(record,original)
+                self.assertEqual([r['kind'] for r in terminal['fence']['completed'][-3:]],['not-submitted']*3)
+                self.assertEqual(terminal['deployment']['state'],'qualification')
+                self.assertIsNone(terminal['deployment']['qualification'])
+                f.clock[0]+=1000
+                trial_launch.revoke(f.native.provision,f.origin_factory,name='missing-approval')
+                self.assertTrue(set(tokens)<=f.revoked)
+        self.exercise(continuation=check)
+
+    def test_third_selection_authenticates_both_owned_terminals_and_histories(self):
+        def check(*args):
+            import trial_controller
+            f=Sequential(self,args); f.through_second()
+            for name in ('direct-push','coding-update'):
+                store=f.native.provision.store(f.native.provision.root/trial_controller.case_journal('trial-controller',dict(name=name)))
+                saved=store.read(); value=copy.deepcopy(saved['value']); value['terminal']['binding']['fence']['completed'][-1]['receipt_digest']='0'*64
+                changed=store.write(saved,value)
+                with self.assertRaises(Refusal): trial_controller.Native(f.preparer)._open('prompt','missing-approval',f.source)
+                self.assertIsNone(f.native.provision.store(f.native.provision.root/'trial-controller-missing-approval').read())
+                store.write(changed,saved['value'])
+            for index in (0,1):
+                run=f.runs[101 if index==0 else 103]
+                artifact=next(a for a in run.artifacts if a['name'].startswith('trial-case-terminal-'))
+                import io,json,zipfile
+                with zipfile.ZipFile(io.BytesIO(run.raw[artifact['id']])) as archive: saved=json.loads(archive.read('trial-case-terminal.json'))
+                value=copy.deepcopy(saved); value['request_digest']='0'*64
+                current=f.remote; f.remote=run; run.replace(artifact['id'],value,'trial-case-terminal.json'); f.remote=current
+                with self.assertRaises(Refusal): trial_controller.Native(f.preparer)._open('prompt','missing-approval',f.source)
+                f.remote=run; run.replace(artifact['id'],saved,'trial-case-terminal.json'); f.remote=current
+            self.assertEqual(len(f.attempts),2)
+        self.exercise(continuation=check)
+
+    def test_third_credentials_scheduling_and_current_success_fail_before_host_effect(self):
+        def check(*args):
+            import trial_case,trial_launch
+            from registry import Registry
+            f=Sequential(self,args); f.third()
+            count=len(f.remote.artifacts); calls=[]
+            def construct(*args): calls.append(args); return f.apps(*args)
+            for selected in ('direct-push','coding-update',True,'human-update'):
+                with self.subTest(selected=selected),self.assertRaises(Refusal): f.host(selected=selected,app_factory=construct)
+            self.assertEqual(calls,[])
+            for change in (lambda env:env.update(AGENTIC_CODING_PRIVATE_KEY=f.api.secrets['AGENTIC_CODING_PRIVATE_KEY']),
+                           lambda env:env.pop('AGENTIC_MERGE_PRIVATE_KEY')):
+                with self.assertRaises(Refusal): f.host(change=change,app_factory=construct)
+            self.assertEqual(calls,[])
+            for name in ('direct-push','coding-update'):
+                from trial_controller import case_journal
+                old=f.native.provision.store(f.native.provision.root/case_journal('trial-case-read-staging',dict(name=name))).read()['value']['credential']['token']
+                f.revoked.discard(old)  # Even an accepting transport cannot supply authority.
+                with self.assertRaises(Refusal): f.host(change=lambda env:env.update(**{trial_case.CaseReadStaging.NAME:old}),app_factory=construct)
+                env=f.job('trial case ready','trial_case_ready'); env[trial_case.CaseReadStaging.NAME]=old
+                with self.assertRaises(Refusal): trial_launch.consume(f.registry,Registry(f.origin_factory(old),f.origin.coordinates),env,f.ready_hint,lambda:f.clock[0])
+                env=f.job('trial case handoff','trial_case_handoff'); env.update(GITHUB_REPOSITORY=f.p['authority_repository'],GITHUB_TOKEN='case-actions-read',**{trial_case.CaseReadStaging.NAME:old})
+                with self.assertRaises(Refusal): service._case_producer(env,f.hint,'fixture-node','handoff',clock=lambda:f.clock[0],
+                    api_factory=lambda token:f.api if token=='case-actions-read' else f.origin_factory(token),uploader_factory=lambda *a:f.upload)
+            self.assertEqual(calls,[])
+            with self.assertRaisesRegex(Refusal,'candidate approval'): f.host()
+            f.reviews=[]
+            checks=copy.deepcopy(f.checks)
+            f.checks=[]
+            with self.assertRaises(Refusal): f.host()
+            f.checks=checks
+            self.assertEqual(len(f.remote.artifacts),count)
+            self.assertEqual(len(f.attempts),2)
+        self.exercise(continuation=check)
+
+    def test_third_unknown_unintended_or_missing_effect_never_replays_and_cleans_after_expiry(self):
+        for fault in ('unknown','wrong-denial','changed','expired'):
+            def check(*args):
+                import trial_launch
+                f=Sequential(self,args); f.third(); f.reviews=[]
+                archives={run:copy.deepcopy(f.runs[run].raw) for run in (101,103)}
+                if fault=='expired': f.clock[0]+=501
+                else: f.fault=fault
+                with self.assertRaises((OSError,Refusal)): f.host()
+                count=len(f.attempts)
+                with self.assertRaises(Refusal): f.host()
+                with self.assertRaises(Refusal): f.run('broker')
+                self.assertEqual(len(f.attempts),count)
+                self.assertEqual(count,2 if fault=='expired' else 3)
+                self.assertIsNotNone(f.registry.binding()['fence']['pending'])
+                self.assertEqual(f.merges,[])
+                for run,raw in archives.items(): self.assertEqual(f.runs[run].raw,raw)
+                state=f.native.provision.store(f.native.provision.root/'trial-controller-missing-approval').read()
+                self.assertEqual(state['value']['phase'],'bound')
+                f.clock[0]+=1000
+                trial_launch.revoke(f.native.provision,f.origin_factory,name='missing-approval')
+                self.assertIn(f.case_token,f.revoked)
+                self.assertEqual(f.native.provision.store(f.native.provision.root/'trial-controller-missing-approval').read(),state)
+                return f.source.refs['main']
+            with self.subTest(fault=fault): self.exercise(continuation=check)
+
+    def test_third_late_approval_after_intent_prevents_host_effect_and_replay(self):
+        def check(*args):
+            f=Sequential(self,args); f.third(); reviews=copy.deepcopy(f.reviews); f.reviews=[]
+            # The existing shared probe must reread missing approval after durable
+            # intent, immediately before its effect, even if approval arrives late.
+            upload=f.upload
+            def arriving(name,raw):
+                value=upload(name,raw)
+                if name.startswith('trial-host-intent-'): f.reviews=reviews
+                return value
+            f.upload=arriving
+            with self.assertRaisesRegex(Refusal,'candidate approval'): f.host()
+            self.assertEqual(len(f.attempts),2)
+            with self.assertRaises(Refusal): f.host()
+            self.assertIsNotNone(f.registry.binding()['fence']['pending'])
+        self.exercise(continuation=check)
+
+    def test_third_closed_outcome_authenticates_exact_actor_request_and_denial(self):
+        def check(*args):
+            import io,json,zipfile
+            from trusted_ci_policy import digest
+            f=Sequential(self,args); f.third(); f.reviews=[]; f.host()
+            artifact=next(a for a in f.remote.artifacts if a['name'].startswith('trial-host-denial-'))
+            with zipfile.ZipFile(io.BytesIO(f.remote.raw[artifact['id']])) as archive: saved=json.loads(archive.read('trial-host-denial.json'))
+            mutations=(lambda o:o.update(actor_id=f.admission.record['pair']['identities']['apps']['coding']['actor_id']),
+                lambda o:o['request'].update(method='PATCH'),lambda o:o['request']['data'].update(sha='0'*40),
+                lambda o:o.update(denial_category='protected_update'),lambda o:o.update(denied_obligation=f.p['check_name']),
+                lambda o:o.update(http_status=500),lambda o:o.update(after='0'*40),
+                lambda o:o.update(reviews=[dict(state='APPROVED',commit_id=f.admission.request['snapshot']['head'])]))
+            for mutation in mutations:
+                value=copy.deepcopy(saved); mutation(value['observation']); value['record']['evidence_digest']=digest(value['observation'])
+                f.remote.replace(artifact['id'],value,'trial-host-denial.json')
+                for job in f.remote.jobs:
+                    if job['name'].startswith('broker ('): job.update(status='in_progress',conclusion=None,completed_at=None)
+                with self.assertRaises(Refusal): f.run('broker')
+                self.assertFalse(any(a['name'].endswith('-host-denied') for a in f.remote.artifacts))
+                self.assertIsNotNone(f.registry.binding()['fence']['pending'])
+            f.remote.replace(artifact['id'],saved,'trial-host-denial.json')
+            next(j for j in f.remote.jobs if j['name'].startswith('broker (')).update(status='in_progress',conclusion=None,completed_at=None)
+            self.assertEqual(f.run('broker')['state'],'host-denied')
+            terminal=f.finalize(); self.assertEqual(f.observe()['binding'],terminal)
+            self.assertEqual(len(f.attempts),3); self.assertEqual(f.merges,[])
+        self.exercise(continuation=check)
+
+    def test_third_host_effect_rechecks_both_prior_ready_pending_and_execution_refs(self):
+        def check(*args):
+            import trial_case
+            from registry import trial_reference
+            f=Sequential(self,args); f.third(); f.reviews=[]
+            tokens=f.tokens
+            for entry in f.admission.value['history']:
+                prior,_=trial_case.read(f.origin,entry['revision'],lambda:f.clock[0])
+                refs=(trial_reference(prior),trial_reference(dict(prior,execution=None)),
+                      trial_reference(dict(prior,kind='trial-case-ready',execution=None)))
+                for ref in refs:
+                    key=ref; revision=f.origin.api.refs[key]; moved=[]
+                    def factory(token):
+                        scoped=tokens(token); get=scoped.get
+                        def read(path):
+                            result=get(path)
+                            if path.endswith('/pulls/'+str(f.admission.candidate['submitted']['pr'])):
+                                f.origin.api.refs[key]=f.admission.value['workflow']['value']['revision_bound']; moved.append(path)
+                            return result
+                        scoped.get=read
+                        return scoped
+                    f.tokens=factory
+                    with self.subTest(ref=ref),self.assertRaisesRegex(Refusal,'prior case reference moved'): f.host()
+                    self.assertTrue(moved)
+                    self.assertEqual(len(f.attempts),2)
+                    self.assertFalse(any(a['name'].startswith('trial-host-intent-') for a in f.remote.artifacts))
+                    f.origin.api.refs[key]=revision
+            self.assertIsNotNone(f.registry.binding()['fence']['pending'])
+        self.exercise(continuation=check)
+
+    def test_third_source_move_during_late_prerequisites_prevents_host_request(self):
+        def check(*args):
+            from qualification_cases import HostCases
+            f=Sequential(self,args); f.third(); f.reviews=[]
+            prerequisite=HostCases._prerequisites; reads=[]
+            def moved(probe,case):
+                result=prerequisite(probe,case); reads.append(case['name'])
+                if len(reads)==2: f.source.refs['main']='0'*40
+                return result
+            with patch.object(HostCases,'_prerequisites',moved),self.assertRaisesRegex(Refusal,'base changed|moved'):
+                f.host()
+            self.assertEqual(reads,['missing-approval']*2)
+            self.assertEqual(len(f.attempts),2)
+            self.assertIsNotNone(f.registry.binding()['fence']['pending'])
+            return f.source.refs['main']
+        self.exercise(continuation=check)
 
     def test_native_direct_push_denial_closes_without_broker_dispatch(self):
         def check(*args):

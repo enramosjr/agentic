@@ -1,6 +1,6 @@
 """Held first native host-negative, sharing the complete-prefix host probe.
 
-Only the coding producer sends the host request. Its create-only intent prevents
+Only the selected App producer sends the host request. Its create-only intent prevents
 replay after an unknown effect. The broker consumes a CLOSED successful outcome;
 it does not enter merge dispatch or pretend the host denial is a broker failure.
 """
@@ -15,11 +15,11 @@ from trusted_ci_policy import digest, object_fields, positive, require
 def selected(admission):
     from trial_controller import authenticated
     authenticated(admission)
-    return admission.candidate['name'] in ('direct-push','coding-update')
+    return admission.candidate['name'] in ('direct-push','coding-update','missing-approval')
 
 
 def _context(admission):
-    require(selected(admission), 'only the prepared native protected-update cases are implemented')
+    require(selected(admission), 'only the prepared native host cases are implemented')
     admission.guard()
     b, s = admission.binding, admission.request['snapshot']
     return b, s, b['deployment']
@@ -49,31 +49,36 @@ def _identity(admission):
         snapshot=s)
 
 
-def _request(d, s):
+def _request(d, s, name):
+    if name=='missing-approval':
+        return dict(path='/repos/'+d['policy']['repository']+'/pulls/'+str(s['pr'])+'/merge',
+                    method='PUT',data=dict(sha=s['head'],merge_method='merge'))
     return dict(path='/repos/'+d['policy']['repository']+'/git/refs/heads/'+quote(d['policy']['target'],safe=''),
                 method='PATCH',data=dict(sha=s['merge'],force=False))
 
 
-def produce(admission, authority, coding, token_factory, environment, uploader):
+def produce(admission, authority, app, token_factory, environment, uploader):
     from service import _upload_document
     b, s, d = _context(admission)
     job = provenance.admit_job(authority,d,environment,'trial host denial',admission.clock())
     case = _case(admission,authority)
     identities = admission.record['pair']['identities']
-    probe = HostCases(admission.registry,admission.source,authority,identities,coding,None,None,
+    missing=admission.candidate['name']=='missing-approval'
+    purpose='merge' if missing else 'coding'
+    probe = HostCases(admission.registry,admission.source,authority,identities,None if missing else app,app if missing else None,None,
                       admission.clock,token_factory,guard=admission.guard)
     probe.binding, probe.d = copy.deepcopy(b), d
     identity = _identity(admission)
     root = '/repos/'+d['policy']['authority_repository']+'/actions/runs/'+str(s['run_id'])
     prefix = 'trial-host-intent-'+admission.record['task_id']+'-'+str(s['run_attempt'])
-    intent = dict(identity,kind='trial-host-intent',job_id=job['id'],request=_request(d,s),issued=admission.clock())
+    intent = dict(identity,kind='trial-host-intent',job_id=job['id'],request=_request(d,s,case['name']),issued=admission.clock())
     def retain(request):
         admission.guard()
         require(request==intent['request'] and not any(v['name']==prefix for v in authority.pages(root+'/artifacts','artifacts')),
                 'host intent already exists; never replay an uncertain request')
         _upload_document(uploader,prefix,intent)  # Create-only acknowledgement before the host effect.
         admission.guard()
-    record, observation = probe._probe(case,dict(coding=identities['apps']['coding']['actor_id']),before_send=retain)
+    record, observation = probe._probe(case,{purpose:identities['apps'][purpose]['actor_id']},before_send=retain)
     admission.guard()
     document = dict(identity,job_id=job['id'],intent=intent,record=record,observation=observation,completed=admission.clock())
     return _upload_document(uploader,'trial-host-denial-'+admission.record['task_id']+'-'+str(s['run_attempt']),document)
@@ -96,24 +101,29 @@ def read(admission, authority, locator=None):
             'host outcome configuration or producer interval differs')
     intent_location = service._locator(authority,d,s['run_id'],s['run_attempt'],'trial-host-intent',key)
     intent = provenance.authenticated_document(authority,d,intent_location,'trial-host-intent',key,admission.clock())
-    expected = dict(identity,kind='trial-host-intent',job_id=proof['job_id'],request=_request(d,s),issued=value['intent'].get('issued'))
+    expected = dict(identity,kind='trial-host-intent',job_id=proof['job_id'],request=_request(d,s,admission.candidate['name']),issued=value['intent'].get('issued'))
     require(intent['document']==value['intent']==expected and intent['job_id']==proof['job_id'] and
             positive(expected['issued']) and proof['job_started']<=expected['issued']<=intent['artifact_created']<=value['completed'],
             'host intent differs or postdates the attempt')
     observation, record = value['observation'], value['record']
     object_fields(observation,('snapshot checks acceptance rules reviews synthetic_commit request actor_id before after '
                               'http_status denial_category denied_obligation').split(),'host observation')
-    actor = admission.record['pair']['identities']['apps']['coding']['actor_id']
+    missing=admission.candidate['name']=='missing-approval'
+    category='required_review' if missing else 'protected_update'
+    if missing:
+        require(not any(r['state']=='APPROVED' and r['commit_id']==s['head'] for r in observation['reviews']),
+                'missing-approval observation has candidate approval')
+    actor = admission.record['pair']['identities']['apps']['merge' if missing else 'coding']['actor_id']
     commit = observation['synthetic_commit']
-    require(observation['snapshot']==s and observation['request']==_request(d,s) and observation['actor_id']==actor and
+    require(observation['snapshot']==s and observation['request']==_request(d,s,admission.candidate['name']) and observation['actor_id']==actor and
             observation['before']==observation['after']==s['base'] and type(observation['http_status']) is int and
-            observation['http_status'] in (403,405,422) and observation['denial_category']=='protected_update' and
+            observation['http_status'] in (403,405,422) and observation['denial_category']==category and
             observation['denied_obligation'] is None and commit['sha']==s['merge'] and
             [v['sha'] for v in commit['parents']]==[s['base'],s['head']] and
             commit['tree']['sha']==admission.candidate['submitted']['tree'], 'intended host denial was not established')
     expected_record = dict(name=admission.candidate['name'],pr=s['pr'],head=s['head'],base=s['base'],merge=s['merge'],
         tree=commit['tree']['sha'],before=s['base'],after=s['base'],actor_id=actor,request_sent=True,
-        http_status=observation['http_status'],denial_category='protected_update',denied_obligation=None,broker_refusal=None,
+        http_status=observation['http_status'],denial_category=category,denied_obligation=None,broker_refusal=None,
         merge_commit=None,merge_parents=[],merge_tree=None,evidence_digest=digest(observation))
     require(record==expected_record, 'host denial record differs')
     # Reauthenticate actual verifier/issuer success, obligations, external human
