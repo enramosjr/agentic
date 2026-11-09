@@ -498,6 +498,7 @@ def _prepare(environment, request, node=None, clock=None, api_factory=GitHub, ap
     import bootstrap
     from authority_github import Readers, current_snapshot
     from provenance import admit_job
+    from trusted_ci_github import independent_approval
     object_fields(request, ('pr',), 'discovered candidate')
     require(positive(request['pr']), 'one discovered candidate required')
     _producer_environment(environment, 'admin')
@@ -511,6 +512,17 @@ def _prepare(environment, request, node=None, clock=None, api_factory=GitHub, ap
     with _source_token('admin', root, api, d, identities, before['configuration_revision'], clock, token_factory, guard) as source:
         readers = Readers(source, api, d)
         s = current_snapshot(readers, d, request['pr'], job['run_id'], int(environment['GITHUB_RUN_ATTEMPT']))
+        def reviewed():
+            guard()
+            pr = source.get('/repos/' + p['repository'] + '/pulls/' + str(s['pr']))
+            require(pr['head']['sha'] == s['head'] and pr['base']['sha'] == s['base'], 'reviewed candidate moved')
+            independent_approval(source, p, pr, human=True)
+            require(current_snapshot(readers, d, s['pr'], s['run_id'], s['run_attempt']) == s,
+                    'candidate moved during human review readback')
+            guard()
+        # Setup consent and cached check success cannot substitute for review.
+        # Observe only; the coordinator never submits or requests a human review.
+        reviewed()
         task, qualification = _retained(api, source, before, identities, s, clock)
         guard()
         require(current_snapshot(readers, d, s['pr'], s['run_id'], s['run_attempt']) == s, 'candidate moved before fencing')
@@ -521,7 +533,7 @@ def _prepare(environment, request, node=None, clock=None, api_factory=GitHub, ap
             deployment_digest=before['deployment_digest'], workflow_sha=p['workflow_sha'], run_id=s['run_id'], attempt=s['run_attempt'],
             created=now, execution_deadline=min(now+3600,d['expires']), **{k:s[k] for k in ('pr','head','base','merge')})
         with _admin_authority(root, api, registry, before, identities, token_factory) as writer:
-            guard()
+            reviewed()
             after = writer.acquire_operation(before['branch_head'], before['configuration_revision'], op)
     require(after['fence']['pending'] == op, 'prepared fence readback differs')
     return dict(schema_version=2, configuration_revision=after['configuration_revision'], deployment_digest=after['deployment_digest'],

@@ -147,7 +147,7 @@ def fixture():
         evidence_digest=digest(evidence), task_digest=digest(task))
     check = checks.publication_body(d, s, evidence, coordinates, 1090)
     source.checks = [dict(check, id=300, app={'id': d['apps']['issuer']})]
-    source.reviews = [dict(id=400, state='APPROVED', commit_id=s['head'], user={'id': 17})]
+    source.reviews = [dict(id=400, state='APPROVED', commit_id=s['head'], user={'id': 17, 'type': 'User'})]
     api.jobs.append(dict(id=900, run_id=99, head_sha=d['policy']['workflow_sha'], name='broker (' + str(s['pr']) + ')',
         status='in_progress', conclusion=None, started_at=stamp(1085), completed_at=None))
     class Registry:

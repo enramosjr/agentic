@@ -135,7 +135,7 @@ def finish(registry, source, authority, identities, prepared, request, control_l
     root = '/repos/' + d['policy']['repository']
     pr = source.get(root + '/pulls/' + str(op['pr']))
     require(pr['head']['sha'] == current['head'] and pr['base']['sha'] == current['base'], 'reviewed PR changed')
-    reviews = independent_approval(source, d['policy'], pr)
+    reviews = independent_approval(source, d['policy'], pr, human=True)
     additional = _additional_checks(source, d, current, controls['document']['result']['required_checks'])
     references = [evidence, qualification, task['provenance'],
                   *prepared['proofs']['provenance'].values(), *proofs['provenance'].values(), controls['provenance']]

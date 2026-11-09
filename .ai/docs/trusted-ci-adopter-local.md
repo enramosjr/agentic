@@ -80,6 +80,19 @@ an administrative job acquires one merge fence. No candidate number, command,
 policy or authority is selected by a dispatch input. Missing retained qualification
 blocks this path; the qualification producer remains unfinished.
 
+Administrative preparation reads independent review of the exact candidate head
+before collecting retained evidence and again immediately before acquiring its
+merge fence. The API must identify the approved reviewer as a human `User`, with
+a unique review identity, separate from the PR author and coding actors. Missing,
+stale or dismissed approval, an outstanding change request, ambiguous review
+inventory or unavailable readback stops preparation without acquiring a fence.
+The coordinator only observes reviews; it never submits an approval or requests
+review on the operator's behalf. Setup consent cannot approve a candidate.
+After an interruption before fencing, preparation rereads current review and
+evidence. An already pending fence blocks another preparation. The broker still
+performs its own fresh human review readback before dispatch; preparation does
+not issue a reusable review authorization.
+
 For the GitHub Actions adapter, verification pulls the approved digest-pinned
 image and uses the existing bounded disk, sandbox and host-side controller.
 Evidence uploads only after sandbox, disk and temporary-input cleanup succeeds.
@@ -164,6 +177,19 @@ connection strings. Job hosts receive expiring object URLs, not cloud identity
 credentials or GitHub keys. Those URLs must stay out of logs and coding mounts.
 
 ## Verification limits and remaining work
+
+Initial qualification still lacks a bounded disposable-fixture admission path.
+The qualification receipt reader validates an already active generation and its
+authenticated closed receipt; it cannot produce the first qualification. Task
+submission/admission and merge authorization also require active state, while
+model leases separately permit qualification-purpose execution. Existing App
+registrations cover the approved source/authority scopes, not a new trial
+repository. A future trial coordinator must provision separately approved fixture
+scopes, retain exact configuration/fence bindings and exercise the actual
+verification/publication/broker paths. Setting a deployment to `active`, supplying
+a local receipt or treating setup consent as human review cannot resolve these
+missing producers. The full trial/case graph and hosted qualification remain
+unavailable.
 
 Local broker foundations include a durable operation fence on the independent
 registry branch, stable deployment-blob identity separate from branch CAS, scoped

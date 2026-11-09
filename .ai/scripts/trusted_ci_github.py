@@ -156,8 +156,12 @@ def current_snapshot(api, p, pr_number, run_id, attempt):
     return validate_snapshot(s, p)
 
 
-def independent_approval(api, p, pr):
+def independent_approval(api, p, pr, human=False):
     reviews = api.pages(repo_path(p) + '/pulls/' + str(pr['number']) + '/reviews')
+    if human:
+        require(isinstance(reviews, list) and len(reviews) <= 10000 and
+                all(isinstance(r, dict) and positive(r.get('id')) for r in reviews) and
+                len({r['id'] for r in reviews}) == len(reviews), 'complete unambiguous human review inventory required')
     latest = {}
     for review in reviews:
         actor = review['user']['id']
@@ -172,6 +176,8 @@ def independent_approval(api, p, pr):
                 actor not in p['coding_actors'] and actor != pr['user']['id'] and
                 r['state'] == 'APPROVED' and r['commit_id'] == pr['head']['sha']]
     require(approved, 'current independent approval required')
+    if human:
+        require(all(r['user'].get('type') == 'User' for r in approved), 'independent human approval required')
     return approved
 
 
