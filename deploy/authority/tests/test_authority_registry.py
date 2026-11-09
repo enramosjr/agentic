@@ -87,6 +87,22 @@ def configuration_operation(store):
 
 
 class RegistryContracts(unittest.TestCase):
+    def test_retained_transition_authenticates_history_without_adopting_current_tip(self):
+        host=RegistryHost(); store=registry.Registry(host,coordinates())
+        store.write(None,intent()); before=store.binding()
+        operation_id=configuration_operation(store); pending=store.binding()
+        changed=copy.deepcopy(intent()); changed.update(generation=2,state='blocked')
+        store.write(digest(intent()),changed,operation_id=operation_id,before_effect=lambda:None)
+        documents={registry.OPERATION:pending['fence']}
+        self.assertEqual(store.authenticate_setup_transition(before,documents,pending),pending)
+        with self.assertRaises(Refusal): store.authenticate_setup_progress(before,documents)
+        for field in ('configuration_revision','deployment_digest','software_revision','branch_head'):
+            forged=copy.deepcopy(pending); forged[field]='0'*len(forged[field])
+            with self.subTest(field=field),self.assertRaises((Refusal,KeyError)):
+                store.authenticate_setup_transition(before,documents,forged)
+        forged=copy.deepcopy(pending); forged['fence']['sequence']+=1
+        with self.assertRaises(Refusal): store.authenticate_setup_transition(before,documents,forged)
+
     def test_unchanged_reobserves_live_refs_and_late_software_without_redownloading_blobs(self):
         for fault in (None, 'configuration', 'software', 'late-software'):
             host = RegistryHost()

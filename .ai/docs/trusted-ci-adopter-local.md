@@ -97,8 +97,8 @@ digest. A generic error, unavailable credential, skipped obligation, unrelated
 required check or moved ref cannot pass. The instance refuses another attempt
 after starting, including an uncertain response. This is not durable recovery
 across processes: full-prefix native orchestration and retained dispatch intents
-remain unfinished. The separate first native direct-push composition below owns
-its durable one-case intent. Public invocation is held before network access. Local fixtures
+remain unfinished. The separate bounded native direct-push/coding-update
+composition below owns durable case intents. Public invocation is held before network access. Local fixtures
 exercise verification, cleanup, closed artifacts and publication against existing
 synthetic active regression configurations; they do not establish initial trial
 qualification. Production active-state and existing qualification requirements
@@ -488,7 +488,7 @@ retains the original 60-second dispatch margin. Trial terminal effects recheck
 that live admission before every conditional Git write, including after blocking
 receipt reads; the ordinary production recovery path retains its existing rules.
 
-The held `trial_launch.Native` supplies one-candidate launch coordination through
+The held `trial_launch.Native` supplies exact-case launch coordination through
 the same registry, staging, dispatch and producer engines. It conditionally
 publishes a separate READY record while the disposable registry is still settled.
 That record binds the selected prepared candidate and original CLOSED worker;
@@ -513,12 +513,12 @@ leaves retained intent pending without redispatch.
 
 The workflow shares the existing verification, publication, concurrent broker /
 controls / five final proofs and independently pinned automatic finalizer jobs.
-The first native host-negative, `direct-push`, instead follows successful
+The native host-negatives, `direct-push` and the distinct reserved `coding-update`, follow successful
 publication with a separate `trial host denial` job. Only that job receives the
 coding App key. It uses the same `HostCases` probe as the complete ordered prefix,
 with actual closed verifier evidence, the exact issuer check, effective obligations
 and externally observed independent human review. No human token is needed for
-this coding-identity case. A create-only intent precedes the scoped PATCH of the
+these coding-identity cases. A create-only intent precedes the scoped PATCH of the
 protected target to the exact synthetic merge SHA (`force=false`). Unknown effects,
 changed target/candidate or any denial other than `protected_update` leave the
 fence pending and cannot replay the request.
@@ -547,6 +547,28 @@ only authenticates the retained conditional terminal commit and records local
 completion. An absent/different effect cannot trigger another write. This does
 not relabel the original settled baseline, clear an uncertain fence or renew an
 expired delegation.
+
+The held controller permits `coding-update` only after the exact original
+`direct-push` case has an independently CLOSED terminal producer and native
+observed completion. The second selection uses the same original sixteen
+reservations and CLOSED worker, with a distinct PR/head/task identity. Separate
+protected controller, launch, staging and publication journals and separate
+READY/pending/execution refs preserve the first case's immutable evidence.
+The second handoff retains its predecessor's exact execution revision and
+terminal locator. Fresh native and producer contexts authenticate both conditional
+transitions, from the original settled baseline to the first pending fence and
+then its terminal state, before admitting the second case. Current state cannot
+replace that original baseline. Both terminal entries remain in fence history.
+
+Before the second queue operation, the same credential engine authenticates and
+revokes the owned first case capability, then mints and stages a fresh capability
+in its separate protected journal. Both READY and pending-case consumers must
+close for that exact token/candidate/run/job/interval. Neither the revoked worker
+token nor a prior case token can authorize the second case. Original ownership,
+expiry and total deadline still bound all effects; progression never renews them.
+`trial_launch.revoke(provision, token_factory, name='coding-update')` reconstructs
+exact second-token cleanup after expiry or restart. This two-case progression is
+a bounded prerequisite, not the complete ordered host prefix or qualification.
 The launcher passes only the fresh read capability and each role's existing
 purpose credentials; READY/preparation/consumer jobs receive no App root or model
 key. The terminal job can close a failed broker's genuine no-dispatch receipt or
@@ -561,7 +583,7 @@ and no real workflow is dispatched by this build.
 Local fixture execution drives authenticated job/closed-artifact readers,
 actual App proofs, verifier cleanup, effective controls and the actual merge
 request encoder, with GitHub/OCI/kernel/model boundaries modeled. It establishes
-neither hosted execution/isolation nor qualification. The one-candidate controller
+neither hosted execution/isolation nor qualification. The bounded controller
 does not prepare the case-specific mutations or coordinate all sixteen probes.
 Full-inventory workflow coordination, case-specific mutations and ordering,
 qualification receipt production and final hosted qualification remain unfinished.

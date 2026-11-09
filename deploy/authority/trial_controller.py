@@ -15,6 +15,10 @@ from trial_setup import Provision
 from trusted_ci_policy import digest, object_fields, require
 
 
+def case_journal(base, candidate):
+    return base + ('-coding-update' if candidate['name']=='coding-update' else '')
+
+
 def authenticated(value, binding=None):
     from trial_case import Hosted
     require(type(value) in (Admission, Hosted), 'actual authenticated trial controller admission required')
@@ -38,10 +42,10 @@ class Native:
     def _recover_terminal(self, prompt, name, source=None):
         require(type(self.candidates) is Prepare, 'actual native candidate preparer required')
         native=self.candidates.native
-        retained=native.provision.store(native.provision.root/'trial-controller').read()
+        retained=native.provision.store(native.provision.root/case_journal('trial-controller',dict(name=name))).read()
         require(retained is not None and retained['value']['prompt_digest']==digest(prompt) and retained['value']['name']==name,
                 'resume only the exact retained native terminal case')
-        result=Admission(native,source or native.provision.api,recover_terminal=True)
+        result=Admission(native,source or native.provision.api,recover_terminal=True,name=name)
         return copy.deepcopy(result.value['terminal'])
 
     def observe_terminal(self, prompt, name, locator):
@@ -51,10 +55,11 @@ class Native:
     def _observe_terminal(self, prompt, name, locator, source=None):
         require(type(self.candidates) is Prepare, 'actual native candidate preparer required')
         native=self.candidates.native
-        retained=native.provision.store(native.provision.root/'trial-controller').read()
-        require(retained is not None and retained['value']['prompt_digest']==digest(prompt) and retained['value']['name']==name=='direct-push',
+        retained=native.provision.store(native.provision.root/case_journal('trial-controller',dict(name=name))).read()
+        require(retained is not None and retained['value']['prompt_digest']==digest(prompt) and retained['value']['name']==name and
+                name in ('direct-push','coding-update'),
                 'exact native host case terminal observation required')
-        admission=Admission(native,source or native.provision.api,terminal_locator=locator)
+        admission=Admission(native,source or native.provision.api,terminal_locator=locator,name=name)
         completed=native._worker_completion(admission.record,prompt,admission.source)
         require(completed['result']==admission.value['worker'], 'retained CLOSED worker changed')
         admission.worker=completed
@@ -74,23 +79,49 @@ class Native:
         require(type(native) is NativeHandoff and type(native.provision) is Provision, 'actual authenticated native trial required')
         c = native.provision
         source = source or c.api
-        journal = c.store(c.root / 'trial-controller')
+        journal = c.store(c.root / case_journal('trial-controller',dict(name=name)))
         document = journal.read()
         if document is None:
-            result = preparer._run(prompt, source)
-            completed = native._completion(prompt, source)
-            candidates = c.store(c.root / 'trial-candidates').read()
+            history=[]
+            if name=='coding-update':
+                previous=c.store(c.root/'trial-controller').read()
+                require(previous is not None and previous['value']['phase']=='terminal' and
+                        previous['value']['name']=='direct-push' and previous['value']['prompt_digest']==digest(prompt) and
+                        'locator' in previous['value']['terminal'], 'owned independently observed first terminal required')
+                prior=previous['value']
+                publication=c.store(c.root/'trial-case-publication').read()
+                require(publication is not None and publication['value']['phase']=='bound' and
+                        publication['value']['initial']['request']==prior['request'] and
+                        publication['value']['initial']['certificate']==prior['certificate'], 'owned first execution publication required')
+                history=[dict(revision=publication['value']['revision_bound'],terminal=prior['terminal']['locator'])]
+                from trial_case import baseline
+                settled=baseline(c.session.registry,native.registry,prior['record'],history,c.clock)
+                require(settled==prior['terminal']['binding'], 'owned first native completion differs')
+                native.registry.unchanged(settled)
+                candidates=c.store(c.root/'trial-candidates').read()
+                require(candidates==prior['candidates'] and c.store(c.root/'trial-workflow').read()==prior['workflow'] and
+                        c.store(c.root/'trial').read()==prior['provisioning'], 'original native trial ownership changed')
+                completed=native._worker_completion(prior['record'],prompt,source)
+                require(completed['result']==prior['worker'], 'original CLOSED worker differs')
+                result=dict(candidates=candidates['value']['candidates'],worker=prior['worker'])
+                completed=dict(completed,record=prior['record'],retained=prior['workflow'])
+            else:
+                result = preparer._run(prompt, source)
+                completed = native._completion(prompt, source)
+                candidates = c.store(c.root / 'trial-candidates').read()
             matches = [v for v in result['candidates'] if v['name'] == name]
             require(len(matches) == 1 and completed['result'] == result['worker'], 'exact prepared trial case required')
             value = dict(kind='native-trial-controller', prompt_digest=digest(prompt), name=name,
                 record=completed['record'], workflow=completed['retained'], candidates=candidates,
                 provisioning=copy.deepcopy(c.document), candidate=matches[0], worker=completed['result'],
-                phase='ready', certificate=None, request=None, pending=None, terminal=None)
+                phase='ready', certificate=None, request=None, pending=None, terminal=None,history=history)
+            if history:
+                value['previous']=previous
             document = journal.write(None, value)
         value = document['value']
         require(value['kind'] == 'native-trial-controller' and value['prompt_digest'] == digest(prompt) and
                 value['name'] == name, 'resume only the exact retained native case')
-        admission = Admission(native, source)
+        admission = Admission(native, source,name=name)
         admission.guard()
         # A new process reauthenticates the immutable worker and candidate rather
         # than projecting the current pending trial as its original settled state.
@@ -103,16 +134,16 @@ class Native:
 
 
 class Admission:
-    def __init__(self, native, source, recover_terminal=False, terminal_locator=None):
+    def __init__(self, native, source, recover_terminal=False, terminal_locator=None,name=None):
         require(type(native) is NativeHandoff and type(native.provision) is Provision, 'actual authenticated native trial required')
         self.native, self.source = native, source
         c = native.provision
-        self.journal = c.store(c.root / 'trial-controller')
+        self.journal = c.store(c.root / case_journal('trial-controller',dict(name=name)))
         self.document = self.journal.read()
         require(self.document is not None, 'native case intent required')
         self.value = copy.deepcopy(self.document['value'])
         object_fields(self.value, ('kind prompt_digest name record workflow candidates provisioning candidate worker '
-            'phase certificate request pending terminal').split(), 'retained native case')
+            'phase certificate request pending terminal history').split()+(['previous'] if self.value.get('history') else []), 'retained native case')
         self.registry, self.clock = native.registry, native.provision.clock
         self.record = self.value['record']
         record, _ = read(c.session.registry,self.value['workflow']['value']['revision_bound'],self.clock())
@@ -121,9 +152,11 @@ class Admission:
         self.candidate = copy.deepcopy(self.value['candidate'])
         self.request = copy.deepcopy(self.value['request'])
         self.worker = None
-        self.binding = copy.deepcopy(self.record['trial'])
+        from trial_case import case_baseline
+        self.baseline=case_baseline(c.session.registry,self.registry,self.record,self.value,self.clock)
+        self.binding = copy.deepcopy(self.baseline)
         if terminal_locator is not None:
-            require(not recover_terminal and self.value['phase']=='bound' and self.candidate['name']=='direct-push',
+            require(not recover_terminal and self.value['phase']=='bound' and self.candidate['name'] in ('direct-push','coding-update'),
                     'only an owned bound host case can observe a terminal producer')
             self._retained()
             from provenance import authenticated_document
@@ -227,10 +260,15 @@ class Admission:
                 'native case original owner or scope changed')
         require(self.record == self.value['record'] and self.candidate == self.value['candidate'] and
                 self.request == self.value['request'], 'native case object changed')
-        launch=c.store(c.root/'trial-case-launch').read()
+        if self.value['history']:
+            require(c.store(c.root/'trial-controller').read()==self.value['previous'] and
+                    self.value['previous']['value']['phase']=='terminal' and
+                    self.value['previous']['value']['terminal']['binding']==self.baseline,
+                    'owned prior native completion changed')
+        launch=c.store(c.root/case_journal('trial-case-launch',self.candidate)).read()
         if launch is not None and self.value['phase'] in ('bound','closing'):
             from trial_case import CaseReadStaging
-            staging=c.store(c.root/CaseReadStaging.JOURNAL).read()
+            staging=c.store(c.root/case_journal(CaseReadStaging.JOURNAL,self.candidate)).read()
             link=launch['value']['link']
             require(launch['value']['phase']=='consumed' and launch['value']['ready']['candidate']==self.candidate and
                     staging is not None and staging['value']['phase'] in ('secret-started','staged') and
@@ -260,12 +298,14 @@ class Admission:
                 'original trial handoff changed')
         require(self.registry.ref(self.registry.coordinates['registry_branch']) == self.binding['branch_head'] and
                 self.registry.ref(trial_branch) == self.binding['software_revision'], 'trial changed during original observation')
+        from trial_case import history_guard
+        history_guard(original,r,self.value['history'])
         d = self.binding['deployment']
         require(d == r['trial']['deployment'] and d['state'] == 'qualification' and d['qualification'] is None,
                 'only the original unqualified disposable configuration is admitted')
         if self.value['phase'] == 'ready':
             require(self.value['certificate'] is None and self.value['pending'] is None and self.request is None and
-                    self.binding == r['trial'], 'unowned trial preparation state')
+                    self.binding == self.baseline, 'unowned trial preparation state')
         self.local_guard(binding)
 
     def _candidate(self, preparer):

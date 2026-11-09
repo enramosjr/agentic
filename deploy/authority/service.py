@@ -848,7 +848,8 @@ def _case_launch(environment,hint,node,role,clock=None,api_factory=GitHub,upload
         original.unchanged(record['origin']['binding'])
         require(time.monotonic()<deadline and clock()<record['expires'],'native pending case remains pending')
         try:
-            revision=original.ref('agentic-trial-'+record['task_id']+'-case')
+            from registry import trial_reference
+            revision=original.ref(trial_reference(dict(ready,kind='trial-case-handoff')))
             break
         except HostRefusal as error:
             require(error.status==404,'pending case observation unavailable')
@@ -858,8 +859,9 @@ def _case_launch(environment,hint,node,role,clock=None,api_factory=GitHub,upload
             value['request']['snapshot']['run_id']==int(environment['GITHUB_RUN_ID']) and environment.get('GITHUB_RUN_ATTEMPT')=='1' and
             value['launch']['credential']['token_digest']==digest(token),'pending case substituted READY execution')
     trial_launch.authenticate(original,api,value['launch'],clock)
-    registry.authenticate_setup_progress(record['trial'],{OPERATION:value['pending']})
-    return dict(value['request'],handoff=dict(origin=hint['origin'],revision=revision),host_case=value['candidate']['name']=='direct-push')
+    trial_case.fresh_capability(original,value,record,token,clock)
+    registry.authenticate_setup_progress(trial_case.case_baseline(original,registry,record,value,clock),{OPERATION:value['pending']})
+    return dict(value['request'],handoff=dict(origin=hint['origin'],revision=revision),host_case=value['candidate']['name'] in ('direct-push','coding-update'))
 
 
 def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub, app_factory=None,
@@ -900,9 +902,10 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
         while True:
             require(time.monotonic()<deadline and clock()<initial['certificate']['expires'],'CLOSED case binding remains pending')
             original.unchanged(record['origin']['binding'])
-            registry.authenticate_setup_progress(record['trial'],{OPERATION:initial['pending']})
+            registry.authenticate_setup_progress(trial_case.case_baseline(original,registry,record,initial,clock),{OPERATION:initial['pending']})
             try:
-                revision=original.ref('agentic-trial-'+record['task_id']+'-case-execution')
+                from registry import trial_reference
+                revision=original.ref(trial_reference(dict(initial,execution=True)))
                 break
             except HostRefusal as error:
                 require(error.status==404,'case execution observation unavailable')

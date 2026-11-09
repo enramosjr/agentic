@@ -12,7 +12,7 @@ import provenance
 from dispatch_controls import locked_reference
 from registry import Registry, TRIAL, trial_reference
 from setup import TrialReadStaging
-from trial_controller import Admission
+from trial_controller import Admission, case_journal
 from trial_handoff import read as read_origin
 from trusted_ci_policy import digest, object_fields, positive, require, sha
 
@@ -20,7 +20,7 @@ from trusted_ci_policy import digest, object_fields, positive, require, sha
 def read(original, revision, clock):
     require(isinstance(original,Registry) and sha(revision),'exact READY publication required')
     value=original.blob(revision,TRIAL)[0]
-    object_fields(value,('schema_version kind task_id origin_revision prompt candidate worker execution').split(),'READY case')
+    object_fields(value,('schema_version kind task_id origin_revision prompt candidate worker execution history').split(),'READY case')
     require(type(value['schema_version']) is int and value['schema_version']==1 and
             value['kind']=='trial-case-ready' and value['execution'] is None,'READY is not pending authorization')
     record,before=read_origin(original,value['origin_revision'],clock())
@@ -62,7 +62,9 @@ def consumption(value, revision, credential, locator):
 def consume(registry, original, environment, hint, clock):
     from trial_case import CaseReadStaging
     value,record=read(original,hint['revision'],clock)
-    registry.unchanged(record['trial'])
+    from trial_case import case_baseline, fresh_capability
+    binding=case_baseline(original,registry,record,value,clock)
+    registry.unchanged(binding)
     token=environment.get(CaseReadStaging.NAME)
     require(isinstance(token,str) and original.api.token==token and
             digest(token)!=record['execution']['credential']['token_digest'] and
@@ -70,7 +72,10 @@ def consume(registry, original, environment, hint, clock):
             'fresh original-only READY read capability required')
     job=provenance.admit_job(registry.api,record['trial']['deployment'],environment,'trial case ready',clock())
     require(environment.get('GITHUB_RUN_ATTEMPT')=='1','READY rerun refused')
-    original.unchanged(record['origin']['binding']); registry.unchanged(record['trial'])
+    fresh_capability(original,value,record,token,clock)
+    original.unchanged(record['origin']['binding']); registry.unchanged(binding)
+    from trial_case import history_guard
+    history_guard(original,record,value['history'])
     require(original.ref(trial_reference(value))==hint['revision'] and clock()<record['expires'],'READY changed during consumption')
     return consumption(value,hint['revision'],dict(token_digest=digest(token),repository_id=original.coordinates['repository_id'],
         permissions=dict(contents='read')),dict(run_id=int(environment['GITHUB_RUN_ID']),attempt=1,job_id=job['id']))
@@ -83,6 +88,7 @@ class Staging(TrialReadStaging):
     def __init__(self, native, reader, token_factory):
         self.native=native
         a=native.admission
+        self.JOURNAL=case_journal(self.JOURNAL,a.candidate)
         super().__init__(a.native.provision,a.registry,native.document['value']['revision'],reader,token_factory)
 
     def run(self):
@@ -92,24 +98,42 @@ class Staging(TrialReadStaging):
         value,record=read(c.session.registry,self.revision,c.clock)
         require(value==self.native.document['value']['ready'],'retained READY differs')
         journal=c.store(c.root/self.JOURNAL)
+        previous_document=None
         def check(document):
             self.native.guard()
             require(journal.read()==document and c.session.registry.ref(trial_reference(value))==self.revision,
                     'READY staging ownership changed')
-        return self._stage(c,record,record['origin']['binding'],journal,check)
+            if previous_document is not None:
+                require(c.store(c.root/Staging.JOURNAL).read()==previous_document, 'owned revoked predecessor changed')
+        previous=Staging.JOURNAL if a.value['history'] else None
+        if previous is not None:
+            from trial_case import read as read_case
+            prior,_=read_case(c.session.registry,a.value['history'][0]['revision'],c.clock)
+            staged=c.store(c.root/previous).read()
+            require(staged is not None and staged['value']['credential'] is not None and
+                    staged['value']['revision']==prior['launch']['revision'] and
+                    digest(staged['value']['credential']['token'])==prior['execution']['credential']['token_digest'],
+                    'owned predecessor capability differs')
+            self.native.guard()
+            revoke(c,self.token_factory)
+            self.native.guard()
+            previous_document=c.store(c.root/previous).read()
+            require(previous_document['value']['phase']=='revoked', 'owned predecessor cleanup remains pending')
+        return self._stage(c,record,record['origin']['binding'],journal,check,previous=previous)
 
 
-def revoke(provision, token_factory):
+def revoke(provision, token_factory, name='direct-push'):
     """Reconstruct exact-token cleanup without expired native admission reads."""
     authority_release.authorize('bootstrap')
     from trial_setup import Provision
     require(type(provision) is Provision,'actual native case provisioning owner required for cleanup')
-    document=provision.store(provision.root/'trial-case-launch').read()
+    candidate=dict(name=name)
+    document=provision.store(provision.root/case_journal('trial-case-launch',candidate)).read()
     require(document is not None and sha(document['value']['revision']),'retained READY cleanup identity required')
     # Reuse the same credential engine with its fixed case purpose. This facade
     # can only revoke the exact retained token; it cannot mint, stage or dispatch.
     staging=TrialReadStaging(provision,None,document['value']['revision'],None,token_factory)
-    staging.NAME,staging.JOURNAL=Staging.NAME,Staging.JOURNAL
+    staging.NAME,staging.JOURNAL=Staging.NAME,case_journal(Staging.JOURNAL,candidate)
     return staging.revoke()
 
 
@@ -127,7 +151,7 @@ class Native:
         if self.document is not None and self.document['value']['credential'] is not None:
             credential=self.document['value']['credential']
             c=self.admission.native.provision
-            staged=c.store(c.root/Staging.JOURNAL).read()
+            staged=c.store(c.root/case_journal(Staging.JOURNAL,self.admission.candidate)).read()
             require(staged is not None and staged['value']['phase'] in ('secret-started','staged') and
                     staged['value']['revision']==credential['revision'] and
                     digest(staged['value']['credential']['token'])==credential['token_digest'] and
@@ -146,10 +170,10 @@ class Native:
         c=a.native.provision; original=c.session.registry
         p=a.record['trial']['deployment']['policy']
         require(p['workflow']=='.github/workflows/authority-v2.yml','case launch requires the fixed authority workflow')
-        self.journal=c.store(c.root/'trial-case-launch'); self.document=self.journal.read()
+        self.journal=c.store(c.root/case_journal('trial-case-launch',a.candidate)); self.document=self.journal.read()
         ready=dict(schema_version=1,kind='trial-case-ready',task_id=a.record['task_id'],
             origin_revision=a.value['workflow']['value']['revision_bound'],prompt=prompt,
-            candidate=copy.deepcopy(a.candidate),worker=copy.deepcopy(a.value['worker']),execution=None)
+            candidate=copy.deepcopy(a.candidate),worker=copy.deepcopy(a.value['worker']),execution=None,history=copy.deepcopy(a.value['history']))
         require(digest(prompt)==a.record['prompt_digest'],'exact approved case prompt required')
         if self.document is None:
             require(a.value['phase']=='ready','READY intent must precede case fencing')

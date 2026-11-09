@@ -244,7 +244,7 @@ class TrialReadStaging:
                     'native delegation authorization changed during readback')
         return self._stage(c, record, origin, journal, guard)
 
-    def _stage(self, c, record, origin, journal, check):
+    def _stage(self, c, record, origin, journal, check, previous=None):
         """Shared own-App mint/write journal; phases never replay unknown effects."""
         import app_proofs
         from trusted_ci_deployment import timestamp
@@ -254,10 +254,14 @@ class TrialReadStaging:
         self._guard = guard
         guard()
         if document is None:
+            prior=c.store(c.root/previous).read() if previous is not None else None
+            require(previous is None or prior is not None and prior['value']['phase']=='revoked' and
+                    prior['value']['credential'] is not None and prior['value']['revision']!=self.revision,
+                    'owned old delegation must be revoked before replacement')
             inventory = c.api.pages(self.registry.root + '/actions/secrets', 'secrets')
             require(isinstance(inventory, list) and len(inventory) <= 10000 and
                     all(isinstance(v, dict) and isinstance(v.get('name'), str) for v in inventory) and
-                    not any(v['name'].upper() == self.NAME for v in inventory), 'unowned origin-read secret already exists')
+                    (prior is not None or not any(v['name'].upper() == self.NAME for v in inventory)), 'unowned origin-read secret already exists')
             guard()
             document = journal.write(None, dict(revision=self.revision, phase='prepared', credential=None))
         state = copy.deepcopy(document['value'])
@@ -275,6 +279,7 @@ class TrialReadStaging:
                 '/access_tokens', dict(repository_ids=[original.coordinates['repository_id']], permissions=dict(contents='read')))
             try:
                 require(isinstance(response.get('token'), str) and response['token'] and
+                        (previous is None or response['token']!=c.store(c.root/previous).read()['value']['credential']['token']) and
                         app_proofs.normalized(response.get('permissions')) == dict(contents='read') and
                         [v['id'] for v in response.get('repositories', [])] == [original.coordinates['repository_id']],
                         'delegated token scope differs from original authority contents-read')

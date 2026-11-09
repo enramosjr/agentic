@@ -15,11 +15,11 @@ from trusted_ci_policy import digest, object_fields, positive, require
 def selected(admission):
     from trial_controller import authenticated
     authenticated(admission)
-    return admission.candidate['name'] == 'direct-push'
+    return admission.candidate['name'] in ('direct-push','coding-update')
 
 
 def _context(admission):
-    require(selected(admission), 'only the prepared native direct-push case is implemented')
+    require(selected(admission), 'only the prepared native protected-update cases are implemented')
     admission.guard()
     b, s = admission.binding, admission.request['snapshot']
     return b, s, b['deployment']
@@ -36,13 +36,13 @@ def _case(admission, authority):
     coordinates = dict(configuration_revision=b['configuration_revision'],operation=b['fence']['pending'],
         sequence=b['fence']['sequence'],issuer_installation_id=identities['apps']['issuer']['installation_id'],
         evidence_job_id=proof['job_id'],evidence_digest=digest(proof['document']),task_digest=task['task_digest'])
-    return dict(name='direct-push',snapshot=s,evidence=location,coordinates=coordinates,
+    return dict(name=admission.candidate['name'],snapshot=s,evidence=location,coordinates=coordinates,
                 expected_failure=None,mutations=[],prior=None)
 
 
 def _identity(admission):
     b, s, _ = _context(admission)
-    return dict(schema_version=1,kind='trial-host-denial',case='direct-push',
+    return dict(schema_version=1,kind='trial-host-denial',case=admission.candidate['name'],
         operation_id=admission.request['operation_id'],sequence=b['fence']['sequence'],
         operation_digest=digest(b['fence']['pending']),configuration_revision=b['configuration_revision'],
         deployment_digest=b['deployment_digest'],certificate_digest=digest(admission.value['certificate']),
@@ -111,7 +111,7 @@ def read(admission, authority, locator=None):
             observation['denied_obligation'] is None and commit['sha']==s['merge'] and
             [v['sha'] for v in commit['parents']]==[s['base'],s['head']] and
             commit['tree']['sha']==admission.candidate['submitted']['tree'], 'intended host denial was not established')
-    expected_record = dict(name='direct-push',pr=s['pr'],head=s['head'],base=s['base'],merge=s['merge'],
+    expected_record = dict(name=admission.candidate['name'],pr=s['pr'],head=s['head'],base=s['base'],merge=s['merge'],
         tree=commit['tree']['sha'],before=s['base'],after=s['base'],actor_id=actor,request_sent=True,
         http_status=observation['http_status'],denial_category='protected_update',denied_obligation=None,broker_refusal=None,
         merge_commit=None,merge_parents=[],merge_tree=None,evidence_digest=digest(observation))

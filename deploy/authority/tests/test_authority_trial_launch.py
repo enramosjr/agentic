@@ -17,7 +17,7 @@ from trusted_ci_policy import Refusal
 
 
 class Launched(case_fixture.Fresh):
-    def ready(self, lost=False, absent=False, name='positive'):
+    def ready(self, lost=False, absent=False, name='positive', token='fresh-case-ready'):
         self.admission=trial_controller.Native(self.preparer)._open('prompt',name,self.source)
         candidate=self.admission.candidate['submitted']
         self.synthetic(next(v for v in self.source.prs if v['number']==candidate['pr']))
@@ -26,18 +26,18 @@ class Launched(case_fixture.Fresh):
         d=self.admission.record['origin']['binding']['deployment']
         root=AppAPI(d,app_proofs.load_identities(d),'reader')
         post=root.post
-        root.post=lambda *args:dict(post(*args),token='fresh-case-ready',expires_at=stamp(self.clock[0]+500))
-        self.revoked=set()
+        root.post=lambda *args:dict(post(*args),token=token,expires_at=stamp(self.clock[0]+500))
+        if not hasattr(self,'revoked'): self.revoked=set()
         outer=self
         class Read:
-            token='fresh-case-ready'
+            def __init__(self,value): self.token=value
             def get(self,path):
                 if self.token in outer.revoked: raise Refusal('revoked')
                 return outer.origin.api.get(path)
             def pages(self,*args): return [{'id':outer.origin.coordinates['repository_id']}]
             def fetch(self,*args,**kwargs): outer.revoked.add(self.token)
-        self.origin_factory=lambda token:Read()
-        self.case_token=Read.token
+        self.origin_factory=lambda value:Read(value)
+        self.case_token=token
         self.launch=trial_launch.Native(self.admission,root,self.origin_factory)
         self.dispatched=[]
         send,pages=self.api.post,self.api.pages

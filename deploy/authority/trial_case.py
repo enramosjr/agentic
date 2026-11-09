@@ -15,10 +15,64 @@ from trial_handoff import Native as NativeHandoff, read as read_origin
 from trusted_ci_policy import digest, object_fields, require, sha
 
 
+def baseline(original, registry, record, history, clock):
+    """Compose only the bounded direct-push terminal prerequisite, never latest state."""
+    require(isinstance(history,list) and len(history)<=1, 'bounded native progression history required')
+    before=copy.deepcopy(record['trial'])
+    if not history: return before
+    entry=history[0]
+    object_fields(entry,('revision','terminal'),'prior native case')
+    prior,loaded=read(original,entry['revision'],clock)
+    require(loaded==record and prior['history']==[] and prior['candidate']['name']=='direct-push' and
+            prior['execution'] is not None and prior['launch'] is not None, 'exact first executed host case required')
+    from types import SimpleNamespace
+    Admission._retained(SimpleNamespace(binding=before,record=record,value=prior,candidate=prior['candidate']))
+    location=entry['terminal']; s=prior['request']['snapshot']
+    require(location['run_id']==s['run_id'] and location['attempt']==s['run_attempt'], 'prior terminal run differs')
+    proof=provenance.authenticated_document(registry.api,before['deployment'],location,
+                                          'trial-case-terminal',record['task_id'],clock())
+    value=proof['document']
+    object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split(),'prior closed terminal')
+    require(type(value['schema_version']) is int and value['schema_version']==1 and value['kind']=='trial-case-terminal' and
+            value['request_digest']==digest(prior['request']) and value['certificate_digest']==digest(prior['certificate']) and
+            type(value['completed']) is int and proof['job_started']<=value['completed']<=proof['artifact_created']<=proof['job_completed'],
+            'prior terminal substituted case or interval')
+    pending=registry.authenticate_setup_transition(before,{OPERATION:prior['pending']},value['before'])
+    from operation_fence import terminal
+    receipt=terminal(value['after']['fence']['completed'][-1])
+    require(receipt['kind']=='not-submitted' and receipt['operation_id']==prior['request']['operation_id'] and
+            receipt['sequence']==prior['request']['sequence'], 'prior host terminal operation differs')
+    fence=copy.deepcopy(pending['fence']); fence['pending']=None; fence['completed'].append(receipt)
+    return registry.authenticate_setup_transition(pending,{OPERATION:fence},value['after'])
+
+
+def case_baseline(original,registry,record,value,clock):
+    history=value['history']
+    require((value['candidate']['name']=='coding-update') == bool(history), 'case progression identity differs')
+    if history:
+        prior,_=read(original,history[0]['revision'],clock)
+        require(value['worker']==prior['worker'] and all(value['candidate']['submitted'][k]!=prior['candidate']['submitted'][k]
+                for k in ('pr','head','task_id')), 'distinct reserved case from the same worker required')
+    return baseline(original,registry,record,history,clock)
+
+
+def fresh_capability(original,value,record,token,clock):
+    require(digest(token)!=record['execution']['credential']['token_digest'], 'original worker capability is revoked')
+    if value['history']:
+        prior,_=read(original,value['history'][0]['revision'],clock)
+        require(digest(token)!=prior['execution']['credential']['token_digest'], 'prior case capability cannot authorize progression')
+
+
+def history_guard(original,record,history):
+    if history:
+        prior=dict(kind='trial-case-handoff',task_id=record['task_id'],execution=True)
+        require(original.ref(trial_reference(prior))==history[0]['revision'], 'authenticated prior case reference moved')
+
+
 def read(original, revision, clock, _initial=False):
     require(isinstance(original, Registry) and sha(revision), 'exact case publication required')
     value = original.blob(revision, TRIAL)[0]
-    object_fields(value, ('schema_version kind task_id origin_revision prompt candidate worker certificate request pending execution launch').split(),
+    object_fields(value, ('schema_version kind task_id origin_revision prompt candidate worker certificate request pending execution launch history').split(),
                   'case handoff')
     require(type(value['schema_version']) is int and value['schema_version'] == 1 and
             value['kind'] == 'trial-case-handoff', 'authenticated case handoff required')
@@ -30,7 +84,7 @@ def read(original, revision, clock, _initial=False):
         from trial_launch import read as read_ready
         object_fields(value['launch'],('revision','credential','handshake'),'READY consumption binding')
         ready, launched=read_ready(original,value['launch']['revision'],clock)
-        require(launched==record and all(ready[k]==value[k] for k in ('task_id','origin_revision','prompt','candidate','worker')) and
+        require(launched==record and all(ready[k]==value[k] for k in ('task_id','origin_revision','prompt','candidate','worker','history')) and
                 value['launch']['handshake']['run_id']==value['request']['snapshot']['run_id'], 'case substituted READY launch')
     commit = original.api.get(original.root + '/git/commits/' + revision)
     require(commit.get('sha') == revision and [v['sha'] for v in commit['parents']] == [before['branch_head']] and
@@ -59,7 +113,8 @@ class Publication:
         require(admission.value['phase'] == 'bound', 'case must own its exact pending fence')
         self.admission = admission
         c = admission.native.provision
-        self.journal = c.store(c.root / 'trial-case-publication')
+        from trial_controller import case_journal
+        self.journal = c.store(c.root / case_journal('trial-case-publication',admission.candidate))
 
     def publish(self, prompt, launch=None):
         authority_release.authorize('qualify-live')
@@ -67,7 +122,7 @@ class Publication:
         a.guard()
         value = dict(schema_version=1, kind='trial-case-handoff', task_id=a.record['task_id'],
             origin_revision=a.value['workflow']['value']['revision_bound'], prompt=prompt,
-            **{k:copy.deepcopy(a.value[k]) for k in ('candidate','worker','certificate','request','pending')}, execution=None,launch=copy.deepcopy(launch))
+            **{k:copy.deepcopy(a.value[k]) for k in ('candidate','worker','certificate','request','pending','history')}, execution=None,launch=copy.deepcopy(launch))
         require(digest(prompt) == a.record['prompt_digest'], 'exact separately approved worker prompt required')
         document = self.journal.read()
         if document is None:
@@ -99,10 +154,11 @@ class Publication:
             # pending/bound Git effect must retain both, including after a
             # blocking artifact or immutable-object read.
             c=self.admission.native.provision
-            launch=c.store(c.root/'trial-case-launch').read()
-            staging=c.store(c.root/CaseReadStaging.JOURNAL).read()
+            from trial_controller import case_journal
+            launch=c.store(c.root/case_journal('trial-case-launch',self.admission.candidate)).read()
+            staging=c.store(c.root/case_journal(CaseReadStaging.JOURNAL,self.admission.candidate)).read()
             require(launch is not None and launch['value']['phase']=='consumed' and launch['value']['link']==link and
-                    all(launch['value']['ready'][k]==initial[k] for k in ('task_id','origin_revision','prompt','candidate','worker')) and
+                    all(launch['value']['ready'][k]==initial[k] for k in ('task_id','origin_revision','prompt','candidate','worker','history')) and
                     staging is not None and staging['value']['revision']==link['revision'] and
                     staging['value']['phase'] in ('secret-started','staged') and
                     digest(staging['value']['credential']['token'])==link['credential']['token_digest'] and
@@ -110,8 +166,8 @@ class Publication:
                     'retained READY publication delegation changed')
             require(c.session.registry.ref(trial_reference(launch['value']['ready']))==link['revision'],
                     'READY publication moved during case effect')
-            require(self.journal.read()==document and c.store(c.root/'trial-case-launch').read()==launch and
-                    c.store(c.root/CaseReadStaging.JOURNAL).read()==staging and
+            require(self.journal.read()==document and c.store(c.root/case_journal('trial-case-launch',self.admission.candidate)).read()==launch and
+                    c.store(c.root/case_journal(CaseReadStaging.JOURNAL,self.admission.candidate)).read()==staging and
                     self.admission.clock()<min(link['credential']['expires'],initial['certificate']['expires']),
                     'case publication delegation changed or expired')
 
@@ -158,6 +214,8 @@ class CaseReadStaging(TrialReadStaging):
     def __init__(self, publication, reader, token_factory):
         require(type(publication) is Publication, 'actual native case publication required')
         a = publication.admission
+        from trial_controller import case_journal
+        self.JOURNAL=case_journal(self.JOURNAL,a.candidate)
         document = publication.journal.read()
         require(document is not None and document['value']['revision'] is not None, 'retained published case required')
         super().__init__(a.native.provision, a.registry, document['value']['revision'], reader, token_factory)
@@ -212,8 +270,9 @@ def consume(registry, origin_reader, environment, hint, clock):
         from trial_launch import authenticate
         authenticate(original,registry.api,value['launch'],clock)
     require(value['execution'] is None, 'initial case publication required')
-    binding = registry.authenticate_setup_progress(record['trial'], {OPERATION:value['pending']})
+    binding = registry.authenticate_setup_progress(case_baseline(original,registry,record,value,clock), {OPERATION:value['pending']})
     token = environment.get(CaseReadStaging.NAME)
+    fresh_capability(original,value,record,token,clock)
     require(isinstance(token,str) and 0 < len(token) <= 16384 and origin_reader.token == token and
             digest(token) != record['execution']['credential']['token_digest'] and
             [v['id'] for v in origin_reader.pages('/installation/repositories','repositories')] == [original.coordinates['repository_id']],
@@ -222,6 +281,7 @@ def consume(registry, origin_reader, environment, hint, clock):
     require(environment.get('GITHUB_RUN_ID') == str(value['request']['snapshot']['run_id']) and
             environment.get('GITHUB_RUN_ATTEMPT') == '1', 'case consumer differs from prepared execution')
     original.unchanged(record['origin']['binding']); registry.unchanged(binding)
+    history_guard(original,record,value['history'])
     require(original.ref(trial_reference(value)) == hint['revision'] and clock() < value['certificate']['expires'],
             'case changed during consumption')
     return consumption(value,hint['revision'],dict(token_digest=digest(token),repository_id=original.coordinates['repository_id'],
@@ -251,6 +311,7 @@ class Hosted:
         execution = value['execution']
         require(execution is not None, 'closed case consumption binding required')
         credential, locator = execution['credential'], execution['handshake']
+        fresh_capability(self.original,value,r,getattr(origin_reader,'token',None),clock)
         object_fields(credential, ('revision repository_id permissions token_digest expires').split(), 'fresh consumed case delegation')
         staged_revision=value['launch']['revision'] if value['launch'] is not None else execution['publication_revision']
         require(credential['revision'] == staged_revision and
@@ -264,9 +325,9 @@ class Hosted:
         _closed(proof,consumption(initial,execution['publication_revision'],credential,locator),r['created'],credential['expires'])
         self.value = dict(value,phase='bound')
         self.candidate, self.request = copy.deepcopy(value['candidate']), copy.deepcopy(value['request'])
-        self.binding = copy.deepcopy(r['trial'])
+        self.binding = case_baseline(self.original,registry,r,value,clock)
         self._retained()
-        self.binding = registry.authenticate_setup_progress(r['trial'], {OPERATION:value['pending']})
+        self.binding = registry.authenticate_setup_progress(self.binding, {OPERATION:value['pending']})
         require(locator['run_id'] == self.request['snapshot']['run_id'] and locator['attempt'] == 1,
                 'case consumed execution differs')
         self.worker = None
@@ -326,4 +387,5 @@ class Hosted:
                 self.original.ref(trial_reference(self.case)) == self.revision and
                 self.registry.ref(self.registry.coordinates['registry_branch']) == self.binding['branch_head'] and
                 self.registry.ref(trial_branch) == self.binding['software_revision'], 'case pointers moved during live observation')
+        history_guard(self.original,r,self.case['history'])
         self.local_guard(binding)

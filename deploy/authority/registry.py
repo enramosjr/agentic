@@ -24,6 +24,8 @@ MAX_DOCUMENT = 512 * 1024
 
 def trial_reference(record):
     suffix = '-case' if record.get('kind') == 'trial-case-handoff' else '-case-ready' if record.get('kind') == 'trial-case-ready' else ''
+    if suffix and record.get('candidate',{}).get('name') == 'coding-update':
+        suffix += '-coding-update'
     return 'agentic-trial-' + record['task_id'] + suffix + ('-execution' if record['execution'] else '')
 
 
@@ -226,6 +228,10 @@ class Registry:
 
     def authenticate_setup_progress(self, before, documents):
         """Authenticate one retained native CAS intent, never arbitrary latest state."""
+        return self.authenticate_setup_transition(before, documents, self.binding(check_software=False))
+
+    def authenticate_setup_transition(self, before, documents, current):
+        """Authenticate an immutable exact transition; callers guard the live tip separately."""
         require(isinstance(documents, dict) and documents and set(documents) <= {DOCUMENT, OPERATION},
                 'exact retained native registry documents required')
         old, revision = self.blob(before['branch_head'], DOCUMENT)
@@ -233,7 +239,11 @@ class Registry:
                 digest(old) == before['deployment_digest'] and
                 self.blob(before['branch_head'], OPERATION)[0] == before['fence'],
                 'retained native registry parent differs')
-        current = self.binding(check_software=False)
+        value, configuration = self.blob(current['branch_head'], DOCUMENT)
+        require(value == current['deployment'] and configuration == current['configuration_revision'] and
+                digest(value) == current['deployment_digest'] and current['branch_exists'] is True and
+                self.blob(current['branch_head'], OPERATION)[0] == current['fence'],
+                'retained native registry result differs')
         require(current['deployment'] == documents.get(DOCUMENT, before['deployment']) and
                 current['fence'] == documents.get(OPERATION, before['fence']) and
                 current['software_revision'] == before['software_revision'], 'native registry progress differs')
