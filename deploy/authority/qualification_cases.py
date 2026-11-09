@@ -2,8 +2,8 @@
 
 Consumes independently prepared PRs and closed verifier/publication observations.
 It makes real protected-update attempts; it never creates candidate reviews or a
-qualification receipt. The fresh-broker suffix and native trial orchestration are
-separate unfinished producers. Public execution remains release-held.
+qualification receipt. The fresh-broker suffix is a separate library; native trial
+orchestration remains unfinished. Public execution remains release-held.
 """
 import copy
 from urllib.parse import quote

@@ -100,9 +100,42 @@ across processes: native case orchestration and retained dispatch intents remain
 unfinished. Public invocation is held before network access. Local fixtures
 exercise verification, cleanup, closed artifacts and publication against existing
 synthetic active regression configurations; they do not establish initial trial
-qualification. Broker-refusal/positive case producers, the receipt producer and
-hosted qualification remain unfinished. Production active-state and existing
-qualification requirements are unchanged.
+qualification. Production active-state and existing qualification requirements
+are unchanged.
+
+The held `qualification_broker.BrokerCases` library consumes independently prepared
+real broker Sessions and reserved host-prefix coordinates, then executes the
+ordered suffix: expired proof, revoked qualification, authority outage, context
+transition and positive. It authenticates the actual merger App and source-only
+token through the existing mint/revocation path. It reuses the existing fresh
+broker, final controls and five final purpose proofs, immutable dispatch/outcome
+receipts and actual-commit recovery. The prefix input reserves distinct PRs/heads;
+it does not authenticate or execute those preceding host probes. Native full-case
+orchestration must supply their actual observations separately.
+
+Only specific measured refusals count: an authenticated issued proof has expired,
+the previously authenticated qualification artifact was removed at final readback,
+the authority's final artifact inventory returned 502/503/504, or a read-back
+configuration and epoch actually changed. Other failures propagate. Negative
+results require no merge request and an unchanged target. Stable-context refusals
+also require an authenticated positive no-dispatch receipt. A changed registry
+cannot authorize an old-context receipt; that refusal leaves the fence held for
+independently pinned recovery. Positive results require exactly one synchronous
+expected-head PUT, authenticated dispatch evidence, and actual closed merged-PR
+readback with parents `[base, head]` and the intended tree. The actual merge SHA
+may differ from the synthetic SHA. Unknown acknowledgements never qualify or
+authorize a retry. Returned secret-free observations bind the measured identities,
+requests, refs, proof/receipt locators, actual commits and evidence digests.
+
+Both libraries are held before transport access and refuse reuse after starting.
+Broker receipts also retain the existing create-only dispatch protection; no
+durable native full-inventory restart coordinator is supplied. Connected local
+fixtures execute the existing verification/publication and fresh-broker graph
+using synthetic active regression configurations and modeled host/OCI boundaries.
+They do not integrate initial-trial handoff/worker admission, prepare native case
+PRs, produce qualification receipts, qualify hosted isolation or activate anything.
+Native trial scoping/orchestration, receipt production and hosted qualification
+remain unfinished; external real candidate human review remains required.
 
 Administrative preparation reads independent review of the exact candidate head
 before collecting retained evidence and again immediately before acquiring its

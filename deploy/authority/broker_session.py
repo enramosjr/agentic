@@ -9,6 +9,7 @@ import time
 
 import authority_release
 import broker_evidence
+from broker_refusal import same
 import control_rendezvous
 from merge_receipts import ActionsReceipts, not_submitted
 import merge_window
@@ -32,9 +33,7 @@ class Session:
 
     def _guard(self):
         current = self.registry.binding()
-        require(all(current[k] == self.binding[k] for k in
-            ('configuration_revision', 'deployment_digest', 'deployment', 'fence')),
-            'operation changed while awaiting final producers')
+        same(current, self.binding, 'operation changed while awaiting final producers')
         self.receipts.current_job()
 
     def _wait(self, deadline, warm):

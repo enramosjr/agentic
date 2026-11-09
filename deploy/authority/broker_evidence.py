@@ -12,6 +12,7 @@ from authority_github import Readers, current_snapshot
 from authority_protocol import validate_deployment
 import app_proofs
 import broker_proofs
+from broker_refusal import BrokerRefusal, same
 import checks
 import control_rendezvous
 from merge_receipts import ActionsReceipts
@@ -19,14 +20,12 @@ import merge_window
 from provenance import authenticated_document, validate_evidence
 import qualification_record
 import task_admission
-from trusted_ci_github import independent_approval
+from trusted_ci_github import HostRefusal, independent_approval
 from trusted_ci_policy import digest, object_fields, positive, require, sha
 
 
 def _same(binding, original):
-    require(all(binding[k] == original[k] for k in
-                ('configuration_revision', 'deployment_digest', 'deployment', 'fence')),
-            'broker configuration or operation changed')
+    same(binding, original, 'broker configuration or operation changed')
 
 
 def preload(registry, source, authority, identities, job_id, locators, clock):
@@ -68,11 +67,21 @@ def _artifact_readback(authority, d, references):
     for ref in references:
         run_id = ref['run_id']
         if run_id not in inventories:
-            inventories[run_id] = authority.pages(root + '/actions/runs/' + str(run_id) + '/artifacts', 'artifacts')
+            path = root + '/actions/runs/' + str(run_id) + '/artifacts'
+            try:
+                inventories[run_id] = authority.pages(path, 'artifacts')
+            except HostRefusal as error:
+                if error.status not in (502, 503, 504):
+                    raise
+                raise BrokerRefusal('readback_unavailable', 'authority artifact readback unavailable',
+                                    dict(path=path, status=error.status)) from error
         role, key = ref['role'], ref['key']
         prefix = role if role == 'qualification' else role + '-' + str(key)
         name = prefix + '-' + str(ref['attempt'])
         matches = [a for a in inventories[run_id] if a['name'] == name]
+        if role == 'qualification' and not matches:
+            raise BrokerRefusal('qualification_revoked', 'authenticated qualification artifact was removed',
+                                {k: ref[k] for k in ('artifact_id', 'artifact_digest', 'run_id', 'attempt', 'job_id')})
         require(len(matches) == 1, 'required broker evidence is missing or ambiguous')
         a = matches[0]
         run = a['workflow_run']
@@ -141,7 +150,8 @@ def finish(registry, source, authority, identities, prepared, request, control_l
                   *prepared['proofs']['provenance'].values(), *proofs['provenance'].values(), controls['provenance']]
     artifact_digest = _artifact_readback(authority, d, references)
     commit = source.get(root + '/git/commits/' + current['merge'])
-    require(sha(commit['tree']['sha']) and [p['sha'] for p in commit['parents']] == [current['base'], current['head']],
+    require(commit.get('sha') == current['merge'] and sha(commit['tree']['sha']) and
+            [p['sha'] for p in commit['parents']] == [current['base'], current['head']],
             'tested merge tree or parents changed')
     require(current_snapshot(api, d, op['pr'], op['run_id'], op['attempt']) == current,
             'candidate moved during final authorization')

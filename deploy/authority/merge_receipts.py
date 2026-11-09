@@ -12,6 +12,7 @@ import zipfile
 
 from authority_protocol import fingerprint
 import merge_window
+from broker_refusal import same
 from operation_fence import validate as validate_fence
 from trusted_ci_deployment import timestamp
 from trusted_ci_policy import Refusal, digest, loads, object_fields, positive, require
@@ -47,9 +48,7 @@ class ActionsReceipts:
 
     def _owned(self):
         current = self.read_binding()
-        require(all(current[key] == self.binding[key] for key in
-                    ('configuration_revision', 'deployment_digest', 'deployment', 'fence')),
-                'receipt operation or configuration changed')
+        same(current, self.binding, 'receipt operation or configuration changed')
         return current
 
     def _name(self, kind):

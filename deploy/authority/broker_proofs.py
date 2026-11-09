@@ -1,6 +1,7 @@
 """Read all five own-App proofs for one exact pending broker attempt."""
 import copy
 import app_proofs
+from broker_refusal import BrokerRefusal
 from authority_protocol import validate_deployment
 from operation_fence import validate as validate_fence
 from provenance import admit_job, authenticated_document
@@ -49,16 +50,26 @@ def _read(authority, binding, identities, snapshot, locators, now, request=None)
                 'broker purpose envelope binding differs')
         require(all(positive(value[k]) for k in ('issued', 'completed', 'expires')) and type(now) is int and
                 max(op['created'], proof['job_started']) <= value['issued'] <= value['completed'] <=
-                proof['artifact_created'] <= proof['job_completed'] <= now < value['expires'] <=
+                proof['artifact_created'] <= proof['job_completed'] <= now and
+                proof['job_completed'] < value['expires'] <=
                 min(value['issued'] + 300, d['expires'], op['execution_deadline']),
                 'broker purpose envelope expired or interval differs')
+        # Establish a well-formed, actually issued capability before classifying
+        # expiry. A malformed envelope/result is not the intended expiry denial.
+        result = app_proofs.validate(value['result'], d, identities, purpose,
+                                     binding['configuration_revision'], value['completed'])
+        require(value['issued'] <= result['observed'] <= value['completed'] and
+                value['expires'] <= result['expires'], 'purpose capability interval differs')
+        if now >= value['expires']:
+            raise BrokerRefusal('proof_expired', 'broker purpose envelope expired or interval differs',
+                dict(purpose=purpose, artifact_id=proof['artifact_id'], proof_digest=digest(value),
+                     provenance={k: v for k, v in proof.items() if k != 'document'},
+                     expires=value['expires'], observed=now))
         if request:
             require(value['ready_digest'] == digest(request) and value['ready_nonce'] == request['nonce'] and
                     request['issued'] <= value['issued'] and now - value['issued'] <= 30,
                     'final own-App readback is stale or from another readiness round')
         result = app_proofs.validate(value['result'], d, identities, purpose, binding['configuration_revision'], now)
-        require(value['issued'] <= result['observed'] <= value['completed'] and
-                value['expires'] <= result['expires'], 'purpose capability interval differs')
         documents[purpose] = value
         provenance[purpose] = {k: v for k, v in proof.items() if k != 'document'}
         valid_until[purpose] = value['expires']
