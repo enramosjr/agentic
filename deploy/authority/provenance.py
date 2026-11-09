@@ -49,7 +49,8 @@ def admit_job(api, d, environment, name, now):
             environment.get('GITHUB_SHA') == p['workflow_sha'], 'not the pinned authority environment')
     key = {'discover': 'discover', 'prepare': 'prepare', 'hosted qualification': 'qualification',
            'model authorization': 'model_auth', 'prepare task': 'prepare_task', 'trial handoff': 'trial_handoff',
-           'trial preparation':'trial_prepare', 'trial case handoff':'trial_case_handoff', 'trial case ready':'trial_case_ready'}.get(name)
+           'trial preparation':'trial_prepare', 'trial case handoff':'trial_case_handoff', 'trial case ready':'trial_case_ready',
+           'trial host denial':'trial_host_denial'}.get(name)
     matrix = re.fullmatch(r'(verify|controls|publish|broker|publication controls) \([1-9][0-9]{0,19}\)', name)
     proof = re.fullmatch(r'(proof|final proof) \((admin|reader|issuer|coding|merge)\)', name)
     if matrix:
@@ -138,7 +139,7 @@ def _authenticated_document(api, d, locator, role, key, now, live=False):
             'current authority artifact coordinates required')
     require(role in ('evidence', 'controls', 'publication-controls', 'proof', 'final-proof', 'task', 'task-ready', 'task-controls',
                     'model-lease', 'qualification', 'credential-proof', 'trial-task', 'trial-task-ready',
-            'trial-task-controls', 'trial-handoff', 'trial-case-handoff', 'trial-case-ready') and live == (role in ('task-ready', 'trial-task-ready')),
+            'trial-task-controls', 'trial-handoff', 'trial-case-handoff', 'trial-case-ready', 'trial-host-intent', 'trial-host-denial', 'trial-case-terminal') and live == (role in ('task-ready', 'trial-task-ready')),
             'unknown authority producer role')
     if role.startswith('trial-'):
         require(d['state'] == 'qualification' and d['qualification'] is None and
@@ -165,6 +166,10 @@ def _authenticated_document(api, d, locator, role, key, now, live=False):
         job_name, prefix = 'trial case handoff', 'trial-case-handoff-' + key
     elif role == 'trial-case-ready':
         job_name, prefix = 'trial case ready', 'trial-case-ready-' + key
+    elif role in ('trial-host-intent','trial-host-denial'):
+        job_name, prefix = 'trial host denial', role + '-' + key
+    elif role == 'trial-case-terminal':
+        job_name, prefix = 'finalize', role + '-' + key
     elif role == 'credential-proof':
         require(key in ('admin', 'reader', 'issuer', 'coding', 'merge', 'model_vault', 'model_delivery'),
                 'unknown credential producer')

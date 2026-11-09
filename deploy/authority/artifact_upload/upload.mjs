@@ -4,12 +4,12 @@ import {join, resolve, dirname} from 'node:path';
 
 function documentMember(name) {
   if (typeof name !== 'string') return null;
-  if (/^agentic-merge-[a-f0-9]{32}-s[1-9][0-9]{0,19}-a[1-9][0-9]{0,19}-(gate|dispatch|outcome|control-ready|not-submitted)$/.test(name)) return 'receipt.json';
+  if (/^agentic-merge-[a-f0-9]{32}-s[1-9][0-9]{0,19}-a[1-9][0-9]{0,19}-(gate|dispatch|outcome|control-ready|not-submitted|host-denied)$/.test(name)) return 'receipt.json';
   const candidate = /^(evidence|controls|publication-controls)-[1-9][0-9]{0,19}-[1-9][0-9]{0,19}$/.exec(name);
   const proof = /^(proof|final-proof)-(admin|reader|issuer|coding|merge)-[1-9][0-9]{0,19}$/.exec(name);
   if (candidate) return `${candidate[1]}.json`;
   if (proof) return `${proof[1]}.json`;
-  const trial = /^(trial-handoff|trial-task|trial-task-ready|trial-task-controls)-[a-f0-9]{32}-[1-9][0-9]{0,19}$/.exec(name);
+  const trial = /^(trial-handoff|trial-case-ready|trial-case-handoff|trial-case-terminal|trial-host-intent|trial-host-denial|trial-task|trial-task-ready|trial-task-controls)-[a-f0-9]{32}-[1-9][0-9]{0,19}$/.exec(name);
   if (trial) return `${trial[1]}.json`;
   if (/^credential-proof-(admin|reader|issuer|coding|merge|model_vault|model_delivery)-[1-9][0-9]{0,19}$/.test(name)) return 'credential-proof.json';
   if (/^task-[a-f0-9]{32}-[1-9][0-9]{0,19}$/.test(name)) return 'task.json';

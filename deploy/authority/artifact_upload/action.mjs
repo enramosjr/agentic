@@ -12,7 +12,7 @@ export function launchParameters(environment, platform = process.platform) {
   const role = environment.INPUT_ROLE;
   const caseRole = typeof role === 'string' && role.startsWith('case-') ? role.slice(5) : null;
   const caseJobs = {ready:'trial_case_ready',prepare:'prepare',handoff:'trial_case_handoff',verify:'verify',
-    'publication-controls':'publication_controls',publish:'publish',broker:'broker',controls:'controls',finalize:'finalize'};
+    'publication-controls':'publication_controls',publish:'publish','host-denial':'trial_host_denial',broker:'broker',controls:'controls',finalize:'finalize'};
   const caseProof = ['proof','final-proof'].includes(caseRole) && ['admin','reader','issuer','coding','merge'].find(
     p=>environment.GITHUB_JOB === `${p}_${caseRole.replace('-','_')}`);
   const caseProducer = Boolean(caseProof) || Object.hasOwn(caseJobs,caseRole) && caseJobs[caseRole] === environment.GITHUB_JOB;
@@ -47,7 +47,7 @@ export function launchParameters(environment, platform = process.platform) {
     role === 'trial-controls' ? ['AGENTIC_ADMIN_PRIVATE_KEY'] :
     trialProof ? [`AGENTIC_${trialProof.toUpperCase()}_PRIVATE_KEY`] : [];
   const caseKeys = caseProof ? [caseProof.toUpperCase()] : caseRole === 'broker' ? ['MERGE','READER'] :
-    ['publication-controls','controls','finalize'].includes(caseRole) ? ['ADMIN'] : caseRole === 'publish' ? ['ISSUER'] : caseRole === 'verify' ? ['READER'] : [];
+    ['publication-controls','controls','finalize'].includes(caseRole) ? ['ADMIN'] : caseRole === 'host-denial' ? ['CODING'] : caseRole === 'publish' ? ['ISSUER'] : caseRole === 'verify' ? ['READER'] : [];
   const secrets = caseProducer ? ['AGENTIC_TRIAL_CASE_ORIGIN_TOKEN',...caseKeys.map(p=>`AGENTIC_${p}_PRIVATE_KEY`)] : trial ? ['AGENTIC_TRIAL_ORIGIN_TOKEN',...trialSecrets] : credential
     ? [`AGENTIC_${purpose.toUpperCase()}_${purpose.startsWith('model_') ? 'KEY' : 'PRIVATE_KEY'}`]
     : model ? ['AGENTIC_MODEL_VAULT_KEY', 'AGENTIC_MODEL_DELIVERY_KEY']
@@ -102,17 +102,17 @@ export function producerOutput(raw, role) {
   const value = JSON.parse(text);
   if (!value || Array.isArray(value)) throw new Error('producer object required');
   const expected = role === 'discover' ? 'pr' : role === 'case-prepare' ?
-    'configuration_revision,deployment_digest,handoff,operation_id,qualification,schema_version,sequence,snapshot,task' :
+    'configuration_revision,deployment_digest,handoff,host_case,operation_id,qualification,schema_version,sequence,snapshot,task' :
     'configuration_revision,deployment_digest,operation_id,qualification,schema_version,sequence,snapshot,task';
   if (Object.keys(value).sort().join() !== expected ||
       (role === 'discover' ? value.pr !== null && (!Number.isSafeInteger(value.pr) || value.pr <= 0) :
         value.schema_version !== 2 || !/^[0-9a-f]{32}$/.test(value.operation_id) ||
         !Number.isSafeInteger(value.sequence) || value.sequence <= 0)) throw new Error('closed producer output required');
-  if (role === 'case-prepare' && (!value.handoff || Array.isArray(value.handoff) ||
+  if (role === 'case-prepare' && (typeof value.host_case !== 'boolean' || !value.handoff || Array.isArray(value.handoff) ||
       Object.keys(value.handoff).sort().join() !== 'origin,revision' || !/^[0-9a-f]{40}$/.test(value.handoff.revision))) {
     throw new Error('closed case lookup required');
   }
-  return 'request='+text+'\n';
+  return 'request='+text+'\n'+(role === 'case-prepare' ? 'host_case='+value.host_case+'\n' : '');
 }
 
 export function run(environment = process.env, launch = spawnSync) {

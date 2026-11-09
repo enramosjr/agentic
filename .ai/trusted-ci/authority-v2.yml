@@ -665,6 +665,7 @@ jobs:
     name: prepare
     outputs:
       request: ${{ steps.produce.outputs.request }}
+      host_case: ${{ steps.produce.outputs.host_case }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -898,8 +899,35 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_ISSUER_PRIVATE_KEY: ${{ secrets.AGENTIC_ISSUER_PRIVATE_KEY }}
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
-  broker:
+  trial_host_denial:
     needs: [prepare, publish]
+    if: inputs.mode == 'case' && needs.prepare.outputs.host_case == 'true'
+    name: trial host denial
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: case-host-denial
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_CODING_PRIVATE_KEY: ${{ secrets.AGENTIC_CODING_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN }}
+  broker:
+    needs: [prepare, publish, trial_host_denial]
     if: always() && needs.prepare.result == 'success'
     name: broker (${{ fromJSON(needs.prepare.outputs.request).snapshot.pr }})
     runs-on: ubuntu-latest
@@ -928,6 +956,7 @@ jobs:
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   controls:
     needs: [prepare, publish]
+    if: needs.prepare.outputs.host_case != 'true'
     name: controls (${{ fromJSON(needs.prepare.outputs.request).snapshot.pr }})
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -954,6 +983,7 @@ jobs:
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   admin_final_proof:
     needs: [prepare, publish]
+    if: needs.prepare.outputs.host_case != 'true'
     name: final proof (admin)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -980,6 +1010,7 @@ jobs:
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   reader_final_proof:
     needs: [prepare, publish]
+    if: needs.prepare.outputs.host_case != 'true'
     name: final proof (reader)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1006,6 +1037,7 @@ jobs:
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   issuer_final_proof:
     needs: [prepare, publish]
+    if: needs.prepare.outputs.host_case != 'true'
     name: final proof (issuer)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1032,6 +1064,7 @@ jobs:
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   coding_final_proof:
     needs: [prepare, publish]
+    if: needs.prepare.outputs.host_case != 'true'
     name: final proof (coding)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1058,6 +1091,7 @@ jobs:
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   merge_final_proof:
     needs: [prepare, publish]
+    if: needs.prepare.outputs.host_case != 'true'
     name: final proof (merge)
     runs-on: ubuntu-latest
     timeout-minutes: 5

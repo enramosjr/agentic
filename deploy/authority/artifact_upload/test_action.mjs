@@ -34,6 +34,7 @@ for (const [role,job,keys] of [
   ['ready','trial_case_ready',[]],['prepare','prepare',[]],['handoff','trial_case_handoff',[]],
   ['verify','verify',['READER']],['proof','admin_proof',['ADMIN']],
   ['publication-controls','publication_controls',['ADMIN']],['publish','publish',['ISSUER']],
+  ['host-denial','trial_host_denial',['CODING']],
   ['broker','broker',['MERGE','READER']],['controls','controls',['ADMIN']],
   ['final-proof','merge_final_proof',['MERGE']],['finalize','finalize',['ADMIN']]]) {
   const source={...env,INPUT_ROLE:'case-'+role,GITHUB_JOB:job,INPUT_TASK:'{}',
@@ -154,7 +155,7 @@ try {
   assert.equal(readFileSync(output,'utf8'),'existing=keep\nrequest='+request+'\n');
   const caseRequest=JSON.stringify({schema_version:2,configuration_revision:'a'.repeat(40),deployment_digest:'b'.repeat(64),
     operation_id:'c'.repeat(32),sequence:1,snapshot:{pr:7},task:{},qualification:{},
-    handoff:{origin:{schema_version:2,repository:'owner/original',repository_id:701,registry_branch:'agentic-registry'},revision:'d'.repeat(40)}});
+    host_case:true,handoff:{origin:{schema_version:2,repository:'owner/original',repository_id:701,registry_branch:'agentic-registry'},revision:'d'.repeat(40)}});
   const caseEnv={...env,INPUT_ROLE:'case-prepare',GITHUB_JOB:'prepare',INPUT_TASK:'{}',
     AGENTIC_TRIAL_CASE_ORIGIN_TOKEN:'fresh-case',GITHUB_OUTPUT:output};
   assert.equal(run(caseEnv,(_exe,argv,options)=>{
@@ -163,7 +164,7 @@ try {
     assert.equal(options.env.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN,'fresh-case');
     return {status:0,stdout:Buffer.from(caseRequest+'\n')};
   }),0);
-  assert.equal(readFileSync(output,'utf8'),'existing=keep\nrequest='+request+'\nrequest='+caseRequest+'\n');
+  assert.equal(readFileSync(output,'utf8'),'existing=keep\nrequest='+request+'\nrequest='+caseRequest+'\nhost_case=true\n');
   for(const bad of [JSON.stringify({...JSON.parse(caseRequest),handoff:null}),caseRequest+'\nextra=value']) {
     assert.throws(()=>producerOutput(bad,'case-prepare'));
   }

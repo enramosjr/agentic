@@ -64,10 +64,11 @@ def negative_evidence(value, d, snapshot, revision, job_id, criterion):
 
 
 class HostCases:
-    def __init__(self, registry, source, authority, identities, coding, merger, human, clock, token_factory=GitHub):
+    def __init__(self, registry, source, authority, identities, coding, merger, human, clock, token_factory=GitHub, guard=None):
         self.registry, self.source, self.authority, self.identities = registry, source, authority, identities
         self.coding, self.merger, self.human, self.clock = coding, merger, human, clock
         self.token_factory = token_factory
+        self.admission_guard = guard
         self.started = False
 
     def run(self, manifest):
@@ -77,6 +78,7 @@ class HostCases:
     def _guard(self):
         require(self.registry.binding() == self.binding and self.clock() < self.d['expires'],
                 'host qualification configuration changed or expired')
+        if self.admission_guard is not None: self.admission_guard()
 
     def _success(self, snapshot, locator, coordinates, d=None):
         d = self.d if d is None else d
@@ -185,60 +187,67 @@ class HostCases:
                          merge=self.identities['apps']['merge']['actor_id'], human=human['id'])
         require(actor_ids['human'] in p['reviewers'] and human.get('type') == 'User',
                 'host probe actor identity differs')
-        readers, root = Readers(self.source, self.authority, self.d), '/repos/' + p['repository']
         records, observations = [], []
         for case in cases:
-            self._guard()
-            s, name = case['snapshot'], case['name']
-            def snapshot():
-                return current_snapshot(readers, self.d, s['pr'], s['run_id'], s['run_attempt'])
-            require(snapshot() == s, 'prepared host case moved')
-            evidence = self._prerequisites(case)
-            commit = self.source.get(root + '/git/commits/' + s['merge'])
-            require(commit.get('sha') == s['merge'] and sha(commit['tree']['sha']) and
-                    [v['sha'] for v in commit['parents']] == [s['base'], s['head']],
-                    'current merge parents or tree differ')
-            evidence['synthetic_commit'] = copy.deepcopy(commit)
-            before = self.source.get(root + '/git/ref/heads/' + quote(p['target'], safe=''))['object']['sha']
-            require(before == s['base'] and snapshot() == s, 'target or candidate moved before host attempt')
-            self._guard()
-            direct = name in ('direct-push', 'human-update', 'coding-update')
-            purpose = 'human' if name == 'human-update' else 'coding' if direct else 'merge'
-            actor = self.human if purpose == 'human' else self.coding if purpose == 'coding' else self.merger
-            request = dict(path=root + ('/git/refs/heads/' + quote(p['target'], safe='') if direct else
-                                       '/pulls/' + str(s['pr']) + '/merge'),
-                           method='PATCH' if direct else 'PUT',
-                           data=dict(sha=s['merge'], force=False) if direct else dict(sha=s['head'], merge_method='merge'))
-            expected = 'protected_update' if direct else 'required_review' if name == 'missing-approval' else 'required_check'
-            def send(scoped):
-                require(snapshot() == s and self.source.get(root + '/git/ref/heads/' +
-                        quote(p['target'], safe=''))['object']['sha'] == before, 'host case moved during credential admission')
-                self._guard()
-                try:
-                    scoped.fetch(request['path'], request['method'], request['data'])
-                except HostRefusal as error:
-                    return error.status, error.category, error.obligation
-                return None, None, None
-            if purpose == 'human':
-                require(self.human.get('/user') == human, 'human probe identity changed')
-                status, category, obligation = send(actor)
-            else:
-                from service import _source_token
-                with _source_token(purpose, actor, self.authority, self.d, self.identities,
-                                   self.binding['configuration_revision'], self.clock,
-                                   self.token_factory, self._guard) as scoped:
-                    status, category, obligation = send(scoped)
-            after = self.source.get(root + '/git/ref/heads/' + quote(p['target'], safe=''))['object']['sha']
-            require(before == after and snapshot() == s, 'negative host probe changed target or candidate')
-            self._guard()
-            require(type(status) is int and status in (403, 405, 422) and category == expected and
-                    obligation == (p['check_name'] if expected == 'required_check' else None),
-                    'host did not establish the intended denial')
-            evidence.update(request=request, actor_id=actor_ids[purpose], before=before, after=after,
-                            http_status=status, denial_category=category, denied_obligation=obligation)
-            records.append(dict(name=name, pr=s['pr'], head=s['head'], base=s['base'], merge=s['merge'],
-                tree=commit['tree']['sha'], before=before, after=after, actor_id=actor_ids[purpose], request_sent=True,
-                http_status=status, denial_category=category, denied_obligation=obligation, broker_refusal=None,
-                merge_commit=None, merge_parents=[], merge_tree=None, evidence_digest=digest(evidence)))
+            record, evidence = self._probe(case, actor_ids, human)
+            records.append(record)
             observations.append(evidence)
         return dict(cases=records, observations=observations, hosted_qualified=False, enforcement_active=False)
+
+    def _probe(self, case, actor_ids, human=None, before_send=lambda request: None):
+        """One shared host effect; callers own admission, ordering and durable intent."""
+        self._guard()
+        s, name, p = case['snapshot'], case['name'], self.d['policy']
+        readers, root = Readers(self.source, self.authority, self.d), '/repos/' + p['repository']
+        def snapshot():
+            return current_snapshot(readers, self.d, s['pr'], s['run_id'], s['run_attempt'])
+        require(snapshot() == s, 'prepared host case moved')
+        evidence = self._prerequisites(case)
+        commit = self.source.get(root + '/git/commits/' + s['merge'])
+        require(commit.get('sha') == s['merge'] and sha(commit['tree']['sha']) and
+                [v['sha'] for v in commit['parents']] == [s['base'], s['head']],
+                'current merge parents or tree differ')
+        evidence['synthetic_commit'] = copy.deepcopy(commit)
+        before = self.source.get(root + '/git/ref/heads/' + quote(p['target'], safe=''))['object']['sha']
+        require(before == s['base'] and snapshot() == s, 'target or candidate moved before host attempt')
+        self._guard()
+        direct = name in ('direct-push', 'human-update', 'coding-update')
+        purpose = 'human' if name == 'human-update' else 'coding' if direct else 'merge'
+        actor = self.human if purpose == 'human' else self.coding if purpose == 'coding' else self.merger
+        request = dict(path=root + ('/git/refs/heads/' + quote(p['target'], safe='') if direct else
+                                   '/pulls/' + str(s['pr']) + '/merge'),
+                       method='PATCH' if direct else 'PUT',
+                       data=dict(sha=s['merge'], force=False) if direct else dict(sha=s['head'], merge_method='merge'))
+        expected = 'protected_update' if direct else 'required_review' if name == 'missing-approval' else 'required_check'
+        def send(scoped):
+            before_send(copy.deepcopy(request))
+            require(snapshot() == s and self.source.get(root + '/git/ref/heads/' +
+                    quote(p['target'], safe=''))['object']['sha'] == before, 'host case moved during credential admission')
+            self._guard()
+            try:
+                scoped.fetch(request['path'], method=request['method'], data=request['data'])
+            except HostRefusal as error:
+                return error.status, error.category, error.obligation
+            return None, None, None
+        if purpose == 'human':
+            require(self.human.get('/user') == human, 'human probe identity changed')
+            status, category, obligation = send(actor)
+        else:
+            from service import _source_token
+            with _source_token(purpose, actor, self.authority, self.d, self.identities,
+                               self.binding['configuration_revision'], self.clock,
+                               self.token_factory, self._guard) as scoped:
+                status, category, obligation = send(scoped)
+        after = self.source.get(root + '/git/ref/heads/' + quote(p['target'], safe=''))['object']['sha']
+        require(before == after and snapshot() == s, 'negative host probe changed target or candidate')
+        self._guard()
+        require(type(status) is int and status in (403, 405, 422) and category == expected and
+                obligation == (p['check_name'] if expected == 'required_check' else None),
+                'host did not establish the intended denial')
+        evidence.update(request=request, actor_id=actor_ids[purpose], before=before, after=after,
+                        http_status=status, denial_category=category, denied_obligation=obligation)
+        record = dict(name=name, pr=s['pr'], head=s['head'], base=s['base'], merge=s['merge'],
+            tree=commit['tree']['sha'], before=before, after=after, actor_id=actor_ids[purpose], request_sent=True,
+            http_status=status, denial_category=category, denied_obligation=obligation, broker_refusal=None,
+            merge_commit=None, merge_parents=[], merge_tree=None, evidence_digest=digest(evidence))
+        return record, evidence

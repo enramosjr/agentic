@@ -277,9 +277,9 @@ class Hosted:
             Finalizer(None,registry.api,None,loads(environment.get('AGENTIC_RECOVERY_PIN','')),environment,clock)._admit()
         else:
             purpose = environment.get('GITHUB_JOB','').split('_',1)[0]
-            require(role in ('verify','proof','publication-controls','publish','broker','controls','final-proof'), 'fixed case producer required')
+            require(role in ('verify','proof','publication-controls','publish','host-denial','broker','controls','final-proof'), 'fixed case producer required')
             name = ('publication controls' if role == 'publication-controls' else 'final proof' if role == 'final-proof' else role)
-            name += ' (' + (purpose if role in ('proof','final-proof') else str(self.candidate['submitted']['pr'])) + ')'
+            name = 'trial host denial' if role == 'host-denial' else name + ' (' + (purpose if role in ('proof','final-proof') else str(self.candidate['submitted']['pr'])) + ')'
             require(environment.get('GITHUB_RUN_ID') == str(locator['run_id']) and environment.get('GITHUB_RUN_ATTEMPT') == '1',
                     'case producer belongs to another execution')
             provenance.admit_job(registry.api,self.binding['deployment'],environment,name,clock())

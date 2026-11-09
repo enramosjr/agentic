@@ -41,7 +41,7 @@ class ProducerWorkflowContracts(unittest.TestCase):
             self.assertIn('ref: ${{ github.sha }}',block)
             self.assertIn('npm ci --ignore-scripts --no-audit --no-fund',block)
         for name in ('broker','controls',*[p+'_final_proof' for p in ('admin','reader','issuer','coding','merge')]):
-            self.assertIn('needs: [prepare, publish]',self.jobs[name])
+            self.assertIn('needs: [prepare, publish, trial_host_denial]' if name == 'broker' else 'needs: [prepare, publish]',self.jobs[name])
             self.assertNotIn('needs: [broker',self.jobs[name])
 
     def test_recovery_uses_independent_pin_and_does_not_retry_or_infer_failure(self):

@@ -343,7 +343,7 @@ def _task(environment, request, node, clock=None, api_factory=GitHub, app_factor
 PRODUCER_ROLES = ('discover', 'prepare', 'verify', 'publication-controls', 'publish',
                   'proof', 'broker', 'controls', 'final-proof', 'finalize')
 TRIAL_ROLES = ('trial-handoff', 'trial-prepare', 'trial-model', 'trial-proof', 'trial-worker', 'trial-controls')
-CASE_ROLES = tuple('case-'+r for r in ('ready','prepare','handoff','verify','proof','publication-controls','publish','broker','controls','final-proof','finalize'))
+CASE_ROLES = tuple('case-'+r for r in ('ready','prepare','handoff','verify','proof','publication-controls','publish','host-denial','broker','controls','final-proof','finalize'))
 
 
 def _trial_evidence(api, context):
@@ -577,7 +577,8 @@ def _locator(authority, d, run_id, attempt, role, key):
     prefix = role if key is None else role + '-' + str(key)
     name = ('verify' if role == 'evidence' else 'publication controls' if role == 'publication-controls' else
             'hosted qualification' if role == 'qualification' else role)
-    if key is not None: name += ' (' + str(key) + ')'
+    if role in ('trial-host-intent','trial-host-denial'): name = 'trial host denial'
+    elif key is not None: name += ' (' + str(key) + ')'
     job = execution_job(authority, d, run_id, attempt, name, completed=True)
     items = authority.pages('/repos/' + d['policy']['authority_repository'] + '/actions/runs/' + str(run_id) + '/artifacts', 'artifacts')
     matches = [a for a in items if a['name'] == prefix + '-' + str(attempt)]
@@ -858,7 +859,7 @@ def _case_launch(environment,hint,node,role,clock=None,api_factory=GitHub,upload
             value['launch']['credential']['token_digest']==digest(token),'pending case substituted READY execution')
     trial_launch.authenticate(original,api,value['launch'],clock)
     registry.authenticate_setup_progress(record['trial'],{OPERATION:value['pending']})
-    return dict(value['request'],handoff=dict(origin=hint['origin'],revision=revision))
+    return dict(value['request'],handoff=dict(origin=hint['origin'],revision=revision),host_case=value['candidate']['name']=='direct-push')
 
 
 def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub, app_factory=None,
@@ -869,7 +870,7 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
     from registry import OPERATION
     clock = clock or (lambda:int(time.time()))
     object_fields(hint, ('origin','revision'), 'case lookup hint')
-    require(role in ('handoff','finalize','verify','proof','publication-controls','publish','broker','controls','final-proof'),
+    require(role in ('handoff','finalize','verify','proof','publication-controls','publish','host-denial','broker','controls','final-proof'),
             'fixed case producer required')
     require(not environment.get('AGENTIC_TRIAL_ORIGIN_TOKEN'), 'original worker capability is not a case delegation')
     purpose = 'admin' if role == 'finalize' else _producer_purpose(environment,role)
@@ -916,6 +917,16 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
     root = (app_factory or bootstrap.app_api)(before['deployment']['apps'][read_purpose],environment.get('AGENTIC_'+read_purpose.upper()+'_PRIVATE_KEY'))
     with _source_token(read_purpose,root,api,before['deployment'],identities,before['configuration_revision'],clock,token_factory,admitted.guard) as source:
         admitted.bind_source(source)
+        if role == 'host-denial':
+            import trial_host_case
+            return trial_host_case.produce(admitted,api,root,token_factory,environment,uploader_factory(node,environment))
+        if role == 'broker':
+            import trial_host_case
+            if trial_host_case.selected(admitted):
+                from provenance import admit_job
+                s=admitted.request['snapshot']
+                job=admit_job(api,before['deployment'],environment,'broker ('+str(s['pr'])+')',clock())
+                return trial_host_case.broker(admitted,api,job['id'],uploader_factory(node,environment))
         if role == 'finalize':
             from broker_finalize import Finalizer
             pin = loads(environment.get('AGENTIC_RECOVERY_PIN',''))
@@ -923,9 +934,15 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
             # pinned terminal role, using the existing finalizer and fence engine.
             with _admin_authority(root,api,registry,before,identities,token_factory) as writer:
                 admitted.guard()
-                return Finalizer(writer,api,source,pin,environment,clock)._finalize(
+                result=Finalizer(writer,api,source,pin,environment,clock)._finalize(
                     admitted.request['operation_id'],admitted.request['sequence'],
                     _case_broker_job(api,admitted),_admission=admitted)
+            from trial_host_case import selected
+            if selected(admitted):
+                document=dict(schema_version=1,kind='trial-case-terminal',request_digest=digest(admitted.request),
+                    certificate_digest=digest(admitted.value['certificate']),before=before,after=result,completed=clock())
+                _upload_document(uploader_factory(node,environment),'trial-case-terminal-'+admitted.record['task_id']+'-1',document)
+            return result
         return _trial_producer(admitted,environment,admitted.request,node,role,clock,api_factory,app_factory,
                                token_factory,uploader_factory,verifier,sleeper)
 
@@ -944,7 +961,7 @@ def _case_broker_job(api, admission):
 
 
 def _producer_purpose(environment, role):
-    return ('admin' if role in ('publication-controls','controls') else 'issuer' if role == 'publish' else
+    return ('coding' if role == 'host-denial' else 'admin' if role in ('publication-controls','controls') else 'issuer' if role == 'publish' else
             'merge' if role == 'broker' else environment.get('GITHUB_JOB','').split('_',1)[0]
             if role in ('proof','final-proof') else 'reader')
 

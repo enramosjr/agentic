@@ -17,13 +17,13 @@ from trusted_ci_policy import Refusal, loads, object_fields, positive, require
 def document_member(name):
     """Closed producer names map to fixed members, never caller-selected paths."""
     if not isinstance(name, str): return None
-    if re.fullmatch(r'agentic-merge-[a-f0-9]{32}-s[1-9][0-9]{0,19}-a[1-9][0-9]{0,19}-(gate|dispatch|outcome|control-ready|not-submitted)', name):
+    if re.fullmatch(r'agentic-merge-[a-f0-9]{32}-s[1-9][0-9]{0,19}-a[1-9][0-9]{0,19}-(gate|dispatch|outcome|control-ready|not-submitted|host-denied)', name):
         return 'receipt.json'
     candidate = re.fullmatch(r'(evidence|controls|publication-controls)-[1-9][0-9]{0,19}-[1-9][0-9]{0,19}', name)
     proof = re.fullmatch(r'(proof|final-proof)-(admin|reader|issuer|coding|merge)-[1-9][0-9]{0,19}', name)
     if candidate: return candidate.group(1) + '.json'
     if proof: return proof.group(1) + '.json'
-    trial = re.fullmatch(r'(trial-handoff|trial-case-handoff|trial-case-ready|trial-task|trial-task-ready|trial-task-controls)-[a-f0-9]{32}-[1-9][0-9]{0,19}', name)
+    trial = re.fullmatch(r'(trial-handoff|trial-case-handoff|trial-case-ready|trial-case-terminal|trial-host-intent|trial-host-denial|trial-task|trial-task-ready|trial-task-controls)-[a-f0-9]{32}-[1-9][0-9]{0,19}', name)
     if trial: return trial.group(1) + '.json'
     if re.fullmatch(r'credential-proof-(admin|reader|issuer|coding|merge|model_vault|model_delivery)-[1-9][0-9]{0,19}', name):
         return 'credential-proof.json'

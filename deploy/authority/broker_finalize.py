@@ -68,12 +68,18 @@ class Finalizer:
         receipts = ActionsReceipts._create(self.authority, read, broker_job_id, self.clock, recovery=True, admission=_admission)
         producer = receipts.terminal_job()
         locators = {kind: receipts.find_for_recovery(kind) for kind in ('not-submitted', 'dispatch', 'outcome')}
-        positive_no_dispatch = locators['not-submitted'] is not None
+        if _admission is not None:
+            locators['host-denied'] = receipts.find_for_recovery('host-denied')
+        host_denied = locators.get('host-denied') is not None
+        require(not host_denied or not (locators['not-submitted'] or receipts.find_for_recovery('gate') or
+                                       receipts.find_for_recovery('control-ready')),
+                'contradictory host terminal evidence; preserve the fence')
+        positive_no_dispatch = locators['not-submitted'] is not None or host_denied
         require(not positive_no_dispatch or not (locators['dispatch'] or locators['outcome']),
                 'contradictory broker terminal evidence; preserve the fence')
         facts = None
         if positive_no_dispatch:
-            receipts.authenticate(locators['not-submitted'])
+            receipts.authenticate(locators['host-denied'] if host_denied else locators['not-submitted'])
             kind = 'not-submitted'
         else:
             require(locators['dispatch'] is not None, 'no positive terminal evidence; preserve the fence')
@@ -99,6 +105,9 @@ class Finalizer:
         # The storage helper checks exact nonforce pointer/parent/tree readback,
         # including lost acknowledgements. No source mutation exists in this class.
         if _admission is not None:
+            from trial_controller import Admission
+            if type(_admission) is Admission:
+                _admission._retain_terminal(before,terminal)
             _admission.guard(before)
             return self.registry.finalize_operation(before['branch_head'], terminal, before_effect=lambda:_admission.guard(before))
         return self.registry.finalize_operation(before['branch_head'], terminal)

@@ -17,8 +17,8 @@ from trusted_ci_policy import Refusal
 
 
 class Launched(case_fixture.Fresh):
-    def ready(self, lost=False, absent=False):
-        self.admission=trial_controller.Native(self.preparer)._open('prompt','positive',self.source)
+    def ready(self, lost=False, absent=False, name='positive'):
+        self.admission=trial_controller.Native(self.preparer)._open('prompt',name,self.source)
         candidate=self.admission.candidate['submitted']
         self.synthetic(next(v for v in self.source.prs if v['number']==candidate['pr']))
         self.reviews=[dict(id=900,user=dict(id=self.p['reviewers'][0],type='User'),state='APPROVED',commit_id=candidate['head'])]
@@ -96,7 +96,7 @@ class Launched(case_fixture.Fresh):
             **{trial_case.CaseReadStaging.NAME:self.case_token})
         return service._case_producer(env,self.hint,'fixture-node','finalize',clock=lambda:self.clock[0],
             api_factory=lambda token:self.api if token=='case-actions-read' else self.origin_factory(token),
-            app_factory=self.apps,token_factory=self.tokens)
+            app_factory=self.apps,token_factory=self.tokens,uploader_factory=lambda *a:self.upload)
 
 
 @unittest.skipIf(getattr(case_fixture.TrialCase,'__unittest_skip__',False),'optional cryptography required')

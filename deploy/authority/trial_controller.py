@@ -31,6 +31,43 @@ class Native:
         authority_release.authorize('qualify-live')
         return self._open(prompt, name)
 
+    def recover_terminal(self, prompt, name):
+        authority_release.authorize('qualify-live')
+        return self._recover_terminal(prompt,name)
+
+    def _recover_terminal(self, prompt, name, source=None):
+        require(type(self.candidates) is Prepare, 'actual native candidate preparer required')
+        native=self.candidates.native
+        retained=native.provision.store(native.provision.root/'trial-controller').read()
+        require(retained is not None and retained['value']['prompt_digest']==digest(prompt) and retained['value']['name']==name,
+                'resume only the exact retained native terminal case')
+        result=Admission(native,source or native.provision.api,recover_terminal=True)
+        return copy.deepcopy(result.value['terminal'])
+
+    def observe_terminal(self, prompt, name, locator):
+        authority_release.authorize('qualify-live')
+        return self._observe_terminal(prompt,name,locator)
+
+    def _observe_terminal(self, prompt, name, locator, source=None):
+        require(type(self.candidates) is Prepare, 'actual native candidate preparer required')
+        native=self.candidates.native
+        retained=native.provision.store(native.provision.root/'trial-controller').read()
+        require(retained is not None and retained['value']['prompt_digest']==digest(prompt) and retained['value']['name']==name=='direct-push',
+                'exact native host case terminal observation required')
+        admission=Admission(native,source or native.provision.api,terminal_locator=locator)
+        completed=native._worker_completion(admission.record,prompt,admission.source)
+        require(completed['result']==admission.value['worker'], 'retained CLOSED worker changed')
+        admission.worker=completed
+        admission._candidate(self.candidates)
+        from authority_github import Readers,current_snapshot
+        s=admission.request['snapshot']; d=admission.binding['deployment']
+        require(current_snapshot(Readers(admission.source,admission.registry.api,d),d,s['pr'],s['run_id'],s['run_attempt'])==s,
+                'host candidate or target changed before native terminal observation')
+        admission.guard()
+        result=dict(binding=copy.deepcopy(admission.binding),**admission.terminal_proof)
+        admission.value.update(phase='terminal',terminal=result); admission._save()
+        return copy.deepcopy(result)
+
     def _open(self, prompt, name, source=None):
         require(type(self.candidates) is Prepare, 'actual native candidate preparer required')
         preparer, native = self.candidates, self.candidates.native
@@ -66,7 +103,7 @@ class Native:
 
 
 class Admission:
-    def __init__(self, native, source):
+    def __init__(self, native, source, recover_terminal=False, terminal_locator=None):
         require(type(native) is NativeHandoff and type(native.provision) is Provision, 'actual authenticated native trial required')
         self.native, self.source = native, source
         c = native.provision
@@ -85,6 +122,56 @@ class Admission:
         self.request = copy.deepcopy(self.value['request'])
         self.worker = None
         self.binding = copy.deepcopy(self.record['trial'])
+        if terminal_locator is not None:
+            require(not recover_terminal and self.value['phase']=='bound' and self.candidate['name']=='direct-push',
+                    'only an owned bound host case can observe a terminal producer')
+            self._retained()
+            from provenance import authenticated_document
+            s=self.request['snapshot']
+            require(terminal_locator['run_id']==s['run_id'] and terminal_locator['attempt']==s['run_attempt'],
+                    'terminal producer belongs to another case run')
+            proof=authenticated_document(self.registry.api,self.binding['deployment'],terminal_locator,
+                                         'trial-case-terminal',self.record['task_id'],self.clock())
+            value=proof['document']
+            object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split(),'closed case terminal')
+            require(type(value['schema_version']) is int and value['schema_version']==1 and value['kind']=='trial-case-terminal' and
+                    value['request_digest']==digest(self.request) and value['certificate_digest']==digest(self.value['certificate']) and
+                    type(value['completed']) is int and proof['job_started']<=value['completed']<=proof['artifact_created']<=proof['job_completed'],
+                    'closed terminal substituted case or producer interval')
+            before=value['before']
+            require(before['fence']==self.value['pending'] and
+                    {k:v for k,v in before.items() if k not in ('branch_head','fence')}==
+                    {k:v for k,v in self.binding.items() if k not in ('branch_head','fence')}, 'closed terminal parent differs')
+            fence=copy.deepcopy(before['fence']); fence['pending']=None
+            receipt=value['after']['fence']['completed'][-1]
+            require(receipt['operation_id']==self.request['operation_id'] and receipt['sequence']==self.request['sequence'] and
+                    receipt['kind']=='not-submitted', 'closed host terminal operation differs')
+            fence['completed'].append(receipt)
+            self.binding=self.registry.authenticate_setup_progress(before,{OPERATION:fence})
+            require(self.binding==value['after'], 'closed host terminal commit differs')
+            self.terminal_proof=dict(locator=copy.deepcopy(terminal_locator),document=value,
+                                     producer={k:v for k,v in proof.items() if k!='document'})
+            self.guard()
+            return
+        if recover_terminal:
+            require(self.value['phase']=='closing', 'exact retained terminal intent required; never repeat finalization')
+            self._retained()
+            retained=self.value['terminal']
+            object_fields(retained,('before','receipt'),'native terminal intent')
+            before=retained['before']
+            require(before['fence']==self.value['pending'] and
+                    {k:v for k,v in before.items() if k not in ('branch_head','fence')}==
+                    {k:v for k,v in self.binding.items() if k not in ('branch_head','fence')}, 'native terminal parent differs')
+            from operation_fence import terminal
+            receipt=terminal(retained['receipt'])
+            op=self.value['pending']['pending']
+            require(receipt['operation_id']==op['operation_id'] and receipt['sequence']==before['fence']['sequence'],
+                    'native terminal receipt substituted operation')
+            fence=copy.deepcopy(before['fence']); fence['pending']=None; fence['completed'].append(receipt)
+            self.binding=self.registry.authenticate_setup_progress(before,{OPERATION:fence})
+            self.guard()
+            self.value.update(phase='terminal',terminal=copy.deepcopy(self.binding)); self._save()
+            return
         if self.value['phase'] in ('fencing', 'bound'):
             self._retained()
             self.binding = self.registry.authenticate_setup_progress(self.binding, {OPERATION:self.value['pending']})
@@ -133,13 +220,24 @@ class Admission:
                 c.store(c.root / 'trial-candidates').read() == self.value['candidates'] and
                 c.store(c.root / 'trial-workflow').read() == self.value['workflow'] and
                 c.store(c.root / 'trial').read() == self.value['provisioning'], 'native case ownership changed')
-        require(self.value['phase'] in ('ready','fencing','bound') and
+        require(self.value['phase'] in ('ready','fencing','bound','closing') and
                 r['created'] <= self.clock() < min(r['expires'], r['trial']['deployment']['expires'],
                     r['origin']['binding']['fence']['pending']['execution_deadline']), 'native case expired or terminal')
         require(c.session.owner == r['origin']['owner'] and c.session.scope == r['origin']['scope'],
                 'native case original owner or scope changed')
         require(self.record == self.value['record'] and self.candidate == self.value['candidate'] and
                 self.request == self.value['request'], 'native case object changed')
+        launch=c.store(c.root/'trial-case-launch').read()
+        if launch is not None and self.value['phase'] in ('bound','closing'):
+            from trial_case import CaseReadStaging
+            staging=c.store(c.root/CaseReadStaging.JOURNAL).read()
+            link=launch['value']['link']
+            require(launch['value']['phase']=='consumed' and launch['value']['ready']['candidate']==self.candidate and
+                    staging is not None and staging['value']['phase'] in ('secret-started','staged') and
+                    staging['value']['revision']==link['revision'] and
+                    digest(staging['value']['credential']['token'])==link['credential']['token_digest'] and
+                    self.clock()<min(link['credential']['expires'],staging['value']['credential']['expires'],self.value['certificate']['expires']),
+                    'native case launch delegation changed or expired')
         if binding is not None: require(binding == self.binding, 'trial controller binding differs')
 
     def guard(self, binding=None, force=False):
@@ -274,6 +372,7 @@ class Admission:
         pin = loads(environment.get('AGENTIC_RECOVERY_PIN',''))
         Finalizer(None,self.registry.api,None,pin,environment,self.clock)._admit()
         self.guard()
+        require(self.value['phase']=='bound', 'terminal intent already retained; recover read-only without replay')
         before = copy.deepcopy(self.binding)
         result = Finalizer(self.registry,self.registry.api,self.source,pin,environment,self.clock)._finalize(
             self.request['operation_id'],self.request['sequence'],broker_job_id,_admission=self)
@@ -281,3 +380,9 @@ class Admission:
         self.value.update(phase='terminal',terminal=result)
         self._save()
         return result
+
+    def _retain_terminal(self, before, terminal):
+        self.guard(before)
+        require(self.value['phase']=='bound', 'native terminal intent already exists')
+        self.value.update(phase='closing',terminal=dict(before=copy.deepcopy(before),receipt=copy.deepcopy(terminal)))
+        self._save()

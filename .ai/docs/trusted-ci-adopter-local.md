@@ -96,8 +96,9 @@ exact request, HTTP denial and obligation, unchanged protected ref and evidence
 digest. A generic error, unavailable credential, skipped obligation, unrelated
 required check or moved ref cannot pass. The instance refuses another attempt
 after starting, including an uncertain response. This is not durable recovery
-across processes: native case orchestration and retained dispatch intents remain
-unfinished. Public invocation is held before network access. Local fixtures
+across processes: full-prefix native orchestration and retained dispatch intents
+remain unfinished. The separate first native direct-push composition below owns
+its durable one-case intent. Public invocation is held before network access. Local fixtures
 exercise verification, cleanup, closed artifacts and publication against existing
 synthetic active regression configurations; they do not establish initial trial
 qualification. Production active-state and existing qualification requirements
@@ -512,6 +513,40 @@ leaves retained intent pending without redispatch.
 
 The workflow shares the existing verification, publication, concurrent broker /
 controls / five final proofs and independently pinned automatic finalizer jobs.
+The first native host-negative, `direct-push`, instead follows successful
+publication with a separate `trial host denial` job. Only that job receives the
+coding App key. It uses the same `HostCases` probe as the complete ordered prefix,
+with actual closed verifier evidence, the exact issuer check, effective obligations
+and externally observed independent human review. No human token is needed for
+this coding-identity case. A create-only intent precedes the scoped PATCH of the
+protected target to the exact synthetic merge SHA (`force=false`). Unknown effects,
+changed target/candidate or any denial other than `protected_update` leave the
+fence pending and cannot replay the request.
+
+The closed successful host job retains its exact request, identity, source,
+candidate, certificate and denial observation. The broker authenticates that
+outcome and emits a distinct trial-only `host-denied` no-dispatch receipt; it never
+enters merge dispatch or fabricates a broker failure. This case skips the warm
+controls/final-proof rendezvous. The existing independently pinned finalizer
+reauthenticates the closed host outcome and broker receipt before recording a
+`not-submitted` terminal fence. Production entrypoints reject this receipt without
+authenticated trial admission. The complete eleven-case `HostCases.run` contract
+remains unchanged. No other native host-negative is coordinated by this slice.
+The automatic finalizer emits a separate `trial-case-terminal` artifact. After
+that same-run job closes successfully, the held native
+`trial_controller.Native.observe_terminal(prompt,name,locator)` authenticates its
+exact request/certificate, pending parent and conditional terminal commit, rereads
+the worker/candidate and unchanged target, and retains the closed producer evidence
+in the native terminal journal. It borrows and revokes the existing scoped coding
+token for candidate readback, and performs no source or registry writes. Missing/unknown
+terminal uploads cannot grant local completion or another finalization attempt.
+
+Native finalization retains the exact terminal intent before Git effects. After
+an interrupted completion, `trial_controller.Native.recover_terminal(prompt,name)`
+only authenticates the retained conditional terminal commit and records local
+completion. An absent/different effect cannot trigger another write. This does
+not relabel the original settled baseline, clear an uncertain fence or renew an
+expired delegation.
 The launcher passes only the fresh read capability and each role's existing
 purpose credentials; READY/preparation/consumer jobs receive no App root or model
 key. The terminal job can close a failed broker's genuine no-dispatch receipt or

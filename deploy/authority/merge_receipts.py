@@ -17,7 +17,7 @@ from operation_fence import validate as validate_fence
 from trusted_ci_deployment import timestamp
 from trusted_ci_policy import Refusal, digest, loads, object_fields, positive, require
 
-KINDS = ('gate', 'dispatch', 'outcome', 'control-ready', 'not-submitted')
+KINDS = ('gate', 'dispatch', 'outcome', 'control-ready', 'not-submitted', 'host-denied')
 MAX_DOCUMENT = 1024 * 1024
 MAX_ARCHIVE = 2 * MAX_DOCUMENT
 
@@ -114,6 +114,10 @@ class ActionsReceipts:
 
     def _document(self, kind, value, historical=False):
         require(isinstance(value, dict), 'broker receipt object required')
+        if kind == 'host-denied':
+            from trial_host_case import validate_receipt
+            require(self._admission is not None, 'host terminal evidence is trial-only')
+            return validate_receipt(value,self._admission,self.api,self.job_id)
         if kind == 'not-submitted':
             expected = not_submitted(self.binding, self.job_id, value.get('issued'))
             require(type(value.get('schema_version')) is int and type(value.get('sequence')) is int and
@@ -155,10 +159,15 @@ class ActionsReceipts:
         self._name(kind)
         self._job()
         self._document(kind, document)
-        if kind in ('control-ready', 'not-submitted'):
+        if kind in ('control-ready', 'not-submitted', 'host-denied'):
             require(not self._matches('dispatch'), 'dispatch intent already exists; readiness cannot restart')
-        if kind == 'not-submitted':
+        if kind in ('not-submitted','host-denied'):
             require(not self._matches('outcome'), 'dispatch outcome contradicts no-dispatch evidence')
+        if kind != 'host-denied':
+            require(not self._matches('host-denied'), 'host denial terminal evidence already exists')
+        else:
+            require(not self._matches('not-submitted') and not self._matches('gate') and not self._matches('control-ready'),
+                    'host denial contradicts broker execution')
         if kind != 'not-submitted':
             require(not self._matches('not-submitted'), 'no-dispatch terminal evidence already exists')
         raw = json.dumps(document, sort_keys=True, separators=(',', ':'), allow_nan=False).encode('utf-8')
@@ -205,7 +214,7 @@ class ActionsReceipts:
         except (zipfile.BadZipFile, OSError, RuntimeError):
             raise Refusal('invalid broker receipt archive') from None
         document = self._document(kind, document, historical=True)
-        if kind in ('control-ready', 'not-submitted'):
+        if kind in ('control-ready', 'not-submitted', 'host-denied'):
             require(document['issued'] <= created, 'ready request postdates artifact creation')
         return document
 

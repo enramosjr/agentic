@@ -18,7 +18,7 @@ class ProducerServiceContracts(unittest.TestCase):
             @property
             def buffer(self): raise AssertionError('read before hold')
         for role in ('discover', 'prepare', 'verify', 'publication-controls', 'publish',
-                     'proof', 'broker', 'controls', 'final-proof', 'finalize'):
+                     'proof', 'broker', 'controls', 'final-proof', 'finalize','case-host-denial'):
             with self.subTest(role=role), patch.object(service.sys, 'argv', ['service.py', role, 'node']), \
                  patch.object(service.sys, 'stdin', Unreadable()):
                 with self.assertRaises(authority_release.Held): service.main()
