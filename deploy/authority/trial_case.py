@@ -10,14 +10,14 @@ import authority_release
 import provenance
 from registry import Registry, OPERATION, TRIAL, trial_reference
 from setup import TrialReadStaging
-from trial_controller import Admission
+from trial_controller import Admission, CASE_CHAIN
 from trial_handoff import Native as NativeHandoff, read as read_origin
 from trusted_ci_policy import digest, object_fields, require, sha
 
 
 def baseline(original, registry, record, history, clock):
-    """Compose the two exact native host predecessors, never latest state."""
-    require(isinstance(history,list) and len(history)<=2, 'bounded native progression history required')
+    """Compose the exact native host predecessors, never latest state."""
+    require(isinstance(history,list) and len(history)<=3, 'bounded native progression history required')
     before=copy.deepcopy(record['trial'])
     for index in range(len(history)):
         before=_predecessor(original,registry,record,history,index,before,clock)
@@ -28,7 +28,7 @@ def _predecessor(original,registry,record,history,index,before,clock):
     entry=history[index]
     object_fields(entry,('revision','terminal'),'prior native case')
     prior,loaded=read(original,entry['revision'],clock)
-    require(loaded==record and prior['history']==history[:index] and prior['candidate']['name']==('direct-push','coding-update')[index] and
+    require(loaded==record and prior['history']==history[:index] and prior['candidate']['name']==CASE_CHAIN[index] and
             prior['execution'] is not None and prior['launch'] is not None, 'exact first executed host case required')
     from types import SimpleNamespace
     Admission._retained(SimpleNamespace(binding=before,record=record,value=prior,candidate=prior['candidate']))
@@ -53,7 +53,7 @@ def _predecessor(original,registry,record,history,index,before,clock):
 
 def case_baseline(original,registry,record,value,clock):
     history=value['history']
-    require(isinstance(history,list) and len(history)=={'coding-update':1,'missing-approval':2}.get(value['candidate']['name'],0),
+    require(isinstance(history,list) and len(history)==(CASE_CHAIN.index(value['candidate']['name']) if value['candidate']['name'] in CASE_CHAIN else 0),
             'case progression identity differs')
     for entry in history:
         prior,_=read(original,entry['revision'],clock)
@@ -70,12 +70,12 @@ def fresh_capability(original,value,record,token,clock):
 
 
 def history_guard(original,record,history):
-    require(isinstance(history,list) and len(history)<=2,'bounded native progression history required')
+    require(isinstance(history,list) and len(history)<=3,'bounded native progression history required')
     for index,entry in enumerate(history):
         # The immutable execution document was authenticated at admission. Keep
         # all its exact publication pointers fixed across later blocking reads.
         prior=original.blob(entry['revision'],TRIAL)[0]
-        require(prior['task_id']==record['task_id'] and prior['candidate']['name']==('direct-push','coding-update')[index] and
+        require(prior['task_id']==record['task_id'] and prior['candidate']['name']==CASE_CHAIN[index] and
                 prior['history']==history[:index] and prior['execution'] is not None and prior['launch'] is not None,
                 'authenticated prior case identity changed')
         require(original.ref(trial_reference(prior))==entry['revision'] and

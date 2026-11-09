@@ -97,7 +97,7 @@ class Fresh(controller_fixture.Connected):
                 return service._case_producer(env,self.hint,'fixture-node',role,clock=lambda:self.clock[0],
                     api_factory=lambda token:self.api if token=='case-actions-read' else self.origin_factory(token),
                     app_factory=self.apps,token_factory=self.tokens,uploader_factory=lambda *a:self.upload,
-                    verifier=self.verify,sleeper=lambda s:None)
+                    verifier=self.verify,sleeper=getattr(self,'sleeper',lambda s:None))
         finally:
             next(j for j in self.remote.jobs if j['name']==name).update(status='completed',conclusion='success',completed_at=stamp(self.clock[0]))
 

@@ -139,11 +139,12 @@ def _authenticated_document(api, d, locator, role, key, now, live=False):
             'current authority artifact coordinates required')
     require(role in ('evidence', 'controls', 'publication-controls', 'proof', 'final-proof', 'task', 'task-ready', 'task-controls',
                     'model-lease', 'qualification', 'credential-proof', 'trial-task', 'trial-task-ready',
-            'trial-task-controls', 'trial-handoff', 'trial-case-handoff', 'trial-case-ready', 'trial-host-intent', 'trial-host-denial', 'trial-case-terminal') and live == (role in ('task-ready', 'trial-task-ready')),
+            'trial-task-controls', 'trial-handoff', 'trial-case-handoff', 'trial-case-ready', 'trial-host-intent', 'trial-host-denial', 'trial-case-terminal', 'trial-broker-intent', 'trial-broker-denial') and live == (role in ('task-ready', 'trial-task-ready')),
             'unknown authority producer role')
     if role.startswith('trial-'):
         require(d['state'] == 'qualification' and d['qualification'] is None and
-                isinstance(key, str) and re.fullmatch('[0-9a-f]{32}', key), 'unqualified trial producer required')
+                (positive(key) if role in ('trial-broker-intent','trial-broker-denial') else
+                 isinstance(key, str) and re.fullmatch('[0-9a-f]{32}', key)), 'unqualified trial producer required')
     if role in ('evidence', 'controls', 'publication-controls'):
         require(positive(key), 'numeric candidate producer required')
         job_name = ('verify' if role == 'evidence' else role.replace('-', ' ')) + ' (' + str(key) + ')'
@@ -168,6 +169,8 @@ def _authenticated_document(api, d, locator, role, key, now, live=False):
         job_name, prefix = 'trial case ready', 'trial-case-ready-' + key
     elif role in ('trial-host-intent','trial-host-denial'):
         job_name, prefix = 'trial host denial', role + '-' + key
+    elif role in ('trial-broker-intent','trial-broker-denial'):
+        job_name, prefix = 'broker (' + str(key) + ')', role + '-' + str(key)
     elif role == 'trial-case-terminal':
         job_name, prefix = 'finalize', role + '-' + key
     elif role == 'credential-proof':

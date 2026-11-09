@@ -67,6 +67,10 @@ class Finalizer:
         read = lambda: self.registry.binding(check_software=False)
         receipts = ActionsReceipts._create(self.authority, read, broker_job_id, self.clock, recovery=True, admission=_admission)
         producer = receipts.terminal_job()
+        if _admission is not None:
+            import trial_broker_case
+            if trial_broker_case.selected(_admission):
+                trial_broker_case.read(_admission,self.authority,broker_job_id)
         locators = {kind: receipts.find_for_recovery(kind) for kind in ('not-submitted', 'dispatch', 'outcome')}
         if _admission is not None:
             locators['host-denied'] = receipts.find_for_recovery('host-denied')
@@ -109,5 +113,9 @@ class Finalizer:
             if type(_admission) is Admission:
                 _admission._retain_terminal(before,terminal)
             _admission.guard(before)
-            return self.registry.finalize_operation(before['branch_head'], terminal, before_effect=lambda:_admission.guard(before))
+            def guard():
+                _admission.guard(before)
+                if trial_broker_case.selected(_admission):
+                    trial_broker_case.guard(_admission)
+            return self.registry.finalize_operation(before['branch_head'], terminal, before_effect=guard)
         return self.registry.finalize_operation(before['branch_head'], terminal)

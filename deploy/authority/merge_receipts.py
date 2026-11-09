@@ -174,6 +174,8 @@ class ActionsReceipts:
         require(0 < len(raw) <= MAX_DOCUMENT and not self._matches(kind), 'receipt already exists or exceeds limit')
         # Provider-side create conflict is the atomic guard. Lost acknowledgement
         # propagates: finding the artifact later is audit, never permission to retry.
+        if self._admission is not None:
+            self._admission.guard(self.binding)
         artifact_id = self.uploader(self._name(kind), raw)
         require(positive(artifact_id), 'artifact upload acknowledgement missing')
         matches = self._matches(kind)

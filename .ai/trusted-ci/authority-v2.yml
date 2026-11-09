@@ -932,7 +932,7 @@ jobs:
     if: always() && needs.prepare.result == 'success'
     name: broker (${{ fromJSON(needs.prepare.outputs.request).snapshot.pr }})
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: ${{ inputs.mode == 'case' && 10 || 5 }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -960,7 +960,7 @@ jobs:
     if: inputs.mode != 'case' || needs.prepare.outputs.host_case == 'none'
     name: controls (${{ fromJSON(needs.prepare.outputs.request).snapshot.pr }})
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: ${{ inputs.mode == 'case' && 10 || 5 }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -987,7 +987,7 @@ jobs:
     if: inputs.mode != 'case' || needs.prepare.outputs.host_case == 'none'
     name: final proof (admin)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: ${{ inputs.mode == 'case' && 10 || 5 }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -1014,7 +1014,7 @@ jobs:
     if: inputs.mode != 'case' || needs.prepare.outputs.host_case == 'none'
     name: final proof (reader)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: ${{ inputs.mode == 'case' && 10 || 5 }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -1041,7 +1041,7 @@ jobs:
     if: inputs.mode != 'case' || needs.prepare.outputs.host_case == 'none'
     name: final proof (issuer)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: ${{ inputs.mode == 'case' && 10 || 5 }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -1068,7 +1068,7 @@ jobs:
     if: inputs.mode != 'case' || needs.prepare.outputs.host_case == 'none'
     name: final proof (coding)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: ${{ inputs.mode == 'case' && 10 || 5 }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
@@ -1095,7 +1095,7 @@ jobs:
     if: inputs.mode != 'case' || needs.prepare.outputs.host_case == 'none'
     name: final proof (merge)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: ${{ inputs.mode == 'case' && 10 || 5 }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:

@@ -93,6 +93,8 @@ class Session:
         except Exception:
             # This closed path has never entered dispatch. An immutable positive
             # artifact may permit later terminal admin recovery, never a retry.
+            if _admission is not None:
+                _admission.guard(self.binding)
             document = not_submitted(self.binding, self.job_id, self.clock())
             stored = self.receipts.append('not-submitted', document)
             require(self.receipts.authenticate(stored) == document, 'no-dispatch evidence readback differs')

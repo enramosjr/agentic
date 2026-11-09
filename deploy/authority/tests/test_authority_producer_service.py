@@ -13,6 +13,16 @@ from test_authority_broker_evidence import fixture
 
 
 class ProducerServiceContracts(unittest.TestCase):
+    def test_production_pre_readiness_wait_keeps_120_second_budget(self):
+        registry,source,api,binding,identities,snapshot,locators,clock=fixture()
+        now=[binding['fence']['pending']['created']]
+        class Empty:
+            def pages(self,*args): return []
+        with self.assertRaisesRegex(Refusal,'readiness unavailable'):
+            service._wait_broker_ready(Empty(),registry,binding,lambda:now[0],lambda:None,
+                                      lambda seconds:now.__setitem__(0,now[0]+seconds))
+        self.assertEqual(now[0],binding['fence']['pending']['created']+120)
+
     def test_new_public_roles_hold_before_input_or_authentication(self):
         class Unreadable:
             @property

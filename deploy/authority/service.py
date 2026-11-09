@@ -578,6 +578,7 @@ def _locator(authority, d, run_id, attempt, role, key):
     name = ('verify' if role == 'evidence' else 'publication controls' if role == 'publication-controls' else
             'hosted qualification' if role == 'qualification' else role)
     if role in ('trial-host-intent','trial-host-denial'): name = 'trial host denial'
+    elif role in ('trial-broker-intent','trial-broker-denial'): name = 'broker (' + str(key) + ')'
     elif key is not None: name += ' (' + str(key) + ')'
     job = execution_job(authority, d, run_id, attempt, name, completed=True)
     items = authority.pages('/repos/' + d['policy']['authority_repository'] + '/actions/runs/' + str(run_id) + '/artifacts', 'artifacts')
@@ -942,6 +943,7 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
         if role == 'finalize':
             from broker_finalize import Finalizer
             pin = loads(environment.get('AGENTIC_RECOVERY_PIN',''))
+            import trial_broker_case
             # Administrative write authority is borrowed only by this separately
             # pinned terminal role, using the existing finalizer and fence engine.
             with _admin_authority(root,api,registry,before,identities,token_factory) as writer:
@@ -950,7 +952,7 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
                     admitted.request['operation_id'],admitted.request['sequence'],
                     _case_broker_job(api,admitted),_admission=admitted)
             from trial_host_case import selected
-            if selected(admitted):
+            if selected(admitted) or trial_broker_case.selected(admitted):
                 document=dict(schema_version=1,kind='trial-case-terminal',request_digest=digest(admitted.request),
                     certificate_digest=digest(admitted.value['certificate']),before=before,after=result,completed=clock())
                 _upload_document(uploader_factory(node,environment),'trial-case-terminal-'+admitted.record['task_id']+'-1',document)
@@ -1050,7 +1052,12 @@ def _produce(environment, request, node, role, clock=None, api_factory=GitHub, a
             reader_root = (app_factory or bootstrap.app_api)(d['apps']['reader'], environment.get('AGENTIC_READER_PRIVATE_KEY'))
             with _source_token('reader', reader_root, api, d, identities, before['configuration_revision'], clock,
                                token_factory, guard) as reader:
-                return Session(registry, reader, api, identities, job['id'], locators, merger, uploader, clock, sleeper)._run(_admission=admission)
+                session=Session(registry, reader, api, identities, job['id'], locators, merger, uploader, clock, sleeper)
+                if admission is not None:
+                    import trial_broker_case
+                    if trial_broker_case.selected(admission):
+                        return trial_broker_case.run(admission,api,session,uploader,sleeper)
+                return session._run(_admission=admission)
         else: raise Refusal('unsupported producer role')
     guard()
     if role == 'publish': return document
@@ -1106,6 +1113,13 @@ def _wait_broker_ready(api, registry, binding, clock, guard, sleeper, admission=
     from merge_receipts import ActionsReceipts
     op, p = binding['fence']['pending'], binding['deployment']['policy']
     deadline = min(clock()+120,op['execution_deadline']-60,binding['deployment']['expires']-60)
+    if admission is not None:
+        import trial_broker_case
+        if trial_broker_case.selected(admission):
+            # Only pre-readiness scheduling spans authentic proof aging. The
+            # ready request's120s and final readback's30s remain unchanged.
+            deadline=min(op['execution_deadline']-60,binding['deployment']['expires']-60,
+                         admission.qualification(binding)['expires'])
     while clock() < deadline:
         guard()
         jobs = api.pages('/repos/'+p['authority_repository']+'/actions/runs/'+str(op['run_id'])+'/attempts/'+str(op['attempt'])+'/jobs','jobs')

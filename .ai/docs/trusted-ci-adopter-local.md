@@ -586,8 +586,38 @@ close for that exact token/candidate/run/job/interval. Neither the revoked worke
 token nor either prior case token can authorize the third case. Original ownership,
 expiry and total deadline still bound all effects; progression never renews them.
 `trial_launch.revoke(provision, token_factory, name='missing-approval')` reconstructs
-exact third-token cleanup after expiry or restart. This three-case progression is
-a bounded prerequisite, not the complete ordered host prefix or qualification.
+exact third-token cleanup after expiry or restart.
+
+The fourth distinct reservation, `expired-proof`, requires all three exact CLOSED
+terminal histories and owned native completions from that same original trial.
+Its separate READY/pending/execution refs and protected journals cannot reuse a
+prior case capability. The same staging engine authenticates and revokes the
+owned missing-approval token before minting and staging the fourth token. Exact
+cleanup remains reconstructible with `name='expired-proof'` after expiry/restart.
+
+The broker keeps its ordinary merger/reader purposes and real warm Session. It
+authenticates current verifier/issuer success, independent human approval,
+administrative publication observation and initially valid own-App envelopes,
+then retains a create-only intent before waiting for actual proof expiry. No
+expiry field or original deadline is rewritten. The actual Session must raise
+the exact `proof_expired` observation and emit its genuine `not-submitted`
+receipt without entering dispatch. A separate CLOSED broker outcome binds the
+intent, retained proof bytes and no-dispatch receipt. Missing, unknown or wrong
+outcomes leave the fence pending and cannot replay the attempt. The independently
+pinned Finalizer authenticates that outcome before its exact conditional terminal
+transition; native observation retains the fourth CLOSED terminal entry. Earlier
+READY/pending/execution references stay pinned across subsequent effects.
+Only this authenticated case's pre-readiness scheduling wait spans proof aging,
+bounded by its original consumed capability, certificate, operation and deployment
+expiry. The readiness request's 120-second lifetime and final 30-second freshness
+remain unchanged. Case-mode broker/concurrent jobs allow ten minutes of runner
+scheduling; original authority deadlines still stop them sooner. Production keeps
+its original 120-second scheduling wait and five-minute job timeout. When this
+broker closes without readiness, concurrent roles refuse the completed broker;
+they do not fabricate control or final-proof artifacts.
+
+This four-case progression is a bounded prerequisite, not the complete ordered
+eleven-case host prefix, five-case broker suffix or qualification.
 The launcher passes only the fresh read capability and each role's existing
 purpose credentials; READY/preparation/consumer jobs receive no App root or model
 key. The terminal job can close a failed broker's genuine no-dispatch receipt or

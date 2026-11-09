@@ -12,7 +12,7 @@ import provenance
 from dispatch_controls import locked_reference
 from registry import Registry, TRIAL, trial_reference
 from setup import TrialReadStaging
-from trial_controller import Admission, case_journal
+from trial_controller import Admission, case_journal, predecessor
 from trial_handoff import read as read_origin
 from trusted_ci_policy import digest, object_fields, positive, require, sha
 
@@ -107,8 +107,8 @@ class Staging(TrialReadStaging):
                 require(c.store(c.root/previous).read()==previous_document, 'owned revoked predecessor changed')
         previous=None
         if a.value['history']:
-            predecessor='direct-push' if a.candidate['name']=='coding-update' else 'coding-update'
-            previous=case_journal(Staging.JOURNAL,dict(name=predecessor))
+            prior_name=predecessor(a.candidate['name'])
+            previous=case_journal(Staging.JOURNAL,dict(name=prior_name))
         if previous is not None:
             from trial_case import read as read_case
             prior,_=read_case(c.session.registry,a.value['history'][-1]['revision'],c.clock)
@@ -118,7 +118,7 @@ class Staging(TrialReadStaging):
                     digest(staged['value']['credential']['token'])==prior['execution']['credential']['token_digest'],
                     'owned predecessor capability differs')
             self.native.guard()
-            revoke(c,self.token_factory,name=predecessor)
+            revoke(c,self.token_factory,name=prior_name)
             self.native.guard()
             previous_document=c.store(c.root/previous).read()
             require(previous_document['value']['phase']=='revoked', 'owned predecessor cleanup remains pending')

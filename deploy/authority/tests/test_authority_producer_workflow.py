@@ -28,6 +28,10 @@ class ProducerWorkflowContracts(unittest.TestCase):
         self.assertNotIn('broker', publication)
         self.assertIn('publication_controls', self.jobs['publish'].split('name:',1)[0])
 
+    def test_trial_expiry_scheduling_preserves_production_timeout(self):
+        for name in ('broker','controls',*[p+'_final_proof' for p in ('admin','reader','issuer','coding','merge')]):
+            self.assertIn("timeout-minutes: ${{ inputs.mode == 'case' && 10 || 5 }}",self.jobs[name])
+
     def test_final_jobs_are_concurrent_with_broker_and_each_key_stays_scoped(self):
         expected = dict(discover={'READER'}, prepare={'ADMIN'}, verify={'READER'},
             publication_controls={'ADMIN'},publish={'ISSUER'},broker={'READER','MERGE'},controls={'ADMIN'})
