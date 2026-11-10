@@ -15,7 +15,7 @@ from trial_setup import Provision
 from trusted_ci_policy import digest, object_fields, require
 
 
-CASE_CHAIN = ('direct-push','coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks')
+CASE_CHAIN = ('direct-push','coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records')
 
 
 def predecessor(name):

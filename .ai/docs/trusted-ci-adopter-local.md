@@ -97,7 +97,7 @@ digest. A generic error, unavailable credential, skipped obligation, unrelated
 required check or moved ref cannot pass. The instance refuses another attempt
 after starting, including an uncertain response. This is not durable recovery
 across processes: full-prefix native orchestration and retained dispatch intents
-remain unfinished. The separate bounded native direct-push/coding-update/missing-approval/bad-acceptance/replaced-checks
+remain unfinished. The separate bounded native direct-push/coding-update/missing-approval/bad-acceptance/replaced-checks/forged-records
 composition below owns durable case intents. Public invocation is held before network access. Local fixtures
 exercise verification, cleanup, closed artifacts and publication against existing
 synthetic active regression configurations; they do not establish initial trial
@@ -646,7 +646,7 @@ authority-outage token before staging the fresh sixth origin-read capability and
 queueing. `trial_launch.revoke(..., name='bad-acceptance')` reconstructs cleanup
 after expiry or restart. Earlier capabilities cannot authorize this case.
 
-Only authenticated `bad-acceptance` and `replaced-checks` cases may retain the pinned verifier's failed first policy
+Only authenticated `bad-acceptance`, `replaced-checks` and `forged-records` cases may retain the pinned verifier's failed first policy
 criterion through `negative_evidence`; cleanup and exact execution provenance must
 still validate. Its mutations are derived from the immutable exported worker bytes
 and checked against the actual candidate and baseline. The successful evidence
@@ -691,7 +691,26 @@ artifact is retrofitted. Its permissive candidate lifecycle command still fails
 the actual pinned controller's denial assertion. Native CLOSED observation retains
 all seven histories; positive consumers remain success-only.
 
-This seven-case progression is a bounded prerequisite, not the complete ordered
+The eighth distinct reservation, `forged-records`, reauthenticates all seven exact
+CLOSED histories and owned native completions against the immutable original
+trial. Separate journals and READY/pending/execution refs retain the original
+owner, expiry and deadlines. Staging revokes the exact owned replaced-checks token
+before minting the fresh eighth origin-read capability and queueing. Original
+worker and all seven earlier capabilities cannot authorize the eighth consumers.
+`trial_launch.revoke(..., name='forged-records')` reconstructs cleanup after expiry
+or restart.
+
+The same failed-verifier, strict issuer refusal, required-check host denial and
+pinned Finalizer path requires an actual changed candidate file under
+`knowledge/history/lifecycle/`, checked against the exact head and baseline.
+The local connected fixture adds attempted forged lifecycle approval/PASS bytes
+only inside the initial worker export, before closure and all sixteen reservations.
+They remain untrusted candidate attack input; they never become native records,
+task evidence, authority receipts or qualification. Replacement-only export cannot
+establish this case. Native CLOSED observation retains all eight histories and
+leaves the original trial unqualified. Positive consumers remain success-only.
+
+This eight-case progression is a bounded prerequisite, not the complete ordered
 eleven-case host prefix, five-case broker suffix or qualification.
 In particular, initial-unqualified revocation remains unimplemented; an ACTIVE
 qualification receipt cannot substitute for that design.

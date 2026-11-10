@@ -865,7 +865,7 @@ def _case_launch(environment,hint,node,role,clock=None,api_factory=GitHub,upload
     registry.authenticate_setup_progress(trial_case.case_baseline(original,registry,record,value,clock),{OPERATION:value['pending']})
     name=value['candidate']['name']
     return dict(value['request'],handoff=dict(origin=hint['origin'],revision=revision),
-                host_case=name if name in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks') else 'none')
+                host_case=name if name in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks','forged-records') else 'none')
 
 
 def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub, app_factory=None,
@@ -921,9 +921,9 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
     # before constructing a role root or minting its source credentials.
     admitted = trial_case.Hosted(registry,origin_reader,None,environment,hint,role,clock)
     if role == 'host-denial':
-        require(host_case in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks') and host_case==admitted.candidate['name'],
+        require(host_case in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks','forged-records') and host_case==admitted.candidate['name'],
                 'host scheduling identity differs from authenticated case')
-        purpose='merge' if admitted.candidate['name'] in ('missing-approval','bad-acceptance','replaced-checks') else 'coding'
+        purpose='merge' if admitted.candidate['name'] in ('missing-approval','bad-acceptance','replaced-checks','forged-records') else 'coding'
         _producer_environment(environment,purpose)
         require(isinstance(environment.get('AGENTIC_'+purpose.upper()+'_PRIVATE_KEY'),str) and
                 bool(environment['AGENTIC_'+purpose.upper()+'_PRIVATE_KEY']), 'selected host App root required')
@@ -1031,7 +1031,7 @@ def _produce(environment, request, node, role, clock=None, api_factory=GitHub, a
                 admission.task(before,s,request['task']['locator'],request['task']['task_id'])
             result = (verifier or _verify_actions)(source, d, s, job['id'], guard, clock)
             document = dict(schema_version=2, kind='actions', registry_revision=before['configuration_revision'], result=result)
-            if admission is not None and admission.candidate['name'] in ('bad-acceptance','replaced-checks'):
+            if admission is not None and admission.candidate['name'] in ('bad-acceptance','replaced-checks','forged-records'):
                 from trial_host_case import failed_evidence
                 failed_evidence(admission,document,job['id'])
             else:
@@ -1047,7 +1047,7 @@ def _produce(environment, request, node, role, clock=None, api_factory=GitHub, a
             broker, ready = _wait_broker_ready(api, registry, before, clock, guard, sleeper, admission)
             document = control_rendezvous._collect(readers, api, registry.binding, broker, ready, clock, admission)
         elif role == 'publish':
-            if admission is not None and admission.candidate['name'] in ('bad-acceptance','replaced-checks'):
+            if admission is not None and admission.candidate['name'] in ('bad-acceptance','replaced-checks','forged-records'):
                 import trial_host_case
                 return trial_host_case.publish(admission,api,job,uploader,source)
             document = _publish_bound(source, api, registry, before, identities, request, clock, guard, admission)

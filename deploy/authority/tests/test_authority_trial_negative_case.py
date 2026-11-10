@@ -61,7 +61,7 @@ class Negative(outage_fixture.Outage):
         self.tokens=factory
 
     def verify(self,source,d,s,job_id,guard,clock):
-        if self.admission.candidate['name'] not in ('bad-acceptance','replaced-checks'):
+        if self.admission.candidate['name'] not in ('bad-acceptance','replaced-checks','forged-records'):
             return super().verify(source,d,s,job_id,guard,clock)
         events=self.events
         class Disk:
@@ -100,7 +100,7 @@ class Negative(outage_fixture.Outage):
         return artifact,member,value
 
     def host(self,change=None,selected=None,app_factory=None):
-        if self.admission.candidate['name'] not in ('bad-acceptance','replaced-checks'):
+        if self.admission.candidate['name'] not in ('bad-acceptance','replaced-checks','forged-records'):
             return super().host(change,selected,app_factory)
         # The existing fixture's host helper selects the key by case name.
         env=self.job('trial host denial','trial_host_denial')
