@@ -1,4 +1,4 @@
-"""Held fourth native case: retain a real Session expiry, never dispatch a merge."""
+"""Held native broker negatives over the shared Session; never dispatch a merge."""
 import copy
 
 import broker_proofs
@@ -11,11 +11,11 @@ from trusted_ci_policy import digest, object_fields, positive, require
 def selected(admission):
     from trial_controller import authenticated
     authenticated(admission)
-    return admission.candidate['name']=='expired-proof'
+    return admission.candidate['name'] in ('expired-proof','authority-outage')
 
 
 def _identity(a):
-    require(selected(a),'exact native expired-proof case required')
+    require(selected(a),'exact native broker negative required')
     return dict(schema_version=1,kind='trial-broker-denial',case=a.candidate['name'],
         request_digest=digest(a.request),certificate_digest=digest(a.value['certificate']))
 
@@ -25,9 +25,11 @@ def guard(a):
     from authority_github import Readers,current_snapshot
     a.guard()
     s=a.request['snapshot']; d=a.binding['deployment']
-    require(current_snapshot(Readers(a.source,a.registry.api,d),d,s['pr'],s['run_id'],s['run_attempt'])==s,
-            'expired-proof candidate changed during admission readback')
+    current=current_snapshot(Readers(a.source,a.registry.api,d),d,s['pr'],s['run_id'],s['run_attempt'])
+    require(current==s,
+            'broker negative candidate changed during admission readback')
     a.local_guard()
+    return current
 
 
 def _prerequisites(a, authority):
@@ -39,7 +41,7 @@ def _prerequisites(a, authority):
     from trusted_ci_github import independent_approval
     b,s=a.binding,a.request['snapshot']; d=b['deployment']
     readers=Readers(a.source,authority,d)
-    require(current_snapshot(readers,d,s['pr'],s['run_id'],s['run_attempt'])==s,'expired-proof candidate changed')
+    require(current_snapshot(readers,d,s['pr'],s['run_id'],s['run_attempt'])==s,'broker negative candidate changed')
     location=service._locator(authority,d,s['run_id'],s['run_attempt'],'evidence',s['pr'])
     proof=provenance.authenticated_document(authority,d,location,'evidence',s['pr'],a.clock())
     task=a.task(b,s,a.request['task']['locator'],a.request['task']['task_id'])
@@ -49,7 +51,7 @@ def _prerequisites(a, authority):
     probe=HostCases(a.registry,a.source,authority,a.record['pair']['identities'],None,None,None,a.clock)
     probe._success(s,location,coordinates,d)
     pr=a.source.get('/repos/'+d['policy']['repository']+'/pulls/'+str(s['pr']))
-    require(pr.get('mergeable') is True,'unresolved expiry candidate')
+    require(pr.get('mergeable') is True,'unresolved broker candidate')
     independent_approval(a.source,d['policy'],pr,human=True)
     facts=observe(readers,d)
     a.qualification(b,facts['controls_digest'])
@@ -81,6 +83,34 @@ def _expiry(a, authority, locators, now):
     require(False,'retained proof has not expired')
 
 
+def _outage(a, authority, intent, collection, refusal, observed, job, terminal=None):
+    """Revalidate the real collection after readback recovers, without dispatch.
+
+    The CLOSED broker attests the transient HTTP failure. Historical validation
+    authenticates its exact inputs and original windows, never extends authority.
+    """
+    import broker_evidence
+    object_fields(refusal,('code','observation'),'native outage refusal')
+    observation=refusal['observation']
+    object_fields(observation,('path','status'),'native outage observation')
+    s=a.request['snapshot']; d=a.binding['deployment']
+    require(refusal['code']=='readback_unavailable' and type(observation['status']) is int and
+            observation['status'] in (502,503,504) and
+            observation['path']=='/repos/'+d['policy']['authority_repository']+'/actions/runs/'+str(s['run_id'])+'/artifacts',
+            'wrong native authority readback refusal')
+    object_fields(collection,('locators','request','controls','proofs'),'native broker collection')
+    locators=collection['locators']; request=collection['request']
+    require(positive(observed) and intent['issued']<=request['issued']<=observed and
+            digest(locators['proofs'])==digest(intent['proofs']), 'native outage collection differs')
+    receipts=ActionsReceipts._create(authority,a.registry.binding,job,a.clock,recovery=True,admission=a)
+    ready=receipts.find_for_recovery('control-ready')
+    require(ready is not None and digest(receipts.authenticate(ready))==digest(request), 'exact Session readiness required')
+    prepared=broker_evidence._preload(a.registry,a.source,authority,a.record['pair']['identities'],job,
+                                    locators,lambda:intent['issued'],admission=a,terminal=terminal)
+    return broker_evidence._finish(a.registry,a.source,authority,a.record['pair']['identities'],prepared,request,
+        collection['controls'],collection['proofs'],lambda:observed,admission=a,terminal=terminal)
+
+
 def run(a, authority, session, uploader, sleeper):
     """Only admission differs from the ordinary broker Session implementation."""
     import service
@@ -97,32 +127,41 @@ def run(a, authority, session, uploader, sleeper):
     issued=a.clock(); proofs=_proofs(a,authority,locators,issued)
     intent=dict(identity,kind='trial-broker-intent',job_id=job,issued=issued,proofs=locators,proofs_digest=proofs['proofs_digest'],
                 publication_digest=_publication(a,authority,issued))
-    guard(a)
+    before=guard(a)
     service._upload_document(uploader,name,intent)
     a.guard()
-    # These are authentic initially valid retained envelopes. Let the real clock
-    # expire the first one without rewriting bytes or extending any authority.
-    deadline=min(proofs['valid_until'].values())
-    while a.clock()<deadline:
-        a.guard(); sleeper(min(2,deadline-a.clock()))
-    _prerequisites(a,authority)
-    _expiry(a,authority,locators,a.clock())
+    expiry=a.candidate['name']=='expired-proof'
+    if expiry:
+        # Authentic initially valid envelopes age without changing their bytes.
+        deadline=min(proofs['valid_until'].values())
+        while a.clock()<deadline:
+            a.guard(); sleeper(min(2,deadline-a.clock()))
+        _prerequisites(a,authority)
+        _expiry(a,authority,locators,a.clock())
     a.guard()
     try:
         session._run(_admission=a)
     except BrokerRefusal as error:
         refusal=dict(code=error.code,observation=error.observation)
-        require(error.code=='proof_expired' and _expiry(a,authority,locators,error.observation['observed'])==refusal,
-                'Session did not establish exact retained-proof expiry')
+        if expiry:
+            require(error.code=='proof_expired' and _expiry(a,authority,locators,error.observation['observed'])==refusal,
+                    'Session did not establish exact retained-proof expiry')
+        else:
+            observed=session._refused_at
+            collection=session._collection
+            _outage(a,authority,intent,collection,refusal,observed,job)
     else:
-        require(False,'Session did not refuse expired proof')
+        require(False,'Session did not establish native broker refusal')
     _prerequisites(a,authority)
+    after=guard(a)
     receipts=ActionsReceipts._create(authority,a.registry.binding,job,a.clock,recovery=True,admission=a)
     location=receipts.find_for_recovery('not-submitted')
     require(location is not None and all(receipts.find_for_recovery(k) is None for k in ('gate','dispatch','outcome','host-denied')),
             'genuine no-dispatch Session evidence required')
     terminal=receipts.authenticate(location)
     document=dict(identity,job_id=job,intent=intent,refusal=refusal,receipt=location,receipt_digest=digest(terminal),completed=a.clock())
+    if not expiry:
+        document.update(collection=collection,observed=observed,before=before,after=after)
     guard(a)
     service._upload_document(uploader,'trial-broker-denial-'+key+'-'+str(s['run_attempt']),document)
     a.guard()
@@ -130,14 +169,16 @@ def run(a, authority, session, uploader, sleeper):
 
 
 def read(a, authority, job_id):
-    """CLOSED outcome, original proof validity, real expiry and Session receipt."""
+    """Authenticate the exact named CLOSED outcome before terminal effects."""
     import service
     identity=_identity(a); s=a.request['snapshot']; d=a.binding['deployment']; key=s['pr']
     def load(role):
         locator=service._locator(authority,d,s['run_id'],s['run_attempt'],role,key)
         return provenance.authenticated_document(authority,d,locator,role,key,a.clock())
     proof=load('trial-broker-denial'); value=proof['document']
-    object_fields(value,(*identity,'job_id','intent','refusal','receipt','receipt_digest','completed'),'native broker outcome')
+    expiry=a.candidate['name']=='expired-proof'
+    extra=[] if expiry else ['collection','observed','before','after']
+    object_fields(value,(*identity,'job_id','intent','refusal','receipt','receipt_digest','completed',*extra),'native broker outcome')
     require(type(value['schema_version']) is int and positive(value['job_id']) and
             all(value[k]==v for k,v in identity.items()) and value['job_id']==proof['job_id']==job_id and
             positive(value['completed']) and proof['job_started']<=value['completed']<=proof['artifact_created']<=proof['job_completed'],
@@ -153,9 +194,12 @@ def read(a, authority, job_id):
             'original valid proofs differ')
     require(_publication(a,authority,intent['issued'])==intent['publication_digest'],'original publication observation differs')
     refusal=value['refusal']; object_fields(refusal,('code','observation'),'native broker refusal')
-    observed=refusal['observation'].get('observed')
+    observed=refusal['observation'].get('observed') if expiry else value['observed']
     require(positive(observed) and retained['artifact_created']<=observed<=value['completed'] and
-            _expiry(a,authority,intent['proofs'],observed)==refusal,'exact proof expiry observation differs')
+            (not expiry or _expiry(a,authority,intent['proofs'],observed)==refusal),'exact proof expiry observation differs')
+    if not expiry:
+        require(digest(value['before'])==digest(value['after'])==digest(s),'native outage before/after differs')
+        _outage(a,authority,intent,value['collection'],refusal,observed,job_id,terminal=value['receipt'])
     receipts=ActionsReceipts._create(authority,a.registry.binding,job_id,a.clock,recovery=True,admission=a)
     receipts.terminal_job()
     require(receipts.find_for_recovery('not-submitted')==value['receipt'] and

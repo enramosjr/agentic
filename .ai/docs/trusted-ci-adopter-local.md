@@ -616,8 +616,32 @@ its original 120-second scheduling wait and five-minute job timeout. When this
 broker closes without readiness, concurrent roles refuse the completed broker;
 they do not fabricate control or final-proof artifacts.
 
-This four-case progression is a bounded prerequisite, not the complete ordered
+The fifth distinct reservation, `authority-outage`, reauthenticates all four
+exact CLOSED histories and owned native completions from the immutable original
+trial. Separate READY/pending/execution refs and journals bind its fresh token;
+the staging engine revokes the exact owned expired-proof token before queueing.
+Cleanup remains reconstructible with `name='authority-outage'` after expiry or
+restart. Prior capabilities cannot authorize its consumers or producers.
+
+This case drives the existing warm Session, concurrent administrative controls
+and all five final proofs with the original 120-second readiness and 30-second
+freshness bounds. Only the genuine typed `readback_unavailable` from a 502/503/504
+at the final authority-artifact inventory can satisfy the named negative. A
+successful authorization is refused before dispatch; wrong failures cannot
+produce its named outcome. A create-only intent precedes the attempt. The CLOSED
+broker outcome binds the exact collection inputs, observed failure, unchanged
+before/after snapshot and genuine no-dispatch receipt. After readback recovers,
+the pinned Finalizer revalidates those inputs at their original timestamps
+through the shared collector. Historical job admission requires this exact
+authenticated CLOSED Session receipt; it cannot start a broker or extend any
+authority. Missing, unknown, substituted or still-unavailable evidence leaves the
+fence pending. The final source snapshot follows blocking admission reads before
+terminal effects, and native observation retains all five exact history entries.
+
+This five-case progression is a bounded prerequisite, not the complete ordered
 eleven-case host prefix, five-case broker suffix or qualification.
+In particular, initial-unqualified revocation remains unimplemented; an ACTIVE
+qualification receipt cannot substitute for that design.
 The launcher passes only the fresh read capability and each role's existing
 purpose credentials; READY/preparation/consumer jobs receive no App root or model
 key. The terminal job can close a failed broker's genuine no-dispatch receipt or

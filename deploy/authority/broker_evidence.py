@@ -32,7 +32,24 @@ def preload(registry, source, authority, identities, job_id, locators, clock):
     return _preload(registry, source, authority, identities, job_id, locators, clock)
 
 
-def _preload(registry, source, authority, identities, job_id, locators, clock, admission=None):
+def _collection_job(registry, authority, job_id, clock, admission, terminal):
+    if terminal is None:
+        return ActionsReceipts(authority, registry.binding, job_id, clock).current_job()
+    # A historical collection is read-only and requires an authentic CLOSED
+    # Session receipt from this exact admitted outage. It cannot authorize a run.
+    from trial_controller import authenticated
+    authenticated(admission,registry.binding())
+    require(admission.candidate['name']=='authority-outage' and terminal['kind']=='not-submitted',
+            'exact native outage terminal required')
+    store=ActionsReceipts._create(authority,registry.binding,job_id,admission.clock,recovery=True,admission=admission)
+    job=store.terminal_job()
+    receipt=store.authenticate(terminal)
+    require(clock()<=receipt['issued'] and all(store.find_for_recovery(k) is None for k in ('gate','dispatch','outcome','host-denied')),
+            'historical collection contradicts no-dispatch evidence')
+    return job
+
+
+def _preload(registry, source, authority, identities, job_id, locators, clock, admission=None, terminal=None):
     binding = copy.deepcopy(registry.binding())
     d = validate_deployment(binding['deployment'])
     app_proofs.identity_record(d, identities)
@@ -42,7 +59,7 @@ def _preload(registry, source, authority, identities, job_id, locators, clock, a
         from trial_controller import authenticated
         authenticated(admission, binding)
     require(op is not None and op['kind'] == 'merge' and (admission is not None or d['state'] == 'active'), 'active pending merge required')
-    ActionsReceipts(authority, registry.binding, job_id, clock).current_job()
+    _collection_job(registry,authority,job_id,clock,admission,terminal)
     api = Readers(source, authority, d)
     s = current_snapshot(api, d, op['pr'], op['run_id'], op['attempt'])
     broker_proofs._operation(binding, s, admission)
@@ -131,12 +148,12 @@ def finish(registry, source, authority, identities, prepared, request, control_l
     return _finish(registry, source, authority, identities, prepared, request, control_locator, final_proof_locators, clock)
 
 
-def _finish(registry, source, authority, identities, prepared, request, control_locator, final_proof_locators, clock, admission=None):
+def _finish(registry, source, authority, identities, prepared, request, control_locator, final_proof_locators, clock, admission=None, terminal=None):
     binding = registry.binding()
     _same(binding, prepared['binding'])
     d, expected = binding['deployment'], prepared['snapshot']
     op = broker_proofs._operation(binding, expected, admission)
-    ActionsReceipts(authority, registry.binding, prepared['job_id'], clock).current_job()
+    _collection_job(registry,authority,prepared['job_id'],clock,admission,terminal)
     control_rendezvous._validate_ready(request, binding, prepared['job_id'], clock(), admission=admission)
     controls = control_rendezvous._read_response(authority, binding, request, control_locator, clock(), admission)
     qualification = prepared['qualification']

@@ -17,7 +17,7 @@ from trusted_ci_policy import digest, object_fields, require, sha
 
 def baseline(original, registry, record, history, clock):
     """Compose the exact native host predecessors, never latest state."""
-    require(isinstance(history,list) and len(history)<=3, 'bounded native progression history required')
+    require(isinstance(history,list) and len(history)<len(CASE_CHAIN), 'bounded native progression history required')
     before=copy.deepcopy(record['trial'])
     for index in range(len(history)):
         before=_predecessor(original,registry,record,history,index,before,clock)
@@ -70,7 +70,7 @@ def fresh_capability(original,value,record,token,clock):
 
 
 def history_guard(original,record,history):
-    require(isinstance(history,list) and len(history)<=3,'bounded native progression history required')
+    require(isinstance(history,list) and len(history)<len(CASE_CHAIN),'bounded native progression history required')
     for index,entry in enumerate(history):
         # The immutable execution document was authenticated at admission. Keep
         # all its exact publication pointers fixed across later blocking reads.

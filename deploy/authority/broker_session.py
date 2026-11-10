@@ -4,6 +4,7 @@ This build cannot start a public session. Internal fixture execution composes th
 real collector/receipt/dispatch interfaces without granting hosted qualification.
 No administrative API, registry writer, candidate command or root key is loaded.
 """
+import copy
 import secrets
 import time
 
@@ -90,7 +91,14 @@ class Session:
                                                uploader=self.uploader, admission=_admission)
         try:
             gate = self._collect(op)
+            if _admission is not None:
+                import trial_broker_case
+                require(not trial_broker_case.selected(_admission), 'native broker negative reached successful authorization')
         except Exception:
+            if _admission is not None and _admission.candidate['name']=='authority-outage':
+                # Retain the collection failure time before blocking guards,
+                # receipt inventories, uploads and readback can advance it.
+                self._refused_at = self.clock()
             # This closed path has never entered dispatch. An immutable positive
             # artifact may permit later terminal admin recovery, never a retry.
             if _admission is not None:
@@ -123,6 +131,9 @@ class Session:
         self.receipts.append('control-ready', request)
         jobs = self._wait(request['expires'] - 60, warm=False)
         controls, final_proofs = self._locators(jobs)
+        if self._admission is not None and self._admission.candidate['name']=='authority-outage':
+            self._collection = dict(locators=copy.deepcopy(locators), request=copy.deepcopy(request),
+                                    controls=copy.deepcopy(controls), proofs=copy.deepcopy(final_proofs))
         arguments = (self.registry,self.source,self.authority,self.identities,prepared,request,controls,final_proofs,self.clock)
         return (broker_evidence.finish(*arguments) if self._admission is None else
                 broker_evidence._finish(*arguments,admission=self._admission))

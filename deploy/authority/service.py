@@ -1115,7 +1115,7 @@ def _wait_broker_ready(api, registry, binding, clock, guard, sleeper, admission=
     deadline = min(clock()+120,op['execution_deadline']-60,binding['deployment']['expires']-60)
     if admission is not None:
         import trial_broker_case
-        if trial_broker_case.selected(admission):
+        if trial_broker_case.selected(admission) and admission.candidate['name']=='expired-proof':
             # Only pre-readiness scheduling spans authentic proof aging. The
             # ready request's120s and final readback's30s remain unchanged.
             deadline=min(op['execution_deadline']-60,binding['deployment']['expires']-60,
