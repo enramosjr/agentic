@@ -132,7 +132,8 @@ class HostCases:
             reviews = independent_approval(self.source, p, pr, human=True)
         evidence['reviews'] = reviews
         if name == 'spoofed-source':
-            require(any(c.get('name') == p['check_name'] and c.get('app', {}).get('id') != p['app_id'] and
+            require(any(c.get('name') == p['check_name'] and positive(c.get('app', {}).get('id')) and
+                        c['app']['id'] != p['app_id'] and
                         c.get('status') == 'completed' and c.get('conclusion') == 'success' and
                         c.get('head_sha') == s['merge'] for c in entries), 'actual spoofed issuer success missing')
         if name in STALE:
@@ -221,7 +222,7 @@ class HostCases:
         expected = 'protected_update' if direct else 'required_review' if name == 'missing-approval' else 'required_check'
         def send(scoped):
             before_send(copy.deepcopy(request))
-            if name in ('missing-approval','bad-acceptance','replaced-checks','forged-records'):
+            if name in ('missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source'):
                 # Minting and durable intent may block. Reread the selected
                 # review/acceptance prerequisites and all other obligations.
                 self._prerequisites(case)

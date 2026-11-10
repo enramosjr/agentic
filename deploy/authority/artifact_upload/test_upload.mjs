@@ -59,6 +59,7 @@ const documents = [
   ['publication-controls-7-1', 'publication-controls.json'],
   ['trial-publication-intent-7-1','trial-publication-intent.json'],
   ['trial-publication-denial-7-1','trial-publication-denial.json'],
+  ['trial-publication-observation-7-1','trial-publication-observation.json'],
   ['task-' + 'a'.repeat(32) + '-1', 'task.json'], ['qualification-1', 'qualification.json'],
   ['task-ready-' + 'a'.repeat(32) + '-1', 'task-ready.json'],
   ['task-controls-' + 'a'.repeat(32) + '-1', 'task-controls.json'],

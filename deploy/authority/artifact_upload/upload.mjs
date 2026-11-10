@@ -5,7 +5,7 @@ import {join, resolve, dirname} from 'node:path';
 function documentMember(name) {
   if (typeof name !== 'string') return null;
   if (/^agentic-merge-[a-f0-9]{32}-s[1-9][0-9]{0,19}-a[1-9][0-9]{0,19}-(gate|dispatch|outcome|control-ready|not-submitted|host-denied)$/.test(name)) return 'receipt.json';
-  const candidate = /^(evidence|controls|publication-controls|trial-publication-intent|trial-publication-denial)-[1-9][0-9]{0,19}-[1-9][0-9]{0,19}$/.exec(name);
+  const candidate = /^(evidence|controls|publication-controls|trial-publication-intent|trial-publication-denial|trial-publication-observation)-[1-9][0-9]{0,19}-[1-9][0-9]{0,19}$/.exec(name);
   const proof = /^(proof|final-proof)-(admin|reader|issuer|coding|merge)-[1-9][0-9]{0,19}$/.exec(name);
   if (candidate) return `${candidate[1]}.json`;
   if (proof) return `${proof[1]}.json`;

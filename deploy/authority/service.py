@@ -578,7 +578,7 @@ def _locator(authority, d, run_id, attempt, role, key):
     name = ('verify' if role == 'evidence' else 'publication controls' if role == 'publication-controls' else
             'hosted qualification' if role == 'qualification' else role)
     if role in ('trial-host-intent','trial-host-denial'): name = 'trial host denial'
-    elif role in ('trial-publication-intent','trial-publication-denial'): name = 'publish (' + str(key) + ')'
+    elif role in ('trial-publication-intent','trial-publication-denial','trial-publication-observation'): name = 'publish (' + str(key) + ')'
     elif role in ('trial-broker-intent','trial-broker-denial'): name = 'broker (' + str(key) + ')'
     elif key is not None: name += ' (' + str(key) + ')'
     job = execution_job(authority, d, run_id, attempt, name, completed=True)
@@ -865,7 +865,7 @@ def _case_launch(environment,hint,node,role,clock=None,api_factory=GitHub,upload
     registry.authenticate_setup_progress(trial_case.case_baseline(original,registry,record,value,clock),{OPERATION:value['pending']})
     name=value['candidate']['name']
     return dict(value['request'],handoff=dict(origin=hint['origin'],revision=revision),
-                host_case=name if name in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks','forged-records') else 'none')
+                host_case=name if name in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source') else 'none')
 
 
 def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub, app_factory=None,
@@ -921,9 +921,9 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
     # before constructing a role root or minting its source credentials.
     admitted = trial_case.Hosted(registry,origin_reader,None,environment,hint,role,clock)
     if role == 'host-denial':
-        require(host_case in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks','forged-records') and host_case==admitted.candidate['name'],
+        require(host_case in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source') and host_case==admitted.candidate['name'],
                 'host scheduling identity differs from authenticated case')
-        purpose='merge' if admitted.candidate['name'] in ('missing-approval','bad-acceptance','replaced-checks','forged-records') else 'coding'
+        purpose='merge' if admitted.candidate['name'] in ('missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source') else 'coding'
         _producer_environment(environment,purpose)
         require(isinstance(environment.get('AGENTIC_'+purpose.upper()+'_PRIVATE_KEY'),str) and
                 bool(environment['AGENTIC_'+purpose.upper()+'_PRIVATE_KEY']), 'selected host App root required')
@@ -1047,7 +1047,7 @@ def _produce(environment, request, node, role, clock=None, api_factory=GitHub, a
             broker, ready = _wait_broker_ready(api, registry, before, clock, guard, sleeper, admission)
             document = control_rendezvous._collect(readers, api, registry.binding, broker, ready, clock, admission)
         elif role == 'publish':
-            if admission is not None and admission.candidate['name'] in ('bad-acceptance','replaced-checks','forged-records'):
+            if admission is not None and admission.candidate['name'] in ('bad-acceptance','replaced-checks','forged-records','spoofed-source'):
                 import trial_host_case
                 return trial_host_case.publish(admission,api,job,uploader,source)
             document = _publish_bound(source, api, registry, before, identities, request, clock, guard, admission)

@@ -19,7 +19,7 @@ def document_member(name):
     if not isinstance(name, str): return None
     if re.fullmatch(r'agentic-merge-[a-f0-9]{32}-s[1-9][0-9]{0,19}-a[1-9][0-9]{0,19}-(gate|dispatch|outcome|control-ready|not-submitted|host-denied)', name):
         return 'receipt.json'
-    candidate = re.fullmatch(r'(evidence|controls|publication-controls|trial-broker-intent|trial-broker-denial|trial-publication-intent|trial-publication-denial)-[1-9][0-9]{0,19}-[1-9][0-9]{0,19}', name)
+    candidate = re.fullmatch(r'(evidence|controls|publication-controls|trial-broker-intent|trial-broker-denial|trial-publication-intent|trial-publication-denial|trial-publication-observation)-[1-9][0-9]{0,19}-[1-9][0-9]{0,19}', name)
     proof = re.fullmatch(r'(proof|final-proof)-(admin|reader|issuer|coding|merge)-[1-9][0-9]{0,19}', name)
     if candidate: return candidate.group(1) + '.json'
     if proof: return proof.group(1) + '.json'

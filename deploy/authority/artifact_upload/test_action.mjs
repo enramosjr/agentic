@@ -53,7 +53,7 @@ for (const [role,job,keys] of [
   assert.equal(Boolean(params.environment.AGENTIC_RECOVERY_PIN),role==='finalize');
   assert.throws(()=>launchParameters({...source,GITHUB_JOB:'candidate'},'linux'));
 }
-for(const [name,key] of [['direct-push','CODING'],['coding-update','CODING'],['missing-approval','MERGE'],['bad-acceptance','MERGE'],['replaced-checks','MERGE'],['forged-records','MERGE']]) {
+for(const [name,key] of [['direct-push','CODING'],['coding-update','CODING'],['missing-approval','MERGE'],['bad-acceptance','MERGE'],['replaced-checks','MERGE'],['forged-records','MERGE'],['spoofed-source','MERGE']]) {
   const source={...env,INPUT_ROLE:'case-host-denial',GITHUB_JOB:'trial_host_denial',INPUT_TASK:JSON.stringify({host_case:name}),
     AGENTIC_CODING_PRIVATE_KEY:'coding',AGENTIC_MERGE_PRIVATE_KEY:'merge'};
   const child=launchParameters(source).environment;

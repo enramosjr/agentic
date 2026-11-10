@@ -97,7 +97,7 @@ digest. A generic error, unavailable credential, skipped obligation, unrelated
 required check or moved ref cannot pass. The instance refuses another attempt
 after starting, including an uncertain response. This is not durable recovery
 across processes: full-prefix native orchestration and retained dispatch intents
-remain unfinished. The separate bounded native direct-push/coding-update/missing-approval/bad-acceptance/replaced-checks/forged-records
+remain unfinished. The separate bounded native direct-push/coding-update/missing-approval/bad-acceptance/replaced-checks/forged-records/spoofed-source
 composition below owns durable case intents. Public invocation is held before network access. Local fixtures
 exercise verification, cleanup, closed artifacts and publication against existing
 synthetic active regression configurations; they do not establish initial trial
@@ -710,7 +710,33 @@ task evidence, authority receipts or qualification. Replacement-only export cann
 establish this case. Native CLOSED observation retains all eight histories and
 leaves the original trial unqualified. Positive consumers remain success-only.
 
-This eight-case progression is a bounded prerequisite, not the complete ordered
+The ninth distinct reservation, `spoofed-source`, authenticates all eight exact
+CLOSED histories and owned native completions against the same original trial.
+Staging revokes the exact owned forged-records capability before minting the ninth
+origin-read capability and queueing; the worker and all eight earlier capabilities
+cannot authorize its READY, handoff or producers. Separate journals and all prior
+READY/pending/execution refs retain their original owner and deadlines. Named
+cleanup remains reconstructible after expiry or restart.
+
+This case uses the shared host probe's actual source-check prerequisites: a
+completed successful foreign-App check with the exact context and synthetic merge,
+absence of authoritative issuer success, independent human approval and every other
+required obligation passing. Its publish job authenticates the genuine task,
+certificate, preliminary App proofs and CLOSED publication controls, then retains
+a named source observation after durable intent. Acceptance verification is not a
+prerequisite for this source-spoof attack; only this exact case skips the scheduled
+verifier. It neither manufactures verifier success nor invokes normal issuer
+publication. The success-only production verifier, issuer and broker remain strict.
+
+The separate merger-App host job rereads prerequisites after its durable intent
+and counts only the exact required-check HTTP 403/405/422 denial. CLOSED readers
+authenticate both named observations, job intervals and intents; the pinned
+Finalizer requires the exact `host-denied` receipt. A generic Session no-dispatch
+receipt cannot close this named case. Native CLOSED observation retains all nine
+histories and leaves the original trial unqualified. Local hostile source checks
+enter only the existing source API fixture, never trusted role or task artifacts.
+
+This nine-case progression is a bounded prerequisite, not the complete ordered
 eleven-case host prefix, five-case broker suffix or qualification.
 In particular, initial-unqualified revocation remains unimplemented; an ACTIVE
 qualification receipt cannot substitute for that design.
