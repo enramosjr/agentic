@@ -901,7 +901,7 @@ jobs:
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   trial_host_denial:
     needs: [prepare, publish]
-    if: inputs.mode == 'case' && contains(fromJSON('["direct-push","coding-update","missing-approval","bad-acceptance"]'), needs.prepare.outputs.host_case)
+    if: inputs.mode == 'case' && contains(fromJSON('["direct-push","coding-update","missing-approval","bad-acceptance","replaced-checks"]'), needs.prepare.outputs.host_case)
     name: trial host denial
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -925,7 +925,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_CODING_PRIVATE_KEY: ${{ contains(fromJSON('["direct-push","coding-update"]'), needs.prepare.outputs.host_case) && secrets.AGENTIC_CODING_PRIVATE_KEY || '' }}
-          AGENTIC_MERGE_PRIVATE_KEY: ${{ contains(fromJSON('["missing-approval","bad-acceptance"]'), needs.prepare.outputs.host_case) && secrets.AGENTIC_MERGE_PRIVATE_KEY || '' }}
+          AGENTIC_MERGE_PRIVATE_KEY: ${{ contains(fromJSON('["missing-approval","bad-acceptance","replaced-checks"]'), needs.prepare.outputs.host_case) && secrets.AGENTIC_MERGE_PRIVATE_KEY || '' }}
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN }}
   broker:
     needs: [prepare, publish, trial_host_denial]

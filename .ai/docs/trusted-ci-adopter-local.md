@@ -97,7 +97,7 @@ digest. A generic error, unavailable credential, skipped obligation, unrelated
 required check or moved ref cannot pass. The instance refuses another attempt
 after starting, including an uncertain response. This is not durable recovery
 across processes: full-prefix native orchestration and retained dispatch intents
-remain unfinished. The separate bounded native direct-push/coding-update/missing-approval/bad-acceptance
+remain unfinished. The separate bounded native direct-push/coding-update/missing-approval/bad-acceptance/replaced-checks
 composition below owns durable case intents. Public invocation is held before network access. Local fixtures
 exercise verification, cleanup, closed artifacts and publication against existing
 synthetic active regression configurations; they do not establish initial trial
@@ -646,7 +646,7 @@ authority-outage token before staging the fresh sixth origin-read capability and
 queueing. `trial_launch.revoke(..., name='bad-acceptance')` reconstructs cleanup
 after expiry or restart. Earlier capabilities cannot authorize this case.
 
-Only this authenticated case may retain the pinned verifier's failed first policy
+Only authenticated `bad-acceptance` and `replaced-checks` cases may retain the pinned verifier's failed first policy
 criterion through `negative_evidence`; cleanup and exact execution provenance must
 still validate. Its mutations are derived from the immutable exported worker bytes
 and checked against the actual candidate and baseline. The successful evidence
@@ -671,7 +671,27 @@ Native observation retains all six exact histories without qualifying the trial.
 Missing or substituted evidence and moved predecessor refs preserve the fence.
 Positive verifier, issuer and broker consumers retain their success requirements.
 
-This six-case progression is a bounded prerequisite, not the complete ordered
+The seventh distinct reservation, `replaced-checks`, reauthenticates all six exact
+CLOSED histories and owned native completions against that same immutable original
+trial. Its separate journals and READY/pending/execution refs preserve the original
+owner, expiry and deadlines. Staging revokes the exact owned bad-acceptance token
+before minting the fresh seventh origin-read capability and queueing. Original
+worker and earlier case capabilities cannot authorize the seventh consumers.
+`trial_launch.revoke(..., name='replaced-checks')` reconstructs cleanup after expiry
+or restart.
+
+This case reuses the failed-verifier, strict issuer refusal, shared host probe and
+pinned Finalizer path above. The shared mutation validator additionally requires
+an actual changed candidate file under `.ai/scripts/tests/` or `.github/workflows/`,
+bound to bytes from the original CLOSED worker export and actual baseline. The
+binary-only default fixture cannot establish this negative. The local connected
+fixture opts into hostile checker/test bytes before the original worker closes
+and before all sixteen reservations; no candidate, tree, baseline or earlier
+artifact is retrofitted. Its permissive candidate lifecycle command still fails
+the actual pinned controller's denial assertion. Native CLOSED observation retains
+all seven histories; positive consumers remain success-only.
+
+This seven-case progression is a bounded prerequisite, not the complete ordered
 eleven-case host prefix, five-case broker suffix or qualification.
 In particular, initial-unqualified revocation remains unimplemented; an ACTIVE
 qualification receipt cannot substitute for that design.

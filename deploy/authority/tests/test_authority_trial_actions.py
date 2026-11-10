@@ -10,12 +10,13 @@ class TrialActions(unittest.TestCase):
     def test_direct_host_case_is_closed_before_broker_and_skips_warm_merge_producers(self):
         block=self.jobs['trial_host_denial']
         self.assertIn('needs: [prepare, publish]',block)
-        self.assertIn("contains(fromJSON('[\"direct-push\",\"coding-update\",\"missing-approval\",\"bad-acceptance\"]'), needs.prepare.outputs.host_case)",block)
+        self.assertIn("contains(fromJSON('[\"direct-push\",\"coding-update\",\"missing-approval\",\"bad-acceptance\",\"replaced-checks\"]'), needs.prepare.outputs.host_case)",block)
         self.assertIn('role: case-host-denial',block)
         self.assertEqual(set(re.findall(r'secrets\.(AGENTIC_[A-Z_]+)',block)),
                          {'AGENTIC_CODING_PRIVATE_KEY','AGENTIC_MERGE_PRIVATE_KEY','AGENTIC_TRIAL_CASE_ORIGIN_TOKEN'})
         self.assertIn("contains(fromJSON('[\"direct-push\",\"coding-update\"]'), needs.prepare.outputs.host_case) && secrets.AGENTIC_CODING_PRIVATE_KEY || ''",block)
-        self.assertIn("contains(fromJSON('[\"missing-approval\",\"bad-acceptance\"]'), needs.prepare.outputs.host_case) && secrets.AGENTIC_MERGE_PRIVATE_KEY || ''",block)
+        self.assertIn("contains(fromJSON('[\"missing-approval\",\"bad-acceptance\",\"replaced-checks\"]'), needs.prepare.outputs.host_case) && secrets.AGENTIC_MERGE_PRIVATE_KEY || ''",block)
+        self.assertRegex(block,r'(?m)^ {10}AGENTIC_MERGE_PRIVATE_KEY:')
         self.assertIn('needs: [prepare, publish, trial_host_denial]',self.jobs['broker'])
         for name in ('controls','admin_final_proof','reader_final_proof','issuer_final_proof','coding_final_proof','merge_final_proof'):
             self.assertIn("needs.prepare.outputs.host_case == 'none'",self.jobs[name])

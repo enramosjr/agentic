@@ -16,12 +16,12 @@ from trusted_ci_policy import Refusal, digest, object_fields, positive, require
 def selected(admission):
     from trial_controller import authenticated
     authenticated(admission)
-    return admission.candidate['name'] in ('direct-push','coding-update','missing-approval','bad-acceptance')
+    return admission.candidate['name'] in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks')
 
 
 def failed_evidence(admission, document, job_id):
     b,s,d=_context(admission)
-    require(admission.candidate['name']=='bad-acceptance','only the admitted verifier negative may retain failed evidence')
+    require(admission.candidate['name'] in ('bad-acceptance','replaced-checks'),'only the admitted verifier negative may retain failed evidence')
     return negative_evidence(document,d,s,b['configuration_revision'],job_id,d['policy']['checks'][0])
 
 
@@ -51,7 +51,7 @@ def _case(admission, authority):
     coordinates = dict(configuration_revision=b['configuration_revision'],operation=b['fence']['pending'],
         sequence=b['fence']['sequence'],issuer_installation_id=identities['apps']['issuer']['installation_id'],
         evidence_job_id=proof['job_id'],evidence_digest=digest(proof['document']),task_digest=task['task_digest'])
-    negative=admission.candidate['name']=='bad-acceptance'
+    negative=admission.candidate['name'] in ('bad-acceptance','replaced-checks')
     mutations=[]
     if negative:
         import submission
@@ -76,7 +76,7 @@ def _identity(admission):
 
 
 def _request(d, s, name):
-    if name in ('missing-approval','bad-acceptance'):
+    if name in ('missing-approval','bad-acceptance','replaced-checks'):
         return dict(path='/repos/'+d['policy']['repository']+'/pulls/'+str(s['pr'])+'/merge',
                     method='PUT',data=dict(sha=s['head'],merge_method='merge'))
     return dict(path='/repos/'+d['policy']['repository']+'/git/refs/heads/'+quote(d['policy']['target'],safe=''),
@@ -88,7 +88,7 @@ def _publication_inputs(admission, authority):
     import service
     import broker_proofs
     b,s,d=_context(admission)
-    require(admission.candidate['name']=='bad-acceptance','only admitted bad acceptance has an issuer refusal')
+    require(admission.candidate['name'] in ('bad-acceptance','replaced-checks'),'only admitted verifier negatives have an issuer refusal')
     case=_case(admission,authority)
     probe=HostCases(admission.registry,admission.source,authority,admission.record['pair']['identities'],None,None,None,admission.clock)
     probe.binding,probe.d=b,d
@@ -166,9 +166,9 @@ def produce(admission, authority, app, token_factory, environment, uploader):
     job = provenance.admit_job(authority,d,environment,'trial host denial',admission.clock())
     case = _case(admission,authority)
     identities = admission.record['pair']['identities']
-    merger=admission.candidate['name'] in ('missing-approval','bad-acceptance')
+    merger=admission.candidate['name'] in ('missing-approval','bad-acceptance','replaced-checks')
     purpose='merge' if merger else 'coding'
-    publication=read_publication(admission,authority) if case['name']=='bad-acceptance' else None
+    publication=read_publication(admission,authority) if case['name'] in ('bad-acceptance','replaced-checks') else None
     probe = HostCases(admission.registry,admission.source,authority,identities,None if merger else app,app if merger else None,None,
                       admission.clock,token_factory,guard=admission.guard)
     probe.binding, probe.d = copy.deepcopy(b), d
@@ -213,7 +213,7 @@ def read(admission, authority, locator=None):
             positive(expected['issued']) and proof['job_started']<=expected['issued']<=intent['artifact_created']<=value['completed'],
             'host intent differs or postdates the attempt')
     observation, record = value['observation'], value['record']
-    negative=admission.candidate['name']=='bad-acceptance'
+    negative=admission.candidate['name'] in ('bad-acceptance','replaced-checks')
     fields=('snapshot checks rules reviews synthetic_commit request actor_id before after '
             'http_status denial_category denied_obligation').split()
     object_fields(observation,fields+(['negative','mutations','publication'] if negative else ['acceptance']),'host observation')

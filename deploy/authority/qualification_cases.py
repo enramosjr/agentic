@@ -221,7 +221,7 @@ class HostCases:
         expected = 'protected_update' if direct else 'required_review' if name == 'missing-approval' else 'required_check'
         def send(scoped):
             before_send(copy.deepcopy(request))
-            if name in ('missing-approval','bad-acceptance'):
+            if name in ('missing-approval','bad-acceptance','replaced-checks'):
                 # Minting and durable intent may block. Reread the selected
                 # review/acceptance prerequisites and all other obligations.
                 self._prerequisites(case)

@@ -53,7 +53,7 @@ class TrialService(unittest.TestCase):
         for fault in ('cleanup', 'nonce', 'lost-pr'):
             with self.subTest(fault=fault): self.exercise(fault)
 
-    def exercise(self, fault=None, latency=False, continuation=None):
+    def exercise(self, fault=None, latency=False, continuation=None, export_files=None):
         continuation_base = None
         f = self.configured()
         native, registry, origin, clock, env, hint, model, proofs, delivery, jobs, artifacts = f
@@ -233,7 +233,9 @@ class TrialService(unittest.TestCase):
             def _export(self, guard):
                 outer.assertTrue(self.stopped and 'relay-revoked' in events)
                 guard(force=True)
-                return submission.pack_export({'result.bin':dict(content=b'\x00\xfftrial result',executable=True)})
+                files={'result.bin':dict(content=b'\x00\xfftrial result',executable=True)}
+                if export_files is not None: files.update(copy.deepcopy(export_files))
+                return submission.pack_export(files)
             def close(self): events.append('box-cleaned')
         worker_environment = dict(env, AGENTIC_CODING_PRIVATE_KEY=api.secrets['AGENTIC_CODING_PRIVATE_KEY'], AGENTIC_MODEL_DELIVERY_KEY=delivery)
         kwargs = dict(clock=native.clock,api_factory=factory,app_factory=app_factory,token_factory=token_factory,

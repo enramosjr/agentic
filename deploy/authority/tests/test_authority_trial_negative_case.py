@@ -61,7 +61,7 @@ class Negative(outage_fixture.Outage):
         self.tokens=factory
 
     def verify(self,source,d,s,job_id,guard,clock):
-        if self.admission.candidate['name']!='bad-acceptance':
+        if self.admission.candidate['name'] not in ('bad-acceptance','replaced-checks'):
             return super().verify(source,d,s,job_id,guard,clock)
         events=self.events
         class Disk:
@@ -74,10 +74,13 @@ class Negative(outage_fixture.Outage):
             def __enter__(self): return self
             def __exit__(self,*a): events.append('negative-box-clean')
             def run(self,argv,**kw):
-                # Model the OCI response for the actual exported candidate:
-                # it lacks lifecycle.py, so the pinned controller cannot run it.
+                # Model only OCI command responses for these exact initial bytes.
+                # The actual pinned controller still evaluates every assertion.
                 if '.ai/scripts/lifecycle.py' in argv:
-                    assert not (self.candidate/'.ai/scripts/lifecycle.py').exists()
+                    script=self.candidate/'.ai/scripts/lifecycle.py'
+                    if script.exists():
+                        assert script.read_bytes()==b'import sys\nsys.exit(0)\n'
+                        events.append('negative-permissive-script'); return 0,''
                     events.append('negative-missing-script'); return 2,'file not found'
                 return 0,''
         return service._verify_actions(source,d,s,job_id,guard,clock,disk_factory=Disk,box_factory=Box,
@@ -97,7 +100,7 @@ class Negative(outage_fixture.Outage):
         return artifact,member,value
 
     def host(self,change=None,selected=None,app_factory=None):
-        if self.admission.candidate['name']!='bad-acceptance':
+        if self.admission.candidate['name'] not in ('bad-acceptance','replaced-checks'):
             return super().host(change,selected,app_factory)
         # The existing fixture's host helper selects the key by case name.
         env=self.job('trial host denial','trial_host_denial')
@@ -108,7 +111,7 @@ class Negative(outage_fixture.Outage):
         result=service._case_producer(env,self.hint,'fixture-node','host-denial',clock=lambda:self.clock[0],
             api_factory=lambda token:self.api if token=='case-actions-read' else self.origin_factory(token),
             app_factory=app_factory or self.apps,token_factory=self.tokens,uploader_factory=lambda *a:self.upload,
-            host_case=selected or 'bad-acceptance')
+            host_case=selected or self.admission.candidate['name'])
         from test_authority_broker_evidence import stamp
         self.remote.jobs[-1].update(status='completed',conclusion='success',completed_at=stamp(self.clock[0]))
         return result
