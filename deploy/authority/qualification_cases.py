@@ -186,7 +186,7 @@ class HostCases:
         human = self.human.get('/user')
         actor_ids = dict(coding=self.identities['apps']['coding']['actor_id'],
                          merge=self.identities['apps']['merge']['actor_id'], human=human['id'])
-        require(actor_ids['human'] in p['reviewers'] and human.get('type') == 'User',
+        require(positive(actor_ids['human']) and actor_ids['human'] in p['reviewers'] and human.get('type') == 'User',
                 'host probe actor identity differs')
         records, observations = [], []
         for case in cases:
@@ -222,10 +222,15 @@ class HostCases:
         expected = 'protected_update' if direct else 'required_review' if name == 'missing-approval' else 'required_check'
         def send(scoped):
             before_send(copy.deepcopy(request))
-            if name in ('missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head'):
+            if name in ('missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source',*STALE,'human-update'):
                 # Minting and durable intent may block. Reread the selected
                 # review/acceptance prerequisites and all other obligations.
                 self._prerequisites(case)
+            if purpose == 'human':
+                current = self.human.get('/user')
+                require(positive(current.get('id')) and current['id'] in p['reviewers'] and
+                        current.get('type') == 'User' and digest(current) == digest(human) and
+                        current['id'] == actor_ids['human'], 'human probe identity changed')
             self._guard()
             require(snapshot() == s and self.source.get(root + '/git/ref/heads/' +
                     quote(p['target'], safe=''))['object']['sha'] == before, 'host case moved during credential admission')
@@ -246,7 +251,7 @@ class HostCases:
         after = self.source.get(root + '/git/ref/heads/' + quote(p['target'], safe=''))['object']['sha']
         require(before == after and snapshot() == s, 'negative host probe changed target or candidate')
         self._guard()
-        require(type(status) is int and status in (403, 405, 422) and category == expected and
+        require(type(status) is int and status in ((403, 422) if purpose == 'human' else (403, 405, 422)) and category == expected and
                 obligation == (p['check_name'] if expected == 'required_check' else None),
                 'host did not establish the intended denial')
         evidence.update(request=request, actor_id=actor_ids[purpose], before=before, after=after,

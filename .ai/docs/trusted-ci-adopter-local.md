@@ -91,6 +91,15 @@ the existing own-App authentication and source-only token mint/revocation path;
 only the separate human token uses the authenticated-user endpoint. Candidate
 reviews are observed, never submitted or requested.
 
+After the caller retains request intent, the shared probe rereads prior acceptance,
+current human approval and other required checks for new-base and policy-transition,
+and current acceptance/approval/checks for human-update. The human transport is
+reauthenticated after those reads and before the final source snapshot; its identity
+must remain the same typed human with a strict positive integer ID. Only an exact
+`protected_update` HTTP 403 or 422 counts as a human-update denial. These checks do
+not supply native base movement or a native human-to-CLOSED-job observation bridge;
+those three native cases remain unfinished.
+
 Each returned observation binds the PR/head/base/synthetic merge/tree, actor,
 exact request, HTTP denial and obligation, unchanged protected ref and evidence
 digest. A generic error, unavailable credential, skipped obligation, unrelated

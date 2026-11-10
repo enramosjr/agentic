@@ -381,6 +381,94 @@ class QualificationCaseContracts(unittest.TestCase):
             'missing-approval', 'direct-push', 'new-head', 'new-base',
             'policy-transition', 'human-update', 'coding-update'))
 
+    def test_remaining_cases_recheck_prerequisites_after_durable_intent(self):
+        for name in ('new-base', 'policy-transition', 'human-update'):
+            for fault in ('approval', 'issuer', 'other-obligation'):
+                with self.subTest(name=name, fault=fault):
+                    f = ConnectedHost()
+                    case = next(c for c in f.records if c['name'] == name)
+                    runner = f.runner()
+                    runner.binding, runner.d = f.binding, f.d
+                    retained = []
+                    def retain(request):
+                        retained.append(copy.deepcopy(request))
+                        if fault == 'approval':
+                            f.active.source.reviews.clear()
+                        elif fault == 'issuer':
+                            merge = (case['prior']['snapshot']['merge'] if case['prior'] else case['snapshot']['merge'])
+                            entries = f.by_merge[merge] if case['prior'] else f.active.source.checks
+                            self.assertTrue(entries)
+                            entries.clear()
+                        else:
+                            pages = f.pages
+                            def extra(path, collection=None):
+                                rows = pages(path, collection)
+                                if '/rules/branches/' in path:
+                                    rows[0]['parameters']['required_status_checks'].append(
+                                        dict(context='another', integration_id=101))
+                                return rows
+                            f.pages = extra
+                    with self.assertRaises(Refusal):
+                        runner._probe(case, dict(merge=19, human=17), dict(id=17, type='User'), before_send=retain)
+                    self.assertEqual(len(retained), 1)
+                    self.assertEqual(f.attempts, [])
+
+    def test_human_identity_is_reauthenticated_after_durable_intent(self):
+        for changed in (dict(id=17, type='Bot'), dict(id=18, type='User'), dict(id=17.0, type='User')):
+            with self.subTest(changed=changed):
+                f = ConnectedHost()
+                case = next(c for c in f.records if c['name'] == 'human-update')
+                runner = f.runner()
+                runner.binding, runner.d = f.binding, f.d
+                def retain(request): runner.human.get = lambda path: changed
+                with self.assertRaises(Refusal):
+                    runner._probe(case, dict(human=17), dict(id=17, type='User'), before_send=retain)
+                self.assertEqual(f.attempts, [])
+
+    def test_full_prefix_requires_strict_human_identity_before_any_attempt(self):
+        f = ConnectedHost()
+        runner = f.runner()
+        runner.human.get = lambda path: dict(id=17.0, type='User')
+        with self.assertRaisesRegex(Refusal, 'host probe actor identity differs'):
+            runner._run(f.manifest)
+        self.assertEqual(f.attempts, [])
+
+    def test_human_identity_read_cannot_outlive_admission(self):
+        from trusted_ci_policy import require
+        f = ConnectedHost()
+        case = next(c for c in f.records if c['name'] == 'human-update')
+        runner = f.runner()
+        runner.binding, runner.d = f.binding, f.d
+        moved = []
+        runner.admission_guard = lambda: require(not moved, 'admission moved')
+        def retain(request):
+            def identity(path):
+                moved.append(True)
+                return dict(id=17, type='User')
+            runner.human.get = identity
+        with self.assertRaisesRegex(Refusal, 'admission moved'):
+            runner._probe(case, dict(human=17), dict(id=17, type='User'), before_send=retain)
+        self.assertEqual(f.attempts, [])
+
+    def test_human_update_counts_only_protected_403_or_422(self):
+        for status in (401, 403, 404, 405, 422, 500):
+            with self.subTest(status=status):
+                f = ConnectedHost()
+                case = next(c for c in f.records if c['name'] == 'human-update')
+                runner = f.runner()
+                runner.binding, runner.d = f.binding, f.d
+                def deny(path, method, data):
+                    f.attempts.append(dict(path=path, method=method, data=data))
+                    raise HostRefusal(status, 'protected_update')
+                runner.human.fetch = deny
+                if status in (403, 422):
+                    record, _ = runner._probe(case, dict(human=17), dict(id=17, type='User'))
+                    self.assertEqual(record['http_status'], status)
+                else:
+                    with self.assertRaises(Refusal):
+                        runner._probe(case, dict(human=17), dict(id=17, type='User'))
+                self.assertEqual(len(f.attempts), 1)
+
 
 if __name__ == '__main__':
     unittest.main()
