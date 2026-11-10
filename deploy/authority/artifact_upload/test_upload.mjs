@@ -57,6 +57,8 @@ const documents = [
   ...['trial-handoff','trial-case-ready','trial-case-handoff','trial-case-terminal','trial-host-intent','trial-host-denial','trial-task','trial-task-ready','trial-task-controls'].map(role=>[`${role}-${'a'.repeat(32)}-1`,`${role}.json`]),
   ['evidence-7-1', 'evidence.json'], ['controls-7-1', 'controls.json'],
   ['publication-controls-7-1', 'publication-controls.json'],
+  ['trial-publication-intent-7-1','trial-publication-intent.json'],
+  ['trial-publication-denial-7-1','trial-publication-denial.json'],
   ['task-' + 'a'.repeat(32) + '-1', 'task.json'], ['qualification-1', 'qualification.json'],
   ['task-ready-' + 'a'.repeat(32) + '-1', 'task-ready.json'],
   ['task-controls-' + 'a'.repeat(32) + '-1', 'task-controls.json'],

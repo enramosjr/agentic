@@ -75,6 +75,10 @@ class Finalizer:
         if _admission is not None:
             locators['host-denied'] = receipts.find_for_recovery('host-denied')
         host_denied = locators.get('host-denied') is not None
+        if _admission is not None:
+            import trial_host_case
+            require(not trial_host_case.selected(_admission) or host_denied,
+                    'named host outcome is missing; preserve the fence')
         require(not host_denied or not (locators['not-submitted'] or receipts.find_for_recovery('gate') or
                                        receipts.find_for_recovery('control-ready')),
                 'contradictory host terminal evidence; preserve the fence')
@@ -117,5 +121,8 @@ class Finalizer:
                 _admission.guard(before)
                 if trial_broker_case.selected(_admission):
                     trial_broker_case.guard(_admission)
+                else:
+                    import trial_host_case
+                    if trial_host_case.selected(_admission): trial_host_case.guard(_admission)
             return self.registry.finalize_operation(before['branch_head'], terminal, before_effect=guard)
         return self.registry.finalize_operation(before['branch_head'], terminal)

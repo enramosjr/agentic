@@ -221,13 +221,13 @@ class HostCases:
         expected = 'protected_update' if direct else 'required_review' if name == 'missing-approval' else 'required_check'
         def send(scoped):
             before_send(copy.deepcopy(request))
-            if name == 'missing-approval':
-                # Minting and durable intent may block. Approval must still be
-                # absent, with current success/obligations, at the host attempt.
+            if name in ('missing-approval','bad-acceptance'):
+                # Minting and durable intent may block. Reread the selected
+                # review/acceptance prerequisites and all other obligations.
                 self._prerequisites(case)
+            self._guard()
             require(snapshot() == s and self.source.get(root + '/git/ref/heads/' +
                     quote(p['target'], safe=''))['object']['sha'] == before, 'host case moved during credential admission')
-            self._guard()
             try:
                 scoped.fetch(request['path'], method=request['method'], data=request['data'])
             except HostRefusal as error:

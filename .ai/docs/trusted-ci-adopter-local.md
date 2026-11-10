@@ -97,7 +97,7 @@ digest. A generic error, unavailable credential, skipped obligation, unrelated
 required check or moved ref cannot pass. The instance refuses another attempt
 after starting, including an uncertain response. This is not durable recovery
 across processes: full-prefix native orchestration and retained dispatch intents
-remain unfinished. The separate bounded native direct-push/coding-update/missing-approval
+remain unfinished. The separate bounded native direct-push/coding-update/missing-approval/bad-acceptance
 composition below owns durable case intents. Public invocation is held before network access. Local fixtures
 exercise verification, cleanup, closed artifacts and publication against existing
 synthetic active regression configurations; they do not establish initial trial
@@ -638,7 +638,40 @@ authority. Missing, unknown, substituted or still-unavailable evidence leaves th
 fence pending. The final source snapshot follows blocking admission reads before
 terminal effects, and native observation retains all five exact history entries.
 
-This five-case progression is a bounded prerequisite, not the complete ordered
+The sixth distinct reservation, `bad-acceptance`, authenticates all five exact
+CLOSED histories and owned native completions against the immutable original
+trial. Separate journals and READY/pending/execution refs retain the original
+owner, expiry and deadlines. The existing staging engine revokes the exact owned
+authority-outage token before staging the fresh sixth origin-read capability and
+queueing. `trial_launch.revoke(..., name='bad-acceptance')` reconstructs cleanup
+after expiry or restart. Earlier capabilities cannot authorize this case.
+
+Only this authenticated case may retain the pinned verifier's failed first policy
+criterion through `negative_evidence`; cleanup and exact execution provenance must
+still validate. Its mutations are derived from the immutable exported worker bytes
+and checked against the actual candidate and baseline. The successful evidence
+producer job means the observation was retained, not that acceptance passed.
+Normal independent human review, all five preliminary own-App proofs, task binding,
+certificate and closed publication observation remain required. A create-only
+issuer intent precedes the unchanged success-only publication engine. Only that
+engine's actual failure for the named criterion produces the distinct CLOSED
+`trial-publication-denial` artifact. Unexpected publication, other failures and
+unknown acknowledgements cannot count or replay.
+
+The separate merger-App host job authenticates that issuer refusal and uses the
+shared `HostCases._probe`, rereading failed evidence, actual mutation bytes,
+independent human approval and other required checks after durable host intent.
+Only HTTP 403/405/422 with `required_check` for the exact issuer obligation and
+unchanged candidate/target establishes this negative. The broker emits the
+existing exact `host-denied` no-dispatch receipt; warm final-proof jobs are skipped.
+Generic Session no-dispatch evidence cannot close any selected named host case.
+The pinned Finalizer reauthenticates the named evidence and checks the final source
+snapshot after blocking admission reads, immediately before terminal effects.
+Native observation retains all six exact histories without qualifying the trial.
+Missing or substituted evidence and moved predecessor refs preserve the fence.
+Positive verifier, issuer and broker consumers retain their success requirements.
+
+This six-case progression is a bounded prerequisite, not the complete ordered
 eleven-case host prefix, five-case broker suffix or qualification.
 In particular, initial-unqualified revocation remains unimplemented; an ACTIVE
 qualification receipt cannot substitute for that design.
