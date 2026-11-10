@@ -124,5 +124,12 @@ class Finalizer:
                 else:
                     import trial_host_case
                     if trial_host_case.selected(_admission): trial_host_case.guard(_admission)
+                    else:
+                        from trial_transition import historical
+                        if historical(_admission.candidate):
+                            from authority_github import Readers, current_snapshot
+                            s=_admission.request['snapshot']
+                            require(current_snapshot(Readers(_admission.source,self.authority,d),d,s['pr'],s['run_id'],s['run_attempt'])==s,
+                                    'historical source moved before terminal effect')
             return self.registry.finalize_operation(before['branch_head'], terminal, before_effect=guard)
         return self.registry.finalize_operation(before['branch_head'], terminal)

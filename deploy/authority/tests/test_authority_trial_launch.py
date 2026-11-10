@@ -17,8 +17,8 @@ from trusted_ci_policy import Refusal
 
 
 class Launched(case_fixture.Fresh):
-    def ready(self, lost=False, absent=False, name='positive', token='fresh-case-ready'):
-        self.admission=trial_controller.Native(self.preparer)._open('prompt',name,self.source)
+    def ready(self, lost=False, absent=False, name='positive', token='fresh-case-ready', phase=None):
+        self.admission=trial_controller.Native(self.preparer)._open('prompt',name,self.source,phase=phase)
         candidate=self.admission.candidate['submitted']
         self.synthetic(next(v for v in self.source.prs if v['number']==candidate['pr']))
         self.reviews=[dict(id=900,user=dict(id=self.p['reviewers'][0],type='User'),state='APPROVED',commit_id=candidate['head'])]

@@ -864,8 +864,9 @@ def _case_launch(environment,hint,node,role,clock=None,api_factory=GitHub,upload
     trial_case.fresh_capability(original,value,record,token,clock)
     registry.authenticate_setup_progress(trial_case.case_baseline(original,registry,record,value,clock),{OPERATION:value['pending']})
     name=value['candidate']['name']
+    from trial_transition import historical
     return dict(value['request'],handoff=dict(origin=hint['origin'],revision=revision),
-                host_case=name if name in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source') else 'none')
+                host_case=name if not historical(value['candidate']) and name in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head') else 'none')
 
 
 def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub, app_factory=None,
@@ -921,9 +922,10 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
     # before constructing a role root or minting its source credentials.
     admitted = trial_case.Hosted(registry,origin_reader,None,environment,hint,role,clock)
     if role == 'host-denial':
-        require(host_case in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source') and host_case==admitted.candidate['name'],
+        from trial_transition import historical
+        require(not historical(admitted.candidate) and host_case in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head') and host_case==admitted.candidate['name'],
                 'host scheduling identity differs from authenticated case')
-        purpose='merge' if admitted.candidate['name'] in ('missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source') else 'coding'
+        purpose='merge' if admitted.candidate['name'] in ('missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head') else 'coding'
         _producer_environment(environment,purpose)
         require(isinstance(environment.get('AGENTIC_'+purpose.upper()+'_PRIVATE_KEY'),str) and
                 bool(environment['AGENTIC_'+purpose.upper()+'_PRIVATE_KEY']), 'selected host App root required')
@@ -953,7 +955,8 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
                     admitted.request['operation_id'],admitted.request['sequence'],
                     _case_broker_job(api,admitted),_admission=admitted)
             from trial_host_case import selected
-            if selected(admitted) or trial_broker_case.selected(admitted):
+            from trial_transition import historical
+            if selected(admitted) or trial_broker_case.selected(admitted) or historical(admitted.candidate):
                 document=dict(schema_version=1,kind='trial-case-terminal',request_digest=digest(admitted.request),
                     certificate_digest=digest(admitted.value['certificate']),before=before,after=result,completed=clock())
                 _upload_document(uploader_factory(node,environment),'trial-case-terminal-'+admitted.record['task_id']+'-1',document)
@@ -1047,7 +1050,8 @@ def _produce(environment, request, node, role, clock=None, api_factory=GitHub, a
             broker, ready = _wait_broker_ready(api, registry, before, clock, guard, sleeper, admission)
             document = control_rendezvous._collect(readers, api, registry.binding, broker, ready, clock, admission)
         elif role == 'publish':
-            if admission is not None and admission.candidate['name'] in ('bad-acceptance','replaced-checks','forged-records','spoofed-source'):
+            from trial_transition import historical
+            if admission is not None and not historical(admission.candidate) and admission.candidate['name'] in ('bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head'):
                 import trial_host_case
                 return trial_host_case.publish(admission,api,job,uploader,source)
             document = _publish_bound(source, api, registry, before, identities, request, clock, guard, admission)

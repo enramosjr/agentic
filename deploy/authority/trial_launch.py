@@ -108,29 +108,35 @@ class Staging(TrialReadStaging):
         previous=None
         if a.value['history']:
             prior_name=predecessor(a.candidate['name'])
-            previous=case_journal(Staging.JOURNAL,dict(name=prior_name))
+            prior_candidate=dict(name=prior_name)
+            transition=a.candidate.get('transition')
+            if transition is not None and transition['intent']['phase']=='current':
+                prior_candidate=dict(name='new-head',transition=dict(intent=dict(phase='prior')))
+            previous=case_journal(Staging.JOURNAL,prior_candidate)
         if previous is not None:
             from trial_case import read as read_case
-            prior,_=read_case(c.session.registry,a.value['history'][-1]['revision'],c.clock)
+            entry=(transition['intent']['prior'] if transition is not None and transition['intent']['phase']=='current'
+                   else a.value['history'][-1])
+            prior,_=read_case(c.session.registry,entry['revision'],c.clock)
             staged=c.store(c.root/previous).read()
             require(staged is not None and staged['value']['credential'] is not None and
                     staged['value']['revision']==prior['launch']['revision'] and
                     digest(staged['value']['credential']['token'])==prior['execution']['credential']['token_digest'],
                     'owned predecessor capability differs')
             self.native.guard()
-            revoke(c,self.token_factory,name=prior_name)
+            revoke(c,self.token_factory,name=prior_candidate['name'],phase='prior' if prior_candidate.get('transition') else None)
             self.native.guard()
             previous_document=c.store(c.root/previous).read()
             require(previous_document['value']['phase']=='revoked', 'owned predecessor cleanup remains pending')
         return self._stage(c,record,record['origin']['binding'],journal,check,previous=previous)
 
 
-def revoke(provision, token_factory, name='direct-push'):
+def revoke(provision, token_factory, name='direct-push', phase=None):
     """Reconstruct exact-token cleanup without expired native admission reads."""
     authority_release.authorize('bootstrap')
     from trial_setup import Provision
     require(type(provision) is Provision,'actual native case provisioning owner required for cleanup')
-    candidate=dict(name=name)
+    candidate=dict(name=name,transition=dict(intent=dict(phase=phase)))
     document=provision.store(provision.root/case_journal('trial-case-launch',candidate)).read()
     require(document is not None and sha(document['value']['revision']),'retained READY cleanup identity required')
     # Reuse the same credential engine with its fixed case purpose. This facade

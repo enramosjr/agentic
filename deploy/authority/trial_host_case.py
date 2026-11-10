@@ -16,7 +16,8 @@ from trusted_ci_policy import Refusal, digest, object_fields, positive, require
 def selected(admission):
     from trial_controller import authenticated
     authenticated(admission)
-    return admission.candidate['name'] in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source')
+    from trial_transition import historical
+    return not historical(admission.candidate) and admission.candidate['name'] in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head')
 
 
 def failed_evidence(admission, document, job_id):
@@ -45,11 +46,12 @@ def _case(admission, authority):
     b, s, d = _context(admission)
     task = admission.request['task']
     task = admission.task(b,s,task['locator'],task['task_id'])
-    if admission.candidate['name']=='spoofed-source':
+    if admission.candidate['name'] in ('spoofed-source','new-head'):
         # The distinguishing prerequisite is a foreign source check, not a
         # verifier mutation or successful authoritative acceptance.
-        return dict(name='spoofed-source',snapshot=s,evidence=None,coordinates=dict(task_digest=task['task_digest']),
-                    expected_failure=None,mutations=[],prior=None)
+        from trial_transition import acceptance
+        return dict(name=admission.candidate['name'],snapshot=s,evidence=None,coordinates=dict(task_digest=task['task_digest']),
+                    expected_failure=None,mutations=[],prior=acceptance(admission,authority) if admission.candidate['name']=='new-head' else None)
     location = service._locator(authority,d,s['run_id'],s['run_attempt'],'evidence',s['pr'])
     proof = provenance.authenticated_document(authority,d,location,'evidence',s['pr'],admission.clock())
     identities = admission.record['pair']['identities']
@@ -81,7 +83,7 @@ def _identity(admission):
 
 
 def _request(d, s, name):
-    if name in ('missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source'):
+    if name in ('missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head'):
         return dict(path='/repos/'+d['policy']['repository']+'/pulls/'+str(s['pr'])+'/merge',
                     method='PUT',data=dict(sha=s['head'],merge_method='merge'))
     return dict(path='/repos/'+d['policy']['repository']+'/git/refs/heads/'+quote(d['policy']['target'],safe=''),
@@ -93,7 +95,7 @@ def _publication_inputs(admission, authority):
     import service
     import broker_proofs
     b,s,d=_context(admission)
-    spoof=admission.candidate['name']=='spoofed-source'
+    spoof=admission.candidate['name'] in ('spoofed-source','new-head')
     require(spoof or admission.candidate['name'] in ('bad-acceptance','replaced-checks','forged-records'),'only admitted publication cases are implemented')
     case=_case(admission,authority)
     probe=HostCases(admission.registry,admission.source,authority,admission.record['pair']['identities'],None,None,None,admission.clock)
@@ -131,7 +133,7 @@ def publish(admission, authority, job, uploader, source):
     guard(admission)
     _upload_document(uploader,prefix,intent)
     require(_publication_inputs(admission,authority)==inputs,'publication inputs changed after intent')
-    if admission.candidate['name']=='spoofed-source':
+    if admission.candidate['name'] in ('spoofed-source','new-head'):
         # This selected attack observes the foreign source check. Publishing the
         # genuine issuer success would invalidate its distinguishing prerequisite.
         observed=admission.clock()
@@ -160,7 +162,7 @@ def publish(admission, authority, job, uploader, source):
 def read_publication(admission, authority):
     import service
     b,s,d=_context(admission)
-    spoof=admission.candidate['name']=='spoofed-source'
+    spoof=admission.candidate['name'] in ('spoofed-source','new-head')
     role='trial-publication-observation' if spoof else 'trial-publication-denial'
     location=service._locator(authority,d,s['run_id'],s['run_attempt'],role,s['pr'])
     proof=provenance.authenticated_document(authority,d,location,role,s['pr'],admission.clock())
@@ -191,9 +193,9 @@ def produce(admission, authority, app, token_factory, environment, uploader):
     job = provenance.admit_job(authority,d,environment,'trial host denial',admission.clock())
     case = _case(admission,authority)
     identities = admission.record['pair']['identities']
-    merger=admission.candidate['name'] in ('missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source')
+    merger=admission.candidate['name'] in ('missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head')
     purpose='merge' if merger else 'coding'
-    publication=read_publication(admission,authority) if case['name'] in ('bad-acceptance','replaced-checks','forged-records','spoofed-source') else None
+    publication=read_publication(admission,authority) if case['name'] in ('bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head') else None
     probe = HostCases(admission.registry,admission.source,authority,identities,None if merger else app,app if merger else None,None,
                       admission.clock,token_factory,guard=admission.guard)
     probe.binding, probe.d = copy.deepcopy(b), d
@@ -239,10 +241,11 @@ def read(admission, authority, locator=None):
             'host intent differs or postdates the attempt')
     observation, record = value['observation'], value['record']
     negative=admission.candidate['name'] in ('bad-acceptance','replaced-checks','forged-records')
-    spoof=admission.candidate['name']=='spoofed-source'
+    stale=admission.candidate['name']=='new-head'
+    spoof=admission.candidate['name'] in ('spoofed-source','new-head')
     fields=('snapshot checks rules reviews synthetic_commit request actor_id before after '
             'http_status denial_category denied_obligation').split()
-    object_fields(observation,fields+(['negative','mutations','publication'] if negative else ['publication'] if spoof else ['acceptance']),'host observation')
+    object_fields(observation,fields+(['negative','mutations','publication'] if negative else ['publication','prior'] if stale else ['publication'] if spoof else ['acceptance']),'host observation')
     missing=admission.candidate['name']=='missing-approval'
     category='required_check' if negative or spoof else 'required_review' if missing else 'protected_update'
     obligation=d['policy']['check_name'] if negative or spoof else None
@@ -273,6 +276,7 @@ def read(admission, authority, locator=None):
     elif spoof:
         require(all(digest(observation[k])==digest(current[k]) for k in ('checks','rules','reviews')) and
                 digest(observation['publication'])==digest(read_publication(admission,authority)), 'host spoof observation differs')
+        if stale: require(digest(observation['prior'])==digest(current['prior']), 'historical acceptance differs')
     else:
         acceptance = observation['acceptance']
         require(acceptance['proof']==current['acceptance']['proof'] and acceptance['coordinates']==current['acceptance']['coordinates'] and

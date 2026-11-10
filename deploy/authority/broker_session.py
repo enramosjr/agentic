@@ -90,6 +90,9 @@ class Session:
         self.receipts = ActionsReceipts._create(self.authority, self.registry.binding, self.job_id, self.clock,
                                                uploader=self.uploader, admission=_admission)
         try:
+            if _admission is not None:
+                from trial_transition import historical
+                require(not historical(_admission.candidate), 'historical preparation never authorizes dispatch')
             gate = self._collect(op)
             if _admission is not None:
                 import trial_broker_case

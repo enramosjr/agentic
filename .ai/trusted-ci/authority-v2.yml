@@ -692,7 +692,7 @@ jobs:
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   verify:
     needs: [prepare, trial_case_handoff]
-    if: always() && needs.prepare.result == 'success' && (inputs.mode == 'production' || (needs.trial_case_handoff.result == 'success' && needs.prepare.outputs.host_case != 'spoofed-source'))
+    if: always() && needs.prepare.result == 'success' && (inputs.mode == 'production' || (needs.trial_case_handoff.result == 'success' && needs.prepare.outputs.host_case != 'spoofed-source' && needs.prepare.outputs.host_case != 'new-head'))
     name: verify (${{ fromJSON(needs.prepare.outputs.request).snapshot.pr }})
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -719,7 +719,7 @@ jobs:
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   publication_controls:
     needs: [prepare, verify]
-    if: always() && needs.prepare.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && needs.prepare.outputs.host_case == 'spoofed-source' && needs.verify.result == 'skipped'))
+    if: always() && needs.prepare.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && (needs.prepare.outputs.host_case == 'spoofed-source' || needs.prepare.outputs.host_case == 'new-head') && needs.verify.result == 'skipped'))
     name: publication controls (${{ fromJSON(needs.prepare.outputs.request).snapshot.pr }})
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -746,7 +746,7 @@ jobs:
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   admin_proof:
     needs: [prepare, verify]
-    if: always() && needs.prepare.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && needs.prepare.outputs.host_case == 'spoofed-source' && needs.verify.result == 'skipped'))
+    if: always() && needs.prepare.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && (needs.prepare.outputs.host_case == 'spoofed-source' || needs.prepare.outputs.host_case == 'new-head') && needs.verify.result == 'skipped'))
     name: proof (admin)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -773,7 +773,7 @@ jobs:
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   reader_proof:
     needs: [prepare, verify]
-    if: always() && needs.prepare.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && needs.prepare.outputs.host_case == 'spoofed-source' && needs.verify.result == 'skipped'))
+    if: always() && needs.prepare.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && (needs.prepare.outputs.host_case == 'spoofed-source' || needs.prepare.outputs.host_case == 'new-head') && needs.verify.result == 'skipped'))
     name: proof (reader)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -800,7 +800,7 @@ jobs:
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   issuer_proof:
     needs: [prepare, verify]
-    if: always() && needs.prepare.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && needs.prepare.outputs.host_case == 'spoofed-source' && needs.verify.result == 'skipped'))
+    if: always() && needs.prepare.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && (needs.prepare.outputs.host_case == 'spoofed-source' || needs.prepare.outputs.host_case == 'new-head') && needs.verify.result == 'skipped'))
     name: proof (issuer)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -827,7 +827,7 @@ jobs:
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   coding_proof:
     needs: [prepare, verify]
-    if: always() && needs.prepare.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && needs.prepare.outputs.host_case == 'spoofed-source' && needs.verify.result == 'skipped'))
+    if: always() && needs.prepare.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && (needs.prepare.outputs.host_case == 'spoofed-source' || needs.prepare.outputs.host_case == 'new-head') && needs.verify.result == 'skipped'))
     name: proof (coding)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -854,7 +854,7 @@ jobs:
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   merge_proof:
     needs: [prepare, verify]
-    if: always() && needs.prepare.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && needs.prepare.outputs.host_case == 'spoofed-source' && needs.verify.result == 'skipped'))
+    if: always() && needs.prepare.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && (needs.prepare.outputs.host_case == 'spoofed-source' || needs.prepare.outputs.host_case == 'new-head') && needs.verify.result == 'skipped'))
     name: proof (merge)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -881,7 +881,7 @@ jobs:
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   publish:
     needs: [prepare, verify, publication_controls, admin_proof, reader_proof, issuer_proof, coding_proof, merge_proof]
-    if: always() && needs.prepare.result == 'success' && needs.publication_controls.result == 'success' && needs.admin_proof.result == 'success' && needs.reader_proof.result == 'success' && needs.issuer_proof.result == 'success' && needs.coding_proof.result == 'success' && needs.merge_proof.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && needs.prepare.outputs.host_case == 'spoofed-source' && needs.verify.result == 'skipped'))
+    if: always() && needs.prepare.result == 'success' && needs.publication_controls.result == 'success' && needs.admin_proof.result == 'success' && needs.reader_proof.result == 'success' && needs.issuer_proof.result == 'success' && needs.coding_proof.result == 'success' && needs.merge_proof.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && (needs.prepare.outputs.host_case == 'spoofed-source' || needs.prepare.outputs.host_case == 'new-head') && needs.verify.result == 'skipped'))
     name: publish (${{ fromJSON(needs.prepare.outputs.request).snapshot.pr }})
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -908,7 +908,7 @@ jobs:
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
   trial_host_denial:
     needs: [prepare, publish]
-    if: inputs.mode == 'case' && contains(fromJSON('["direct-push","coding-update","missing-approval","bad-acceptance","replaced-checks","forged-records","spoofed-source"]'), needs.prepare.outputs.host_case)
+    if: inputs.mode == 'case' && contains(fromJSON('["direct-push","coding-update","missing-approval","bad-acceptance","replaced-checks","forged-records","spoofed-source","new-head"]'), needs.prepare.outputs.host_case)
     name: trial host denial
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -932,7 +932,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           AGENTIC_CODING_PRIVATE_KEY: ${{ contains(fromJSON('["direct-push","coding-update"]'), needs.prepare.outputs.host_case) && secrets.AGENTIC_CODING_PRIVATE_KEY || '' }}
-          AGENTIC_MERGE_PRIVATE_KEY: ${{ contains(fromJSON('["missing-approval","bad-acceptance","replaced-checks","forged-records","spoofed-source"]'), needs.prepare.outputs.host_case) && secrets.AGENTIC_MERGE_PRIVATE_KEY || '' }}
+          AGENTIC_MERGE_PRIVATE_KEY: ${{ contains(fromJSON('["missing-approval","bad-acceptance","replaced-checks","forged-records","spoofed-source","new-head"]'), needs.prepare.outputs.host_case) && secrets.AGENTIC_MERGE_PRIVATE_KEY || '' }}
           AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN }}
   broker:
     needs: [prepare, publish, trial_host_denial]

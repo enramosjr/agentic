@@ -252,3 +252,61 @@ def _submit(api, d, request, files):
         'pr': pr['number'], 'export_digest': digest(manifest), 'configuration_revision': request['configuration_revision'],
         'deployment_digest': digest(d), 'app_id': d['apps']['coding'], 'bot_id': int(bot),
         'run_id': request['run_id'], 'attempt': request['attempt'], 'admission_established': False}
+
+
+def _advance(api, d, previous, tree, intent_digest, issued, recover=False):
+    """Finite native transition only; caller owns protected intent and deadlines.
+
+    Unlike task submission this appends an existing, authenticated tree to an
+    existing reserved PR. updateRefs compares the exact old OID atomically. A
+    caller recovering an uncertain effect is strictly read-only.
+    """
+    require(sha(tree) and isinstance(intent_digest, str) and
+            re.fullmatch('[0-9a-f]{64}', intent_digest) and positive(issued) and
+            type(recover) is bool, 'exact source transition intent required')
+    p, root = d['policy'], '/repos/' + d['policy']['repository']
+    repo = api.get(root)
+    require(repo['id'] == p['repository_id'] and repo['default_branch'] == p['target'] and
+            isinstance(repo.get('node_id'), str) and repo['node_id'], 'transition repository differs')
+    require(all(positive(previous[k]) for k in ('pr','bot_id','app_id','run_id','attempt')) and
+            previous['app_id']==d['apps']['coding'] and sha(previous['head']), 'transition submitted identity differs')
+    pr = api.get(root + '/pulls/' + str(previous['pr']))
+    require(positive(previous['pr']) and pr['number'] == previous['pr'] and pr['state'] == 'open' and
+            pr.get('merged') is False and pr.get('draft') is False and
+            pr['head']['ref'] == previous['branch'] and pr['base']['ref'] == p['target'] and
+            pr['head']['repo']['id'] == p['repository_id'] == pr['base']['repo']['id'],
+            'transition PR differs')
+    # API users carry additional fields; authenticate identity rather than shape.
+    require(pr['user']['id'] == previous['bot_id'] == int(d['resources']['coding_bot_id']) and
+            pr['user'].get('type') == 'Bot', 'transition coding identity differs')
+    message = 'AGENTIC source transition ' + intent_digest
+    date = datetime.fromtimestamp(issued, timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    slug, bot = d['resources']['coding_slug'], d['resources']['coding_bot_id']
+    author = dict(name=slug+'[bot]', email=bot+'+'+slug+'[bot]@users.noreply.github.com', date=date)
+    def inspect(head):
+        commit = api.get(root + '/git/commits/' + head)
+        require(sha(head) and commit.get('sha') == head and commit.get('message') == message and
+                commit['tree']['sha'] == tree and [v['sha'] for v in commit['parents']] == [previous['head']] and
+                commit.get('author') == author == commit.get('committer'), 'transition commit differs')
+    head = existing_ref(api, root, previous['branch'])
+    require(head == pr['head']['sha'], 'transition branch and PR differ')
+    if recover:
+        require(head != previous['head'], 'transition effect remains unknown; never replay')
+    else:
+        require(head == previous['head'], 'transition source moved')
+        head = api.post(root + '/git/commits', dict(message=message, tree=tree,
+            parents=[previous['head']], author=author, committer=author))['sha']
+        inspect(head)
+        query = 'mutation($input:UpdateRefsInput!){updateRefs(input:$input){clientMutationId}}'
+        value = api.post('/graphql', dict(query=query, variables=dict(input=dict(
+            repositoryId=repo['node_id'], clientMutationId=intent_digest, refUpdates=[dict(
+                name='refs/heads/'+previous['branch'], beforeOid=previous['head'], afterOid=head, force=False)]))))
+        require(isinstance(value, dict) and not value.get('errors') and
+                value.get('data', {}).get('updateRefs', {}).get('clientMutationId') == intent_digest,
+                'conditional source update refused or unknown; never replay')
+    inspect(head)
+    manifest = export_manifest(_read_tree(api, root, tree, lambda: None))
+    pr = api.get(root + '/pulls/' + str(previous['pr']))
+    require(pr['head']['sha'] == existing_ref(api, root, previous['branch']) == head,
+            'transition head moved during readback')
+    return dict(previous, head=head, tree=tree, export_digest=digest(manifest))

@@ -59,7 +59,12 @@ def case_baseline(original,registry,record,value,clock):
         prior,_=read(original,entry['revision'],clock)
         require(value['worker']==prior['worker'] and all(value['candidate']['submitted'][k]!=prior['candidate']['submitted'][k]
                 for k in ('pr','head','task_id')), 'distinct reserved case from the same worker required')
-    return baseline(original,registry,record,history,clock)
+    before=baseline(original,registry,record,history,clock)
+    transition=value['candidate'].get('transition')
+    if transition is not None and transition['intent']['phase']=='current':
+        from trial_transition import terminal_baseline
+        before=terminal_baseline(original,registry,record,history,transition['intent']['prior'],before,clock)
+    return before
 
 
 def fresh_capability(original,value,record,token,clock):
@@ -67,10 +72,14 @@ def fresh_capability(original,value,record,token,clock):
     for entry in value['history']:
         prior,_=read(original,entry['revision'],clock)
         require(digest(token)!=prior['execution']['credential']['token_digest'], 'prior case capability cannot authorize progression')
+    transition=value['candidate'].get('transition')
+    if transition is not None and transition['intent']['phase']=='current':
+        prior,_=read(original,transition['intent']['prior']['revision'],clock)
+        require(digest(token)!=prior['execution']['credential']['token_digest'], 'historical capability cannot authorize current transition')
 
 
 def history_guard(original,record,history):
-    require(isinstance(history,list) and len(history)<len(CASE_CHAIN),'bounded native progression history required')
+    require(isinstance(history,list) and len(history)<=len(CASE_CHAIN),'bounded native progression history required')
     for index,entry in enumerate(history):
         # The immutable execution document was authenticated at admission. Keep
         # all its exact publication pointers fixed across later blocking reads.
@@ -372,6 +381,10 @@ class Hosted:
         self.source, self.worker = source, worker
         self._seal = copy.deepcopy(self._state())
         self.guard()
+        if 'transition' in self.candidate:
+            from trial_transition import validate
+            validate(self.candidate,self.record,self.value['worker'],self.value['history'],source,self.original,self.registry,self.clock)
+            self.guard()
 
     def _state(self):
         return dict(case=self.case,record=self.record,value=self.value,candidate=self.candidate,request=self.request,binding=self.binding,worker=self.worker)
@@ -403,4 +416,6 @@ class Hosted:
                 self.registry.ref(self.registry.coordinates['registry_branch']) == self.binding['branch_head'] and
                 self.registry.ref(trial_branch) == self.binding['software_revision'], 'case pointers moved during live observation')
         history_guard(self.original,r,self.case['history'])
+        from trial_transition import guard as transition_guard
+        transition_guard(self)
         self.local_guard(binding)

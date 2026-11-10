@@ -97,7 +97,7 @@ digest. A generic error, unavailable credential, skipped obligation, unrelated
 required check or moved ref cannot pass. The instance refuses another attempt
 after starting, including an uncertain response. This is not durable recovery
 across processes: full-prefix native orchestration and retained dispatch intents
-remain unfinished. The separate bounded native direct-push/coding-update/missing-approval/bad-acceptance/replaced-checks/forged-records/spoofed-source
+remain unfinished. The separate bounded native direct-push/coding-update/missing-approval/bad-acceptance/replaced-checks/forged-records/spoofed-source/new-head
 composition below owns durable case intents. Public invocation is held before network access. Local fixtures
 exercise verification, cleanup, closed artifacts and publication against existing
 synthetic active regression configurations; they do not establish initial trial
@@ -724,8 +724,9 @@ absence of authoritative issuer success, independent human approval and every ot
 required obligation passing. Its publish job authenticates the genuine task,
 certificate, preliminary App proofs and CLOSED publication controls, then retains
 a named source observation after durable intent. Acceptance verification is not a
-prerequisite for this source-spoof attack; only this exact case skips the scheduled
-verifier. It neither manufactures verifier success nor invokes normal issuer
+prerequisite for this source-spoof attack; its current observation phase skips the
+scheduled verifier, as does the current new-head phase described below. Historical
+new-head preparation still verifies. The spoof phase neither manufactures verifier success nor invokes normal issuer
 publication. The success-only production verifier, issuer and broker remain strict.
 
 The separate merger-App host job rereads prerequisites after its durable intent
@@ -736,7 +737,28 @@ receipt cannot close this named case. Native CLOSED observation retains all nine
 histories and leaves the original trial unqualified. Local hostile source checks
 enter only the existing source API fixture, never trusted role or task artifacts.
 
-This nine-case progression is a bounded prerequisite, not the complete ordered
+The tenth original reservation, `new-head`, uses a separately journaled historical
+preparation on the same PR. The native owner captures the exact frozen source-base
+tree as the old verification fixture; this is not another model result. It appends
+that tree to the reserved branch, runs the actual pinned verifier and success-only
+issuer, and retains CLOSED old acceptance with its exact task, operation, synthetic
+merge and issuer coordinates. Historical preparation cannot dispatch: the existing
+Session exception path emits its no-dispatch receipt and the pinned Finalizer
+closes that separate operation. Its conditional terminal commit becomes part of
+the current case baseline without becoming another host-case history entry.
+
+The current phase appends the original CLOSED worker tree after the old head.
+Both source changes use exact expected-old-OID atomic updates, preserve file modes,
+and retain protected intent before effects. Unknown effects permit only exact
+read-only recovery. Original reservation/worker evidence remains unchanged. Fresh
+READY, pending and execution bindings use distinct phase refs and capabilities;
+the prior capability is revoked before current staging. The current host producer
+reauthenticates genuine same-PR old success, current human approval and every other
+obligation, and requires absence of current own-App success. Only the exact issuer
+required-check denial and named `new-head` outcome can close it. The original
+deadlines, all nine predecessor histories and their 27 refs remain binding.
+
+This ten-case progression is a bounded prerequisite, not the complete ordered
 eleven-case host prefix, five-case broker suffix or qualification.
 In particular, initial-unqualified revocation remains unimplemented; an ACTIVE
 qualification receipt cannot substitute for that design.

@@ -19,7 +19,7 @@ class ProducerWorkflowContracts(unittest.TestCase):
         self.assertIn("inputs.mode == 'case' && 'case-prepare' || 'prepare'", self.jobs['prepare'])
         self.assertIn("inputs.mode == 'production' && needs.discover.result == 'success'",self.jobs['prepare'])
         self.assertIn('needs: [prepare, trial_case_handoff]', self.jobs['verify'])
-        self.assertIn("inputs.mode == 'production' || (needs.trial_case_handoff.result == 'success' && needs.prepare.outputs.host_case != 'spoofed-source')",self.jobs['verify'])
+        self.assertIn("inputs.mode == 'production' || (needs.trial_case_handoff.result == 'success' && needs.prepare.outputs.host_case != 'spoofed-source' && needs.prepare.outputs.host_case != 'new-head')",self.jobs['verify'])
         for purpose in ('admin','reader','issuer','coding','merge'):
             self.assertIn('needs: [prepare, verify]', self.jobs[purpose+'_proof'])
         publication = self.jobs['publication_controls']

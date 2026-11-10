@@ -24,8 +24,9 @@ MAX_DOCUMENT = 512 * 1024
 
 def trial_reference(record):
     suffix = '-case' if record.get('kind') == 'trial-case-handoff' else '-case-ready' if record.get('kind') == 'trial-case-ready' else ''
-    if suffix and record.get('candidate',{}).get('name') in ('coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source'):
+    if suffix and record.get('candidate',{}).get('name') in ('coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head'):
         suffix += '-'+record['candidate']['name']
+        if record['candidate'].get('transition',{}).get('intent',{}).get('phase')=='prior': suffix += '-prior'
     return 'agentic-trial-' + record['task_id'] + suffix + ('-execution' if record['execution'] else '')
 
 

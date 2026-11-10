@@ -102,13 +102,13 @@ class Sequential(HostFixture):
             api_factory=lambda token:self.api if token=='case-actions-read' else self.origin_factory(token),
             app_factory=self.apps,token_factory=self.tokens,uploader_factory=lambda *a:self.upload)
 
-    def observe(self):
+    def observe(self, phase=None):
         import trial_controller
         job=next(j for j in self.remote.jobs if j['name']=='finalize')
         job.update(status='completed',conclusion='success',completed_at=stamp(self.clock[0]))
         artifact=next(a for a in self.remote.artifacts if a['name'].startswith('trial-case-terminal-'))
         location=dict(run_id=self.remote.run['id'],attempt=1,job_id=job['id'],artifact_id=artifact['id'])
-        return trial_controller.Native(self.preparer)._observe_terminal('prompt',self.admission.candidate['name'],location,self.source)
+        return trial_controller.Native(self.preparer)._observe_terminal('prompt',self.admission.candidate['name'],location,self.source,phase=phase)
 
     def second(self, name='coding-update', run=103, token='fresh-second-case'):
         from test_authority_broker_evidence import AuthorityAPI
