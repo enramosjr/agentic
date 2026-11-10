@@ -50,9 +50,10 @@ def deployment(provision, pair, origin):
 
 class _Boundary:
     """Bracket every transport effect/read with the original retained fence."""
-    def __init__(self, api, guard, read_guard=None, before_effect=None):
+    def __init__(self, api, guard, read_guard=None, before_effect=None, before_request=None):
         self._target, self._guard, self._read_guard = api, guard, read_guard or guard
         self._before_effect = before_effect or guard
+        self._before_request = before_request
     def __getattr__(self, name):
         call = getattr(self._target, name)
         def invoke(*args, **kwargs):
@@ -60,6 +61,8 @@ class _Boundary:
             read = name in ('get', 'pages') or name in ('api', 'fetch') and method == 'GET'
             guard = self._read_guard if read else self._guard
             (guard if read else self._before_effect)()
+            if not read and self._before_request is not None:
+                self._before_request(name, args, kwargs)
             result = call(*args, **kwargs)
             try:
                 guard()

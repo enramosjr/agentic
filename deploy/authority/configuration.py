@@ -92,6 +92,18 @@ class SetupConfigurationSession(ConfigurationSession):
     This class cannot establish absence of a same-user modifying process.
     """
 
+    @classmethod
+    def trial_transition(cls, native, name, operator_api, admin_api, document):
+        """Finite protected native context admission, never a setup-preview waiver."""
+        from trial_transition import configuration_preview
+        preview, before = configuration_preview(native, name, document)
+        result = cls.__new__(cls)
+        result.native_transition = (native, name, document)
+        cls.__init__(result, native.registry, before['fence']['pending']['operation_id'], before['fence']['sequence'],
+            operator_api, admin_api, document['value']['record']['pair']['identities'], preview, preview['effects'],
+            {k:before[k] for k in ('configuration_revision', 'deployment_digest', 'branch_head')}, native.provision.clock)
+        return result
+
     def __init__(self, registry, operation_id, sequence, operator_api, admin_api, identities,
                  approved_preview, approved_scope, known_binding, clock, software_progress=None, persist_software_progress=None):
         self.operator_api, self.admin_api = operator_api, admin_api
@@ -122,6 +134,12 @@ class SetupConfigurationSession(ConfigurationSession):
     def _authenticate(self, current):
         import app_proofs
         preview, d = self.preview, current['deployment']
+        if hasattr(self, 'native_transition'):
+            from trial_transition import configuration_preview
+            native, name, document = self.native_transition
+            expected, _ = configuration_preview(native, name, document)
+            require(digest(preview) == digest(expected), 'native transition preview changed')
+            return self._native_identity(d)
         object_fields(preview, ('schema_version kind operator_id repository repository_id target authority_repository '
             'authority_repository_id adapter account configuration_revision deployment_digest workflow_sha effects changes').split(),
             'approved setup preview')
@@ -138,7 +156,11 @@ class SetupConfigurationSession(ConfigurationSession):
                 len(set(changes['credentials'])) == len(changes['credentials']) and
                 (changes['cloud'] is None if d['adapter'] == 'github-actions' else
                  isinstance(changes['cloud'], dict) and bool(changes['cloud'])), 'exact setup inventory required')
-        p = d['policy']
+        return self._native_identity(d)
+
+    def _native_identity(self, d):
+        import app_proofs
+        preview, p = self.preview, d['policy']
         require(all(preview[k] == p[k] for k in ('repository', 'repository_id', 'target', 'authority_repository',
                     'authority_repository_id')) and preview['adapter'] == d['adapter'] and preview['account'] == d['account'],
                 'approved setup account or target differs')
@@ -148,19 +170,22 @@ class SetupConfigurationSession(ConfigurationSession):
                 user['id'] not in [v['actor_id'] for v in self.identities['apps'].values()], 'native human setup identity differs')
         for name, identity in ((p['repository'], p['repository_id']), (p['authority_repository'], p['authority_repository_id'])):
             repo = self.operator_api.get('/repos/' + name)
-            require(repo.get('id') == identity and repo.get('owner', {}).get('id') == self.identities['owner_id'] and
+            require(positive(repo.get('id')) and positive(repo.get('owner',{}).get('id')) and
+                    repo.get('id') == identity and repo.get('owner', {}).get('id') == self.identities['owner_id'] and
                     repo.get('permissions', {}).get('admin') is True and
                     (name != p['authority_repository'] or repo.get('private') is True),
                     'current native administrative repository access required')
         record = self.identities['apps']['admin']
         app = self.admin_api.get('/app')
-        require(app['id'] == record['id'] and app['slug'] == record['slug'] and
-                app['owner']['id'] == self.identities['owner_id'] and
+        require(positive(app.get('id')) and app['id'] == record['id'] and app['slug'] == record['slug'] and
+                positive(app.get('owner',{}).get('id')) and app['owner']['id'] == self.identities['owner_id'] and
                 app_proofs.normalized(app['permissions']) == app_proofs.PERMISSIONS['admin'], 'setup administrative App changed')
         for route in ('/app/installations/' + str(record['installation_id']),
                       '/repos/' + p['repository'] + '/installation', '/repos/' + p['authority_repository'] + '/installation'):
             installation = self.admin_api.get(route)
-            require(installation['id'] == record['installation_id'] and installation['app_id'] == record['id'] and
+            require(positive(installation.get('id')) and positive(installation.get('app_id')) and
+                    positive(installation.get('account',{}).get('id')) and
+                    installation['id'] == record['installation_id'] and installation['app_id'] == record['id'] and
                     installation['account']['id'] == self.identities['owner_id'] and installation.get('suspended_at') is None and
                     installation.get('repository_selection') == 'selected' and
                     app_proofs.normalized(installation['permissions']) == app_proofs.PERMISSIONS['admin'],
@@ -175,6 +200,17 @@ class SetupConfigurationSession(ConfigurationSession):
                 (actual == policy_sha or policy_sha == self.owner['workflow_sha'] and actual == prepared),
                 'setup software does not match its approved transition phase')
         return super()._owned(current)
+
+    def _check(self):
+        current = super()._check()
+        if hasattr(self, 'native_transition'):
+            from submission import existing_ref
+            native, name, document = self.native_transition
+            v = document['value']; p = current['deployment']['policy']
+            expected = v['source']['base'] if v['source'] is not None else v['preview']['base']
+            require(existing_ref(self.operator_api, '/repos/'+p['repository'], p['target']) == expected,
+                    'native configuration source moved during admission')
+        return current
 
     def _validate_software_progress(self, registry, binding, progress):
         from repository import Repository

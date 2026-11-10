@@ -20,6 +20,39 @@ import tempfile
 
 
 class ConfigurationContracts(unittest.TestCase):
+    def test_native_administrator_identity_rejects_numeric_aliases(self):
+        from configuration import SetupConfigurationSession
+        from test_authority_app_proofs import AppProofContracts
+        for fault in (None,'repository','repository-owner','app','app-owner','installation','installation-app','installation-owner'):
+            with self.subTest(fault=fault):
+                d,records,admin=AppProofContracts().prepared('admin')
+                p=d['policy']; get=admin.get
+                def app_read(path):
+                    value=copy.deepcopy(get(path))
+                    if path=='/app':
+                        if fault=='app': value['id']=float(value['id'])
+                        if fault=='app-owner': value['owner']['id']=float(value['owner']['id'])
+                    else:
+                        if fault=='installation': value['id']=float(value['id'])
+                        if fault=='installation-app': value['app_id']=float(value['app_id'])
+                        if fault=='installation-owner': value['account']['id']=float(value['account']['id'])
+                    return value
+                admin.get=app_read
+                class Operator:
+                    def get(self,path):
+                        if path=='/user': return dict(id=17,type='User')
+                        repository_id=p['authority_repository_id'] if path=='/repos/'+p['authority_repository'] else p['repository_id']
+                        return dict(id=float(repository_id) if fault=='repository' else repository_id,
+                            owner=dict(id=7.0 if fault=='repository-owner' else 7),private=True,permissions=dict(admin=True))
+                session=SetupConfigurationSession.__new__(SetupConfigurationSession)
+                session.operator_api,session.admin_api,session.identities=Operator(),admin,records
+                session.preview=dict(operator_id=17,adapter=d['adapter'],account=d['account'],
+                    **{k:p[k] for k in ('repository','repository_id','target','authority_repository','authority_repository_id')})
+                if fault is None:
+                    self.assertEqual(session._native_identity(d)['operator_id'],17)
+                else:
+                    with self.assertRaises(Refusal): session._native_identity(d)
+
     def test_established_mutators_without_session_make_no_external_calls(self):
         for adapter in (cloud.Aws, cloud.Azure):
             calls = []

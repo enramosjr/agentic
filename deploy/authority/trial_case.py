@@ -12,12 +12,12 @@ from registry import Registry, OPERATION, TRIAL, trial_reference
 from setup import TrialReadStaging
 from trial_controller import Admission, CASE_CHAIN
 from trial_handoff import Native as NativeHandoff, read as read_origin
-from trusted_ci_policy import digest, object_fields, require, sha
+from trusted_ci_policy import digest, object_fields, positive, require, sha
 
 
 def baseline(original, registry, record, history, clock):
     """Compose the exact native host predecessors, never latest state."""
-    require(isinstance(history,list) and len(history)<len(CASE_CHAIN), 'bounded native progression history required')
+    require(isinstance(history,list) and len(history)<=len(CASE_CHAIN), 'bounded native progression history required')
     before=copy.deepcopy(record['trial'])
     for index in range(len(history)):
         before=_predecessor(original,registry,record,history,index,before,clock)
@@ -30,8 +30,15 @@ def _predecessor(original,registry,record,history,index,before,clock):
     prior,loaded=read(original,entry['revision'],clock)
     require(loaded==record and prior['history']==history[:index] and prior['candidate']['name']==CASE_CHAIN[index] and
             prior['execution'] is not None and prior['launch'] is not None, 'exact first executed host case required')
+    transition = prior['candidate'].get('transition')
+    if transition is not None and transition['intent']['phase'] == 'current':
+        from trial_transition import terminal_baseline
+        before = terminal_baseline(original,registry,record,history[:index],transition['intent']['prior'],before,clock)
+    if 'context' in prior['candidate']:
+        from trial_transition import authenticate_context
+        before=authenticate_context(original,registry,record,prior['candidate'],history[:index],before,clock)
     from types import SimpleNamespace
-    Admission._retained(SimpleNamespace(binding=before,record=record,value=prior,candidate=prior['candidate']))
+    Admission._retained(SimpleNamespace(binding=before,record=record,value=prior,candidate=prior['candidate'],original=original))
     location=entry['terminal']; s=prior['request']['snapshot']
     require(location['run_id']==s['run_id'] and location['attempt']==s['run_attempt'], 'prior terminal run differs')
     proof=provenance.authenticated_document(registry.api,before['deployment'],location,
@@ -64,6 +71,9 @@ def case_baseline(original,registry,record,value,clock):
     if transition is not None and transition['intent']['phase']=='current':
         from trial_transition import terminal_baseline
         before=terminal_baseline(original,registry,record,history,transition['intent']['prior'],before,clock)
+    if 'context' in value['candidate']:
+        from trial_transition import authenticate_context
+        before=authenticate_context(original,registry,record,value['candidate'],history,before,clock)
     return before
 
 
@@ -87,6 +97,11 @@ def history_guard(original,record,history):
         require(prior['task_id']==record['task_id'] and prior['candidate']['name']==CASE_CHAIN[index] and
                 prior['history']==history[:index] and prior['execution'] is not None and prior['launch'] is not None,
                 'authenticated prior case identity changed')
+        transition = prior['candidate'].get('transition')
+        if transition is not None and transition['intent']['phase'] == 'current':
+            history_guard(original,record,history[:index]+[transition['intent']['prior']])
+        from trial_transition import context_guard
+        context_guard(original,record,prior['candidate'])
         require(original.ref(trial_reference(prior))==entry['revision'] and
                 original.ref(trial_reference(dict(prior,execution=None)))==prior['execution']['publication_revision'] and
                 original.ref(trial_reference(dict(prior,kind='trial-case-ready',execution=None)))==prior['launch']['revision'],
@@ -292,7 +307,7 @@ def consume(registry, origin_reader, environment, hint, clock):
     value, record = read(original, hint['revision'], clock)
     if value['launch'] is not None:
         from trial_launch import authenticate
-        authenticate(original,registry.api,value['launch'],clock)
+        authenticate(original,registry,value['launch'],clock)
     require(value['execution'] is None, 'initial case publication required')
     binding = registry.authenticate_setup_progress(case_baseline(original,registry,record,value,clock), {OPERATION:value['pending']})
     token = environment.get(CaseReadStaging.NAME)
@@ -331,7 +346,7 @@ class Hosted:
         value, r = self.case, self.record
         if value['launch'] is not None:
             from trial_launch import authenticate
-            authenticate(self.original,registry.api,value['launch'],clock)
+            authenticate(self.original,registry,value['launch'],clock)
         execution = value['execution']
         require(execution is not None, 'closed case consumption binding required')
         credential, locator = execution['credential'], execution['handshake']
@@ -345,16 +360,18 @@ class Hosted:
                 [v['id'] for v in origin_reader.pages('/installation/repositories','repositories')] == [credential['repository_id']],
                 'exact fresh consumed case read delegation required')
         initial = dict(value,execution=None)
-        proof = provenance.authenticated_document(registry.api,r['trial']['deployment'],locator,'trial-case-handoff',r['task_id'],clock())
+        baseline_binding=case_baseline(self.original,registry,r,value,clock)
+        proof = provenance.authenticated_document(registry.api,baseline_binding['deployment'],locator,'trial-case-handoff',r['task_id'],clock())
         _closed(proof,consumption(initial,execution['publication_revision'],credential,locator),r['created'],credential['expires'])
         self.value = dict(value,phase='bound')
         self.candidate, self.request = copy.deepcopy(value['candidate']), copy.deepcopy(value['request'])
-        self.binding = case_baseline(self.original,registry,r,value,clock)
+        self.binding = baseline_binding
         self._retained()
         self.binding = registry.authenticate_setup_progress(self.binding, {OPERATION:value['pending']})
         require(locator['run_id'] == self.request['snapshot']['run_id'] and locator['attempt'] == 1,
                 'case consumed execution differs')
         self.worker = None
+        self._human_links = None
         self._seal = copy.deepcopy(self._state())
         if role == 'finalize':
             from broker_finalize import Finalizer
@@ -387,7 +404,8 @@ class Hosted:
             self.guard()
 
     def _state(self):
-        return dict(case=self.case,record=self.record,value=self.value,candidate=self.candidate,request=self.request,binding=self.binding,worker=self.worker)
+        return dict(case=self.case,record=self.record,value=self.value,candidate=self.candidate,request=self.request,
+                    binding=self.binding,worker=self.worker,human_links=self._human_links)
 
     def local_guard(self, binding=None):
         require(self._state() == self._seal and (binding is None or binding == self.binding), 'case admission object changed')
@@ -404,8 +422,8 @@ class Hosted:
         p = self.binding['deployment']['policy']
         if self.source is not None:
             repo = self.source.get('/repos/'+p['repository'])
-            require(repo.get('id') == p['repository_id'] and repo.get('private') is True and
-                    repo.get('owner',{}).get('id') == r['pair']['identities']['owner_id'] and repo.get('default_branch') == p['target'],
+            require(positive(repo.get('id')) and repo.get('id') == p['repository_id'] and repo.get('private') is True and
+                    positive(repo.get('owner',{}).get('id')) and repo.get('owner',{}).get('id') == r['pair']['identities']['owner_id'] and repo.get('default_branch') == p['target'],
                     'case source identity changed')
         require(self.original.ref(self.original.coordinates['registry_branch']) == origin['branch_head'] and
                 self.original.ref(original_branch) == origin['software_revision'] and
@@ -418,4 +436,6 @@ class Hosted:
         history_guard(self.original,r,self.case['history'])
         from trial_transition import guard as transition_guard
         transition_guard(self)
+        from trial_transition import context_guard
+        context_guard(self.original,r,self.candidate)
         self.local_guard(binding)

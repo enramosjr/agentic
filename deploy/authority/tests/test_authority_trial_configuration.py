@@ -81,6 +81,23 @@ class TrialConfigurationContracts(unittest.TestCase):
         self.assertEqual(guarded.api('/user'), 'observed')
         self.assertEqual(observations, ['guard', '/user', 'guard'])
 
+    def test_transport_intent_binds_actual_mutation_before_transport(self):
+        calls=[]
+        class API:
+            def post(self,path,data): calls.append(('effect',path,data)); return dict(ok=True)
+        def record(name,args,kwargs):
+            calls.append(('intent',name,args,kwargs))
+        boundary=trial_configuration._Boundary(API(),lambda:None,before_request=record)
+        body=dict(name='exact-owned-rule',bypass_actors=[])
+        self.assertEqual(boundary.post('/repos/owner/trial/rulesets',body),dict(ok=True))
+        self.assertEqual(calls,[('intent','post',('/repos/owner/trial/rulesets',body),{}),
+                                ('effect','/repos/owner/trial/rulesets',body)])
+        calls.clear()
+        def deny(*args): raise Refusal('unrecognized request')
+        boundary=trial_configuration._Boundary(API(),lambda:None,before_request=deny)
+        with self.assertRaisesRegex(Refusal,'unrecognized'): boundary.post('/repos/other/rulesets',body)
+        self.assertEqual(calls,[])
+
     def test_invalid_native_provision_is_not_json_admission(self):
         with patch.object(authority_release, 'authorize'), self.assertRaises(Refusal):
             trial_configuration.Prepare(dict(state='fixture-provisioned')).run(digest)

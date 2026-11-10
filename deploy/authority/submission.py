@@ -310,3 +310,56 @@ def _advance(api, d, previous, tree, intent_digest, issued, recover=False):
     require(pr['head']['sha'] == existing_ref(api, root, previous['branch']) == head,
             'transition head moved during readback')
     return dict(previous, head=head, tree=tree, export_digest=digest(manifest))
+
+
+def _advance_target(api, d, base, admin, intent_digest, issued, recover=False, before_effect=None):
+    """Empty native disposable base append; caller owns admission/rules/intent.
+
+    Recovery never creates objects or repeats a ref update. The native controller
+    must restore its temporary controls even when this effect remains unknown.
+    """
+    require(sha(base) and isinstance(intent_digest, str) and
+            re.fullmatch('[0-9a-f]{64}', intent_digest) and positive(issued) and type(recover) is bool,
+            'exact target transition intent required')
+    object_fields(admin, ('id', 'slug', 'installation_id', 'actor_id'), 'native administrator identity')
+    require(all(positive(admin[k]) for k in ('id', 'installation_id', 'actor_id')) and admin['id'] == d['apps']['admin'] and
+            isinstance(admin['slug'], str) and re.fullmatch('[A-Za-z0-9_-]{1,100}', admin['slug']),
+            'target transition administrator differs')
+    p, root = d['policy'], '/repos/' + d['policy']['repository']
+    repo = api.get(root)
+    require(positive(repo.get('id')) and repo['id'] == p['repository_id'] and repo.get('default_branch') == p['target'] and
+            isinstance(repo.get('node_id'), str) and repo['node_id'], 'target transition repository differs')
+    prior = api.get(root + '/git/commits/' + base)
+    require(prior.get('sha') == base and sha(prior['tree']['sha']), 'target transition base commit differs')
+    tree = prior['tree']['sha']
+    date = datetime.fromtimestamp(issued, timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    slug, bot = admin['slug'], str(admin['actor_id'])
+    author = dict(name=slug+'[bot]', email=bot+'+'+slug+'[bot]@users.noreply.github.com', date=date)
+    message = 'AGENTIC disposable base transition ' + intent_digest
+    def inspect(head):
+        commit = api.get(root + '/git/commits/' + head)
+        require(sha(head) and commit.get('sha') == head and commit.get('message') == message and
+                commit['tree']['sha'] == tree and [v['sha'] for v in commit['parents']] == [base] and
+                digest(commit.get('author')) == digest(author) == digest(commit.get('committer')),
+                'target transition commit differs')
+    current = existing_ref(api, root, p['target'])
+    if recover:
+        require(current != base, 'target effect remains unknown; never replay')
+        head = current
+    else:
+        require(current == base, 'target source moved')
+        if before_effect is not None: before_effect()
+        require(existing_ref(api,root,p['target'])==base, 'target moved before commit effect')
+        head = api.post(root + '/git/commits', dict(message=message, tree=tree, parents=[base], author=author, committer=author))['sha']
+        inspect(head)
+        if before_effect is not None: before_effect()
+        require(existing_ref(api,root,p['target'])==base, 'target moved before conditional ref effect')
+        value = api.post('/graphql', dict(query='mutation($input:UpdateRefsInput!){updateRefs(input:$input){clientMutationId}}',
+            variables=dict(input=dict(repositoryId=repo['node_id'], clientMutationId=intent_digest,
+                refUpdates=[dict(name='refs/heads/'+p['target'], beforeOid=base, afterOid=head, force=False)]))))
+        require(isinstance(value, dict) and not value.get('errors') and
+                value.get('data', {}).get('updateRefs', {}).get('clientMutationId') == intent_digest,
+                'conditional target update refused or unknown; never replay')
+    inspect(head)
+    require(existing_ref(api, root, p['target']) == head, 'target moved during readback')
+    return dict(base=head, tree=tree, parents=[base], intent_digest=intent_digest)

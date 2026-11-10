@@ -6,10 +6,11 @@ it does not enter merge dispatch or pretend the host denial is a broker failure.
 """
 import copy
 import hashlib
+import time
 from urllib.parse import quote
 
 import provenance
-from qualification_cases import HostCases, negative_evidence
+from qualification_cases import HostCases, negative_evidence, STALE
 from trusted_ci_policy import Refusal, digest, object_fields, positive, require
 
 
@@ -17,7 +18,7 @@ def selected(admission):
     from trial_controller import authenticated
     authenticated(admission)
     from trial_transition import historical
-    return not historical(admission.candidate) and admission.candidate['name'] in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head')
+    return not historical(admission.candidate) and admission.candidate['name'] in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source','human-update',*STALE)
 
 
 def failed_evidence(admission, document, job_id):
@@ -46,12 +47,12 @@ def _case(admission, authority):
     b, s, d = _context(admission)
     task = admission.request['task']
     task = admission.task(b,s,task['locator'],task['task_id'])
-    if admission.candidate['name'] in ('spoofed-source','new-head'):
+    if admission.candidate['name'] in ('spoofed-source',*STALE):
         # The distinguishing prerequisite is a foreign source check, not a
         # verifier mutation or successful authoritative acceptance.
         from trial_transition import acceptance
         return dict(name=admission.candidate['name'],snapshot=s,evidence=None,coordinates=dict(task_digest=task['task_digest']),
-                    expected_failure=None,mutations=[],prior=acceptance(admission,authority) if admission.candidate['name']=='new-head' else None)
+                    expected_failure=None,mutations=[],prior=acceptance(admission,authority) if admission.candidate['name'] in STALE else None)
     location = service._locator(authority,d,s['run_id'],s['run_attempt'],'evidence',s['pr'])
     proof = provenance.authenticated_document(authority,d,location,'evidence',s['pr'],admission.clock())
     identities = admission.record['pair']['identities']
@@ -83,7 +84,7 @@ def _identity(admission):
 
 
 def _request(d, s, name):
-    if name in ('missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head'):
+    if name in ('missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source',*STALE):
         return dict(path='/repos/'+d['policy']['repository']+'/pulls/'+str(s['pr'])+'/merge',
                     method='PUT',data=dict(sha=s['head'],merge_method='merge'))
     return dict(path='/repos/'+d['policy']['repository']+'/git/refs/heads/'+quote(d['policy']['target'],safe=''),
@@ -95,7 +96,7 @@ def _publication_inputs(admission, authority):
     import service
     import broker_proofs
     b,s,d=_context(admission)
-    spoof=admission.candidate['name'] in ('spoofed-source','new-head')
+    spoof=admission.candidate['name'] in ('spoofed-source',*STALE)
     require(spoof or admission.candidate['name'] in ('bad-acceptance','replaced-checks','forged-records'),'only admitted publication cases are implemented')
     case=_case(admission,authority)
     probe=HostCases(admission.registry,admission.source,authority,admission.record['pair']['identities'],None,None,None,admission.clock)
@@ -133,7 +134,7 @@ def publish(admission, authority, job, uploader, source):
     guard(admission)
     _upload_document(uploader,prefix,intent)
     require(_publication_inputs(admission,authority)==inputs,'publication inputs changed after intent')
-    if admission.candidate['name'] in ('spoofed-source','new-head'):
+    if admission.candidate['name'] in ('spoofed-source',*STALE):
         # This selected attack observes the foreign source check. Publishing the
         # genuine issuer success would invalidate its distinguishing prerequisite.
         observed=admission.clock()
@@ -162,7 +163,7 @@ def publish(admission, authority, job, uploader, source):
 def read_publication(admission, authority):
     import service
     b,s,d=_context(admission)
-    spoof=admission.candidate['name'] in ('spoofed-source','new-head')
+    spoof=admission.candidate['name'] in ('spoofed-source',*STALE)
     role='trial-publication-observation' if spoof else 'trial-publication-denial'
     location=service._locator(authority,d,s['run_id'],s['run_attempt'],role,s['pr'])
     proof=provenance.authenticated_document(authority,d,location,role,s['pr'],admission.clock())
@@ -187,15 +188,17 @@ def read_publication(admission, authority):
     return dict(locator=location,digest=digest(value))
 
 
-def produce(admission, authority, app, token_factory, environment, uploader):
+def produce(admission, authority, app, token_factory, environment, uploader, sleeper=time.sleep):
     from service import _upload_document
     b, s, d = _context(admission)
     job = provenance.admit_job(authority,d,environment,'trial host denial',admission.clock())
+    if admission.candidate['name']=='human-update':
+        return consume_human(admission,authority,job,uploader,sleeper)
     case = _case(admission,authority)
     identities = admission.record['pair']['identities']
-    merger=admission.candidate['name'] in ('missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head')
+    merger=admission.candidate['name'] in ('missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source',*STALE)
     purpose='merge' if merger else 'coding'
-    publication=read_publication(admission,authority) if case['name'] in ('bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head') else None
+    publication=read_publication(admission,authority) if case['name'] in ('bad-acceptance','replaced-checks','forged-records','spoofed-source',*STALE) else None
     probe = HostCases(admission.registry,admission.source,authority,identities,None if merger else app,app if merger else None,None,
                       admission.clock,token_factory,guard=admission.guard)
     probe.binding, probe.d = copy.deepcopy(b), d
@@ -218,6 +221,158 @@ def produce(admission, authority, app, token_factory, environment, uploader):
     return _upload_document(uploader,'trial-host-denial-'+admission.record['task_id']+'-'+str(s['run_attempt']),document)
 
 
+def native_human(admission, human):
+    """The native human sends the request; Actions later consumes this claim."""
+    from trial_controller import Admission, case_journal
+    from trial_case import read as read_case
+    from trial_transition import _publish_native
+    require(type(admission) is Admission and admission.candidate['name']=='human-update', 'actual native human case owner required')
+    b,s,d=_context(admission); c=admission.native.provision
+    journal=c.store(c.root/'trial-native-human')
+    require(journal.read() is None,'native human attempt already retained; never replay')
+    publication=c.store(c.root/case_journal('trial-case-publication',admission.candidate)).read()
+    require(publication is not None and publication['value']['phase']=='bound','owned exact human execution publication required')
+    revision=publication['value']['revision_bound']
+    value,record=read_case(c.session.registry,revision,admission.clock)
+    require(record==admission.record and value['request']==admission.request and value['candidate']==admission.candidate and
+            value['execution'] is not None,'native human substituted current execution')
+    identity=human.get('/user')
+    require(positive(identity.get('id')) and identity.get('type')=='User' and identity['id'] in d['policy']['reviewers'] and
+            identity['id'] not in [v['actor_id'] for v in record['pair']['identities']['apps'].values()],
+            'independently supplied human identity differs')
+    job=provenance.execution_job(admission.registry.api,d,s['run_id'],s['run_attempt'],'trial host denial')
+    require(job.get('status') in ('queued','in_progress'),'native human requires its exact pending consumer job')
+    binding=dict(schema_version=1,task_id=record['task_id'],execution=None,record_digest=digest(record),name='human-update',
+        case_revision=revision,case_digest=digest(value),request_digest=digest(admission.request),
+        certificate_digest=digest(admission.value['certificate']),snapshot=s,identity=identity,consumer_job_id=job['id'],
+        token_digest=value['execution']['credential']['token_digest'],expires=min(record['expires'],value['certificate']['expires'],
+            value['execution']['credential']['expires']))
+    document=None; intent=None
+    def owner_guard():
+        require(journal.read()==document,'native human intent ownership changed')
+        admission.guard()
+        if intent is not None:
+            from trial_transition import read_native
+            require(digest(read_native(c.session.registry,intent,record))==digest(document['value']['claim']),
+                    'native human intent publication moved')
+        current_job=provenance.execution_job(admission.registry.api,d,s['run_id'],s['run_attempt'],'trial host denial')
+        require(current_job['id']==job['id'] and current_job.get('status') in ('queued','in_progress'),
+                'native human consumer was replaced or cancelled')
+        require(journal.read()==document,'native human ownership changed during admission')
+    probe=HostCases(admission.registry,admission.source,admission.registry.api,record['pair']['identities'],None,None,human,
+                    admission.clock,guard=owner_guard)
+    probe.binding,probe.d=b,d
+    def retain(request):
+        nonlocal document,intent
+        admission.guard()
+        claim=dict(binding,kind='native-trial-human-intent',request=request,issued=admission.clock())
+        document=journal.write(None,dict(phase='intent-started',claim=claim,intent=None,result=None,completion=None))
+        intent=_publish_native(c,record,claim,owner_guard)
+        document=journal.write(document,dict(document['value'],phase='intent-published',intent=intent))
+        admission.guard()
+    result,observation=probe._probe(_case(admission,admission.registry.api),dict(human=identity['id']),identity,before_send=retain)
+    owner_guard()
+    claim=dict(binding,kind='native-trial-human-result',intent=intent,record=result,observation=observation,completed=admission.clock())
+    document=journal.write(document,dict(document['value'],phase='result-started',result=claim))
+    completion=_publish_native(c,record,claim,owner_guard)
+    journal.write(document,dict(document['value'],phase='complete',completion=completion))
+    return completion
+
+
+def read_human(admission, authority, job_id):
+    """Authenticate native provenance; do not relabel it as a job-sent request."""
+    from trial_transition import read_native
+    from registry import trial_reference
+    from trial_case import read as read_case
+    b,s,d=_context(admission)
+    require(admission.candidate['name']=='human-update','fixed native human consumer required')
+    original=admission.original if hasattr(admission,'original') else admission.native.provision.session.registry
+    links={kind:dict(kind=kind,revision=original.ref(trial_reference(dict(kind=kind,name='human-update',
+           task_id=admission.record['task_id'],execution=None)))) for kind in ('native-trial-human-intent','native-trial-human-result')}
+    intent=read_native(original,links['native-trial-human-intent'],admission.record)
+    result=read_native(original,links['native-trial-human-result'],admission.record)
+    fields=('schema_version task_id execution record_digest name case_revision case_digest request_digest certificate_digest '
+            'snapshot identity consumer_job_id token_digest expires').split()
+    object_fields(intent,fields+['kind','request','issued'],'native human intent')
+    object_fields(result,fields+['kind','intent','record','observation','completed'],'native human result')
+    value,record=read_case(original,result['case_revision'],admission.clock)
+    identity=result['identity']; credential=value['execution']['credential']
+    require(digest({k:intent[k] for k in fields})==digest({k:result[k] for k in fields}) and
+            type(result['schema_version']) is int and result['schema_version']==1 and result['name']=='human-update' and
+            result['intent']==links['native-trial-human-intent'] and result['case_digest']==digest(value) and
+            record==admission.record and value['request']==admission.request and value['candidate']==admission.candidate and
+            result['request_digest']==digest(admission.request) and result['certificate_digest']==digest(admission.value['certificate']) and
+            digest(result['snapshot'])==digest(s) and positive(result['consumer_job_id']) and result['consumer_job_id']==job_id and
+            result['token_digest']==credential['token_digest'] and positive(result['expires']) and
+            result['expires']==min(record['expires'],value['certificate']['expires'],credential['expires']) and
+            positive(intent['issued']) and positive(result['completed']) and
+            b['fence']['pending']['created']<=intent['issued']<=result['completed']<=admission.clock()<result['expires'] and
+            positive(identity.get('id')) and identity.get('type')=='User' and identity['id'] in d['policy']['reviewers'] and
+            identity['id'] not in [v['actor_id'] for v in record['pair']['identities']['apps'].values()] and
+            digest(intent['request'])==digest(_request(d,s,'human-update')), 'native human observation binding differs')
+    observation=result['observation']; host=result['record']
+    require(observation['actor_id']==identity['id'] and type(observation['http_status']) is int and
+            observation['http_status'] in (403,422) and observation['denial_category']=='protected_update' and
+            observation['denied_obligation'] is None and observation['before']==observation['after']==s['base'] and
+            digest(observation['snapshot'])==digest(s) and digest(observation['request'])==digest(intent['request']) and
+            host['evidence_digest']==digest(observation), 'native human did not establish exact protected denial')
+    probe=HostCases(admission.registry,admission.source,authority,record['pair']['identities'],None,None,None,admission.clock)
+    probe.binding,probe.d=b,d
+    current=probe._prerequisites(_case(admission,authority))
+    a,now=observation['acceptance'],current['acceptance']
+    require(digest(a['proof'])==digest(now['proof']) and digest(a['coordinates'])==digest(now['coordinates']) and
+            all(a['check'][k]==now['check'][k] for k in ('check_id','external_id','expires')) and
+            all(digest(observation[k])==digest(current[k]) for k in ('checks','rules','reviews')), 'native human prerequisites changed')
+    admission.local_guard()
+    old=getattr(admission,'_human_links',None)
+    require(old is None or digest(old)==digest(links),'authenticated native human publications changed')
+    if old is None:
+        admission._human_links=copy.deepcopy(links)
+        if hasattr(admission,'_seal'): admission._seal=copy.deepcopy(admission._state())
+    guard(admission)
+    return dict(intent=links['native-trial-human-intent'],result=links['native-trial-human-result'],
+                intent_document=intent,result_document=result)
+
+
+def consume_human(admission, authority, job, uploader, sleeper=time.sleep):
+    from service import _upload_document
+    from registry import trial_reference
+    b,s,d=_context(admission)
+    original=admission.original if hasattr(admission,'original') else admission.native.provision.session.registry
+    expires=min(admission.record['expires'],admission.value['certificate']['expires'],b['fence']['pending']['execution_deadline'])
+    if hasattr(admission,'case'): expires=min(expires,admission.case['execution']['credential']['expires'])
+    deadline=time.monotonic()+max(0,expires-admission.clock())
+    while True:
+        require(admission.clock()<expires and time.monotonic()<deadline,'native human observation deadline expired')
+        admission.guard(); guard(admission)
+        current=provenance.execution_job(authority,d,s['run_id'],s['run_attempt'],'trial host denial')
+        require(current['id']==job['id'] and current.get('status')=='in_progress','human consumer replaced or cancelled')
+        ready=True
+        for kind in ('native-trial-human-intent','native-trial-human-result'):
+            try: original.ref(trial_reference(dict(kind=kind,name='human-update',task_id=admission.record['task_id'],execution=None)))
+            except __import__('trusted_ci_github').HostRefusal as error:
+                require(error.status==404,'native human observation unavailable')
+                ready=False
+        admission.guard(); guard(admission)
+        if ready: break
+        sleeper(min(0.25,max(0,expires-admission.clock())))
+    claim=read_human(admission,authority,job['id'])
+    b,s,d=_context(admission); identity=_identity(admission)
+    root='/repos/'+d['policy']['authority_repository']+'/actions/runs/'+str(s['run_id'])
+    prefix='trial-host-intent-'+admission.record['task_id']+'-'+str(s['run_attempt'])
+    require(not any(v['name']==prefix for v in authority.pages(root+'/artifacts','artifacts')),
+            'native human consumer intent exists; never replay publication')
+    intent=dict(identity,kind='trial-host-intent',job_id=job['id'],request=_request(d,s,'human-update'),
+                issued=admission.clock(),origin='native-human-observation',native=claim)
+    admission.guard(); guard(admission)
+    _upload_document(uploader,prefix,intent)
+    require(digest(read_human(admission,authority,job['id']))==digest(claim),'native human claim moved during consumption')
+    document=dict(identity,job_id=job['id'],intent=intent,record=claim['result_document']['record'],
+        observation=claim['result_document']['observation'],origin='native-human-observation',native=claim,completed=admission.clock())
+    admission.guard(); guard(admission)
+    return _upload_document(uploader,'trial-host-denial-'+admission.record['task_id']+'-'+str(s['run_attempt']),document)
+
+
 def read(admission, authority, locator=None):
     """Authenticate closed source, job interval, intent and exact denial outcome."""
     import service
@@ -229,20 +384,28 @@ def read(admission, authority, locator=None):
     proof = provenance.authenticated_document(authority,d,locator,'trial-host-denial',key,admission.clock())
     value = proof['document']
     identity = _identity(admission)
-    object_fields(value,(*identity,'job_id','intent','record','observation','completed'),'trial host outcome')
+    human=admission.candidate['name']=='human-update'
+    object_fields(value,(*identity,'job_id','intent','record','observation','completed',*(('origin','native') if human else ())), 'trial host outcome')
     require(digest({k:value[k] for k in identity})==digest(identity) and positive(value['job_id']) and value['job_id']==proof['job_id'] and
             positive(value['completed']) and proof['job_started']<=value['completed']<=proof['artifact_created']<=proof['job_completed'],
             'host outcome configuration or producer interval differs')
     intent_location = service._locator(authority,d,s['run_id'],s['run_attempt'],'trial-host-intent',key)
     intent = provenance.authenticated_document(authority,d,intent_location,'trial-host-intent',key,admission.clock())
     expected = dict(identity,kind='trial-host-intent',job_id=proof['job_id'],request=_request(d,s,admission.candidate['name']),issued=value['intent'].get('issued'))
+    native=read_human(admission,authority,proof['job_id']) if human else None
+    if human:
+        require(value['origin']=='native-human-observation' and digest(value['native'])==digest(native) and
+                digest(value['record'])==digest(native['result_document']['record']) and
+                digest(value['observation'])==digest(native['result_document']['observation']), 'native human consumer provenance differs')
+        expected.update(origin='native-human-observation',native=native)
+        require(native['result_document']['completed']<=expected['issued'],'human consumption predates native completion')
     require(digest(intent['document'])==digest(value['intent'])==digest(expected) and intent['job_id']==proof['job_id'] and
             positive(expected['issued']) and proof['job_started']<=expected['issued']<=intent['artifact_created']<=value['completed'],
             'host intent differs or postdates the attempt')
     observation, record = value['observation'], value['record']
     negative=admission.candidate['name'] in ('bad-acceptance','replaced-checks','forged-records')
-    stale=admission.candidate['name']=='new-head'
-    spoof=admission.candidate['name'] in ('spoofed-source','new-head')
+    stale=admission.candidate['name'] in STALE
+    spoof=admission.candidate['name'] in ('spoofed-source',*STALE)
     fields=('snapshot checks rules reviews synthetic_commit request actor_id before after '
             'http_status denial_category denied_obligation').split()
     object_fields(observation,fields+(['negative','mutations','publication'] if negative else ['publication','prior'] if stale else ['publication'] if spoof else ['acceptance']),'host observation')
@@ -252,11 +415,12 @@ def read(admission, authority, locator=None):
     if missing:
         require(not any(r['state']=='APPROVED' and r['commit_id']==s['head'] for r in observation['reviews']),
                 'missing-approval observation has candidate approval')
-    actor = admission.record['pair']['identities']['apps']['merge' if missing or negative or spoof else 'coding']['actor_id']
+    actor = (native['result_document']['identity']['id'] if human else
+             admission.record['pair']['identities']['apps']['merge' if missing or negative or spoof else 'coding']['actor_id'])
     commit = observation['synthetic_commit']
     require(digest(observation['snapshot'])==digest(s) and digest(observation['request'])==digest(_request(d,s,admission.candidate['name'])) and positive(observation['actor_id']) and observation['actor_id']==actor and
             observation['before']==observation['after']==s['base'] and type(observation['http_status']) is int and
-            observation['http_status'] in (403,405,422) and observation['denial_category']==category and
+            observation['http_status'] in ((403,422) if human else (403,405,422)) and observation['denial_category']==category and
             observation['denied_obligation']==obligation and commit['sha']==s['merge'] and
             [v['sha'] for v in commit['parents']]==[s['base'],s['head']] and
             commit['tree']['sha']==admission.candidate['submitted']['tree'], 'intended host denial was not established')

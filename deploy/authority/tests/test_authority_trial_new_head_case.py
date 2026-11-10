@@ -13,6 +13,7 @@ import test_authority_trial_spoof_case as spoof_fixture
 
 
 class NewHead(spoof_fixture.Spoof):
+    TRANSITION_CASES = ('new-head',)
     def __init__(self, owner, args):
         super().__init__(owner, args)
         from test_authority_trial_transition import TransitionHost
@@ -85,14 +86,14 @@ class NewHead(spoof_fixture.Spoof):
         if observed: self.observed()
 
     def run(self, role, purpose=None, change=None):
-        if self.admission.candidate['name']=='new-head':
+        if self.admission.candidate['name'] in self.TRANSITION_CASES:
             name=('publication controls' if role=='publication-controls' else role)+' ('+(purpose or str(self.admission.candidate['submitted']['pr']))+')'
             for job in self.remote.jobs:
                 if job['name']==name: job.update(status='in_progress',conclusion=None,completed_at=None)
         return super().run(role,purpose,change)
 
     def host(self, change=None, selected=None, app_factory=None):
-        if self.admission.candidate['name'] != 'new-head':
+        if self.admission.candidate['name'] not in self.TRANSITION_CASES:
             return super().host(change, selected, app_factory)
         import trial_case
         from test_authority_broker_evidence import stamp
@@ -104,12 +105,12 @@ class NewHead(spoof_fixture.Spoof):
         value = service._case_producer(env, self.hint, 'fixture-node', 'host-denial', clock=lambda:self.clock[0],
             api_factory=lambda token:self.api if token=='case-actions-read' else self.origin_factory(token),
             app_factory=app_factory or self.apps, token_factory=self.tokens, uploader_factory=lambda *a:self.upload,
-            host_case=selected or 'new-head')
+            host_case=selected or self.admission.candidate['name'])
         self.remote.jobs[-1].update(status='completed',conclusion='success',completed_at=stamp(self.clock[0]))
         return value
 
     def verify(self, source, d, s, job_id, guard, clock):
-        if self.admission.candidate['name'] != 'new-head':
+        if self.admission.candidate['name'] not in self.TRANSITION_CASES:
             return super().verify(source, d, s, job_id, guard, clock)
         events = self.events
         expected = (Path(__file__).resolve().parents[3]/'.ai/scripts/lifecycle.py').read_bytes()

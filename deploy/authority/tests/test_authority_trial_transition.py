@@ -34,13 +34,67 @@ class TransitionHost(SubmissionHost):
 
 
 class Advance(unittest.TestCase):
+    def test_finite_context_and_human_references_never_alias_cases_or_origin(self):
+        from registry import trial_reference
+        refs = set()
+        for name in ('new-base','policy-transition'):
+            for kind in ('native-trial-context-intent','native-trial-context-complete'):
+                refs.add(trial_reference(dict(kind=kind,task_id='1'*32,name=name,execution=None)))
+        for kind in ('native-trial-human-intent','native-trial-human-result'):
+            refs.add(trial_reference(dict(kind=kind,task_id='1'*32,name='human-update',execution=None)))
+        self.assertEqual(len(refs),6)
+        with self.assertRaises(Refusal):
+            trial_reference(dict(kind='unknown-native-claim',task_id='1'*32,execution=None))
+
+    def test_target_transition_is_empty_exact_cas_and_unknown_recovery_is_read_only(self):
+        d, request, _ = fixture(); host = TransitionHost()
+        host.refs['main'] = request['base']
+        host.commits[request['base']]['sha'] = request['base']
+        post = host.post
+        def send(path, data):
+            if path != '/graphql': return post(path, data)
+            host.writes.append((path, copy.deepcopy(data)))
+            value = data['variables']['input']; update, = value['refUpdates']
+            self.assertEqual(update['name'], 'refs/heads/main')
+            self.assertEqual(update['beforeOid'], request['base'])
+            self.assertIs(update['force'], False)
+            if host.refs['main'] != update['beforeOid']: return dict(errors=[dict(message='moved')])
+            host.refs['main'] = update['afterOid']
+            raise OSError('unknown target acknowledgement')
+        host.post = send
+        admin = dict(id=d['apps']['admin'], actor_id=23, slug='fixture-admin', installation_id=33)
+        with self.assertRaisesRegex(OSError, 'unknown target'):
+            submission._advance_target(host, d, request['base'], admin, 'a'*64, 1001)
+        writes = copy.deepcopy(host.writes)
+        result = submission._advance_target(host, d, request['base'], admin, 'a'*64, 1001, recover=True)
+        self.assertEqual(result['base'], host.refs['main'])
+        self.assertEqual(result['tree'], host.commits[request['base']]['tree']['sha'])
+        self.assertEqual(result['parents'], [request['base']])
+        self.assertEqual(host.writes, writes)
+        host.refs['main'] = request['base']
+        with self.assertRaisesRegex(Refusal, 'unknown.*never replay'):
+            submission._advance_target(host, d, request['base'], admin, 'a'*64, 1001, recover=True)
+        self.assertEqual(host.writes, writes)
+
     def test_all_native_transition_entrypoints_preserve_release_hold(self):
         from trial_controller import Native
         native=Native(None)
         for call in (lambda:native.open_prior('prompt'),
                      lambda:native.observe_terminal('prompt','new-head',{},phase='prior'),
-                     lambda:native.recover_terminal('prompt','new-head',phase='prior')):
+                     lambda:native.recover_terminal('prompt','new-head',phase='prior'),
+                     lambda:native.transition_context('prompt','new-base',None,None,None),
+                     lambda:native.human_attempt('prompt',None)):
             with self.assertRaisesRegex(Refusal,'qualify-live blocked'): call()
+        with self.assertRaisesRegex(Refusal,'bootstrap blocked'): native.cleanup_context('new-base',None,None)
+
+    def test_target_movement_during_admission_blocks_commit_creation(self):
+        d,request,_=fixture(); host=TransitionHost(); host.refs['main']=request['base']
+        host.commits[request['base']]['sha']=request['base']
+        admin=dict(id=d['apps']['admin'],actor_id=23,slug='fixture-admin',installation_id=33)
+        def move(): host.refs['main']='f'*40
+        with self.assertRaises(Refusal):
+            submission._advance_target(host,d,request['base'],admin,'a'*64,1001,before_effect=move)
+        self.assertEqual(host.writes,[])
 
     def test_exact_append_preserves_modes_and_recovers_unknown_ref_without_replay(self):
         d, request, files = fixture(); host = TransitionHost()

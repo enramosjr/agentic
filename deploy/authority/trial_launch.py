@@ -38,7 +38,7 @@ def read(original, revision, clock):
     return value,record
 
 
-def authenticate(original, api, link, clock):
+def authenticate(original, registry, link, clock):
     """Authenticate the pre-queue capability and CLOSED READY consumer."""
     from trial_case import _closed
     object_fields(link,('revision','credential','handshake'),'READY consumption binding')
@@ -48,7 +48,9 @@ def authenticate(original, api, link, clock):
     require(credential['revision']==link['revision'] and credential['repository_id']==original.coordinates['repository_id'] and
             credential['permissions']==dict(contents='read') and clock()<credential['expires']<=record['expires'],
             'READY capability scope or lifetime differs')
-    proof=provenance.authenticated_document(api,record['trial']['deployment'],locator,'trial-case-ready',record['task_id'],clock())
+    from trial_case import case_baseline
+    binding=case_baseline(original,registry,record,value,clock)
+    proof=provenance.authenticated_document(registry.api,binding['deployment'],locator,'trial-case-ready',record['task_id'],clock())
     _closed(proof,consumption(value,link['revision'],credential,locator),record['created'],credential['expires'])
     require(locator['attempt']==1,'READY rerun refused')
     return value,record
@@ -70,7 +72,7 @@ def consume(registry, original, environment, hint, clock):
             digest(token)!=record['execution']['credential']['token_digest'] and
             [v['id'] for v in original.api.pages('/installation/repositories','repositories')]==[original.coordinates['repository_id']],
             'fresh original-only READY read capability required')
-    job=provenance.admit_job(registry.api,record['trial']['deployment'],environment,'trial case ready',clock())
+    job=provenance.admit_job(registry.api,binding['deployment'],environment,'trial case ready',clock())
     require(environment.get('GITHUB_RUN_ATTEMPT')=='1','READY rerun refused')
     fresh_capability(original,value,record,token,clock)
     original.unchanged(record['origin']['binding']); registry.unchanged(binding)
@@ -111,7 +113,7 @@ class Staging(TrialReadStaging):
             prior_candidate=dict(name=prior_name)
             transition=a.candidate.get('transition')
             if transition is not None and transition['intent']['phase']=='current':
-                prior_candidate=dict(name='new-head',transition=dict(intent=dict(phase='prior')))
+                prior_candidate=dict(name=a.candidate['name'],transition=dict(intent=dict(phase='prior')))
             previous=case_journal(Staging.JOURNAL,prior_candidate)
         if previous is not None:
             from trial_case import read as read_case
@@ -177,7 +179,7 @@ class Native:
         require(type(a) is Admission,'actual native case launch owner required')
         a.guard()
         c=a.native.provision; original=c.session.registry
-        p=a.record['trial']['deployment']['policy']
+        p=a.binding['deployment']['policy']
         require(p['workflow']=='.github/workflows/authority-v2.yml','case launch requires the fixed authority workflow')
         self.journal=c.store(c.root/case_journal('trial-case-launch',a.candidate)); self.document=self.journal.read()
         ready=dict(schema_version=1,kind='trial-case-ready',task_id=a.record['task_id'],
@@ -221,9 +223,9 @@ class Native:
             require(len(candidates)==1 and candidates[0].get('run_attempt')==1,'case dispatch remains pending or ambiguous; never redispatch')
             locator=self.locator(candidates[0]['id'],'trial case ready','trial-case-ready')
             link=dict(revision=revision,credential=state['credential'],handshake=locator)
-            require(authenticate(original,a.registry.api,link,a.clock)[0]==ready,'case READY consumer differs')
+            require(authenticate(original,a.registry,link,a.clock)[0]==ready,'case READY consumer differs')
             state.update(phase='consumed',link=link); self.save(state)
-        authenticate(original,a.registry.api,state['link'],a.clock)
+            authenticate(original,a.registry,state['link'],a.clock)
         run_id=state['link']['handshake']['run_id']
         if a.value['phase']=='ready':
             environment=dict(GITHUB_REPOSITORY_ID=str(p['authority_repository_id']),GITHUB_SHA=p['workflow_sha'],

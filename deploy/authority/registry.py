@@ -23,8 +23,17 @@ MAX_DOCUMENT = 512 * 1024
 
 
 def trial_reference(record):
+    kind = record.get('kind')
+    native = {'native-trial-context-intent':'context-intent', 'native-trial-context-complete':'context-complete',
+              'native-trial-human-intent':'human-intent', 'native-trial-human-result':'human-result'}
+    if kind in native:
+        require(record.get('name') in (('human-update',) if kind.startswith('native-trial-human-') else
+                ('new-base','policy-transition')) and record.get('execution') is None,
+                'fixed native context publication identity required')
+        return 'agentic-trial-'+record['task_id']+'-'+record['name']+'-'+native[kind]
+    require(kind in ('native-trial-handoff','trial-case-handoff','trial-case-ready'), 'unknown native publication kind')
     suffix = '-case' if record.get('kind') == 'trial-case-handoff' else '-case-ready' if record.get('kind') == 'trial-case-ready' else ''
-    if suffix and record.get('candidate',{}).get('name') in ('coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head'):
+    if suffix and record.get('candidate',{}).get('name') in ('coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head','new-base','policy-transition','human-update'):
         suffix += '-'+record['candidate']['name']
         if record['candidate'].get('transition',{}).get('intent',{}).get('phase')=='prior': suffix += '-prior'
     return 'agentic-trial-' + record['task_id'] + suffix + ('-execution' if record['execution'] else '')

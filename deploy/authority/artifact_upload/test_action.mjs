@@ -53,13 +53,13 @@ for (const [role,job,keys] of [
   assert.equal(Boolean(params.environment.AGENTIC_RECOVERY_PIN),role==='finalize');
   assert.throws(()=>launchParameters({...source,GITHUB_JOB:'candidate'},'linux'));
 }
-for(const [name,key] of [['direct-push','CODING'],['coding-update','CODING'],['missing-approval','MERGE'],['bad-acceptance','MERGE'],['replaced-checks','MERGE'],['forged-records','MERGE'],['spoofed-source','MERGE'],['new-head','MERGE']]) {
+for(const [name,key] of [['direct-push','CODING'],['coding-update','CODING'],['missing-approval','MERGE'],['bad-acceptance','MERGE'],['replaced-checks','MERGE'],['forged-records','MERGE'],['spoofed-source','MERGE'],['new-head','MERGE'],['new-base','MERGE'],['policy-transition','MERGE'],['human-update','READER']]) {
   const source={...env,INPUT_ROLE:'case-host-denial',GITHUB_JOB:'trial_host_denial',INPUT_TASK:JSON.stringify({host_case:name}),
-    AGENTIC_CODING_PRIVATE_KEY:'coding',AGENTIC_MERGE_PRIVATE_KEY:'merge'};
+    AGENTIC_CODING_PRIVATE_KEY:'coding',AGENTIC_MERGE_PRIVATE_KEY:'merge',AGENTIC_READER_PRIVATE_KEY:'reader'};
   const child=launchParameters(source).environment;
-  assert.equal(child[`AGENTIC_${key}_PRIVATE_KEY`],key==='MERGE'?'merge':'coding');
-  assert.equal(child[`AGENTIC_${key==='MERGE'?'CODING':'MERGE'}_PRIVATE_KEY`],undefined);
-  for(const value of [true,false,null,'none','human-update',{}]) {
+  assert.equal(child[`AGENTIC_${key}_PRIVATE_KEY`],source[`AGENTIC_${key}_PRIVATE_KEY`]);
+  for(const purpose of ['CODING','MERGE','READER']) if(purpose!==key) assert.equal(child[`AGENTIC_${purpose}_PRIVATE_KEY`],undefined);
+  for(const value of [true,false,null,'none','native-human',{}]) {
     assert.throws(()=>launchParameters({...source,INPUT_TASK:JSON.stringify({host_case:value})}));
   }
 }

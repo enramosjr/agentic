@@ -96,9 +96,9 @@ current human approval and other required checks for new-base and policy-transit
 and current acceptance/approval/checks for human-update. The human transport is
 reauthenticated after those reads and before the final source snapshot; its identity
 must remain the same typed human with a strict positive integer ID. Only an exact
-`protected_update` HTTP 403 or 422 counts as a human-update denial. These checks do
-not supply native base movement or a native human-to-CLOSED-job observation bridge;
-those three native cases remain unfinished.
+`protected_update` HTTP 403 or 422 counts as a human-update denial. The held native
+context and human-observation protocol below connects these three cases; full-prefix
+collection and qualification remain unfinished.
 
 Each returned observation binds the PR/head/base/synthetic merge/tree, actor,
 exact request, HTTP denial and obligation, unchanged protected ref and evidence
@@ -106,7 +106,7 @@ digest. A generic error, unavailable credential, skipped obligation, unrelated
 required check or moved ref cannot pass. The instance refuses another attempt
 after starting, including an uncertain response. This is not durable recovery
 across processes: full-prefix native orchestration and retained dispatch intents
-remain unfinished. The separate bounded native direct-push/coding-update/missing-approval/bad-acceptance/replaced-checks/forged-records/spoofed-source/new-head
+remain unfinished. The separate bounded native direct-push/coding-update/missing-approval/bad-acceptance/replaced-checks/forged-records/spoofed-source/new-head/new-base/policy-transition/human-update
 composition below owns durable case intents. Public invocation is held before network access. Local fixtures
 exercise verification, cleanup, closed artifacts and publication against existing
 synthetic active regression configurations; they do not establish initial trial
@@ -767,8 +767,57 @@ obligation, and requires absence of current own-App success. Only the exact issu
 required-check denial and named `new-head` outcome can close it. The original
 deadlines, all nine predecessor histories and their 27 refs remain binding.
 
-This ten-case progression is a bounded prerequisite, not the complete ordered
-eleven-case host prefix, five-case broker suffix or qualification.
+The next reservations, `new-base` and `policy-transition`, each prepare genuine
+same-PR historical acceptance from the frozen native baseline tree. Their heads
+remain unchanged while the base advances. The existing native configuration engine
+admits only a protected, separately approved disposable transition preview, with
+its actual native human/admin identities, exact source/authority IDs, original
+history, scope, control bodies and deadlines. Full setup-preview validation remains
+unchanged; no software or credential inventory is fabricated for this admission.
+
+`Native.transition_context` owns a separate disposable configuration fence. It
+temporarily adds only the existing disposable administrator Integration to both
+owned gates, preserving other actors, rules and foreign controls. Its native-only
+source capability is scoped to that fixture. An inspected empty commit retains
+the old base tree and parent; the target update compares the exact expected old
+OID. Both original gates must be restored before fresh case staging. The policy
+case then reuses `ContextTransition` to install and observe a fresh epoch/check
+context and conditionally record the next unqualified generation. Original worker,
+reservations, configuration and histories remain immutable; current Native/Hosted
+bindings replay only the authenticated finite configuration/publication chain.
+
+Ruleset PUTs have no documented atomic expected-body/version precondition. Native
+preimage, intent and postimage checks do not prevent every concurrent writer race;
+an owned-rule edit can be overwritten between read and PUT without detection.
+Future live operation requires independently enforced exclusive administrative
+writing. This build does not establish that prerequisite and remains release-held.
+Unknown effects never authorize a repeated write. `Native.cleanup_context` uses
+independently authenticated native authority to remove only recognized retained
+temporary allowances and revoke exact capabilities after expiry/restart. It cannot
+extend a normal session, advance the source, stage work or qualify a case.
+
+The final `human-update` reservation prepares a native baseline-tree candidate and
+obtains genuine current verifier/issuer acceptance. `Native.human_attempt` requires
+an already bound case and a separately supplied typed authorized human transport.
+It invokes the shared protected-update probe, retains protected intent before the
+HTTP request, and conditionally publishes immutable native intent/result claims.
+No human token is put in those claims or in Actions. The separate CLOSED host job
+receives only the reader App root and fresh original-authority read delegation;
+it authenticates the exact native observation, consumer job, case, token digest,
+context, source state and interval. If it starts first, it waits read-only for the
+fixed native publications within the original credential/certificate deadlines,
+rechecking admission, source and cancellation without sending a human request.
+Its outcome explicitly records
+`origin: native-human-observation`; it does not claim the job sent or independently
+witnessed the human request. Cancellation, changed approval/acceptance, generic
+errors and uncertain human requests cannot establish the named denial or replay it.
+Only exact `protected_update` HTTP 403/422 evidence can reach the existing named
+host receipt and pinned Finalizer.
+
+This thirteen-case progression includes two broker negatives. It is a bounded
+prerequisite, not completion of the ordered eleven-case host consumer, five-case
+broker suffix or qualification. Earlier base/epoch facts remain historical; they
+cannot be assembled into current-policy facts for `HostCases._run`.
 In particular, initial-unqualified revocation remains unimplemented; an ACTIVE
 qualification receipt cannot substitute for that design.
 The launcher passes only the fresh read capability and each role's existing
