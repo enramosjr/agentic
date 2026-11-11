@@ -98,6 +98,11 @@ class Session:
                 import trial_broker_case
                 require(not trial_broker_case.selected(_admission), 'native broker negative reached successful authorization')
         except Exception:
+            if _admission is not None and _admission.candidate['name']=='context-transition':
+                # Its retained operation has evidence-only rights. The native
+                # context runner authenticates the typed refusal separately;
+                # ordinary old-context receipts must never be emitted here.
+                raise
             if _admission is not None and _admission.candidate['name']=='authority-outage':
                 # Retain the collection failure time before blocking guards,
                 # receipt inventories, uploads and readback can advance it.
@@ -130,6 +135,9 @@ class Session:
         prepared = (broker_evidence.preload(*arguments) if self._admission is None else
                     broker_evidence._preload(*arguments,admission=self._admission))
         self._guard()
+        if self._admission is not None and self._admission.candidate['name']=='context-transition':
+            from trial_broker_context import paused
+            return paused(self,prepared)
         if self._admission is not None and self._admission.candidate['name']=='revoked-qualification':
             from trial_broker_case import preloaded
             preloaded(self,prepared)

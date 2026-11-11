@@ -45,6 +45,7 @@ await readyContract(upload);
 await readyContract(upload, 'not-submitted');
 await readyContract(upload, 'host-denied');
 await readyContract(upload, 'trial-preloaded');
+await readyContract(upload, 'trial-context-refusal');
 await assert.rejects(readyContract(async (actual, ...rest) => {
   if (actual.endsWith('-not-submitted')) throw new Error('deliberately rejected terminal evidence');
   return upload(actual, ...rest);
@@ -55,7 +56,7 @@ await assert.rejects(readyContract(async (actual, ...rest) => {
   return upload(actual, ...rest);
 }), /deliberately rejected readiness/);
 const documents = [
-  ...['trial-handoff','trial-case-ready','trial-case-handoff','trial-case-certificate','trial-case-terminal','trial-host-intent','trial-host-denial','trial-task','trial-task-ready','trial-task-controls'].map(role=>[`${role}-${'a'.repeat(32)}-1`,`${role}.json`]),
+  ...['trial-handoff','trial-case-ready','trial-case-handoff','trial-case-certificate','trial-case-terminal','trial-context-recovery-intent','trial-host-intent','trial-host-denial','trial-task','trial-task-ready','trial-task-controls'].map(role=>[`${role}-${'a'.repeat(32)}-1`,`${role}.json`]),
   ['evidence-7-1', 'evidence.json'], ['controls-7-1', 'controls.json'],
   ['publication-controls-7-1', 'publication-controls.json'],
   ['trial-broker-intent-7-1','trial-broker-intent.json'],

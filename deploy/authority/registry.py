@@ -26,15 +26,17 @@ def trial_reference(record):
     kind = record.get('kind')
     native = {'native-trial-context-intent':'context-intent', 'native-trial-context-complete':'context-complete',
               'native-trial-human-intent':'human-intent', 'native-trial-human-result':'human-result',
-              'native-trial-revocation-intent':'revocation-intent', 'native-trial-revocation-result':'revocation-result'}
+              'native-trial-revocation-intent':'revocation-intent', 'native-trial-revocation-result':'revocation-result',
+              'native-trial-broker-context-intent':'broker-context-intent', 'native-trial-broker-context-result':'broker-context-result'}
     if kind in native:
-        require(record.get('name') in (('revoked-qualification',) if kind.startswith('native-trial-revocation-') else ('human-update',) if kind.startswith('native-trial-human-') else
+        require(record.get('name') in (('context-transition',) if kind.startswith('native-trial-broker-context-') else
+                ('revoked-qualification',) if kind.startswith('native-trial-revocation-') else ('human-update',) if kind.startswith('native-trial-human-') else
                 ('new-base','policy-transition')) and record.get('execution') is None,
                 'fixed native context publication identity required')
         return 'agentic-trial-'+record['task_id']+'-'+record['name']+'-'+native[kind]
     require(kind in ('native-trial-handoff','trial-case-handoff','trial-case-ready'), 'unknown native publication kind')
     suffix = '-case' if record.get('kind') == 'trial-case-handoff' else '-case-ready' if record.get('kind') == 'trial-case-ready' else ''
-    if suffix and record.get('candidate',{}).get('name') in ('coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head','new-base','policy-transition','human-update','revoked-qualification'):
+    if suffix and record.get('candidate',{}).get('name') in ('coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head','new-base','policy-transition','human-update','revoked-qualification','context-transition'):
         suffix += '-'+record['candidate']['name']
         if record['candidate'].get('transition',{}).get('intent',{}).get('phase')=='prior': suffix += '-prior'
     return 'agentic-trial-' + record['task_id'] + suffix + ('-execution' if record['execution'] else '')
@@ -168,6 +170,10 @@ class Registry:
         if before['branch_exists']:
             self.require_configuration_operation(before, operation_id)
             require(callable(before_effect), 'fresh configuration guard required for registry mutation')
+            if before['fence']['schema_version'] == 3:
+                retained = before['fence']['retained']['binding']
+                self._native_context_change(retained, value)
+                require(before['deployment'] == retained['deployment'], 'native handover permits one context transition')
         documents = {DOCUMENT: value}
         if not before['branch_exists']:
             documents[OPERATION] = operation_fence.empty(value)
@@ -202,7 +208,7 @@ class Registry:
     def acquire_operation(self, expected_head, expected_configuration, pending, before_effect=None):
         operation_fence.operation(pending)
         before = self.binding()
-        require(before['branch_head'] == expected_head and
+        require(before['fence']['schema_version'] == 2 and before['branch_head'] == expected_head and
                 before['configuration_revision'] == expected_configuration and
                 before['fence']['pending'] is None, 'registry moved or another operation is pending')
         d, p = before['deployment'], before['deployment']['policy']
@@ -224,6 +230,7 @@ class Registry:
         """
         operation_fence.terminal(terminal)
         before = self.binding(check_software=False)
+        require(before['fence']['schema_version'] == 2, 'native handover requires paired terminal recovery')
         fence = copy.deepcopy(before['fence'])
         pending = fence['pending']
         require(before['branch_head'] == expected_head and pending is not None and
@@ -236,6 +243,76 @@ class Registry:
         fence['pending'] = None
         operation_fence.validate(fence)
         return self._replace(before, {OPERATION: fence}, before_effect=before_effect, terminal_only=True)
+
+    @staticmethod
+    def _native_context_change(before, value):
+        """The transient owner can change only the required native check context."""
+        old, p = before['deployment'], value['policy']
+        expected = copy.deepcopy(old)
+        expected['generation'] += 1
+        expected['policy'].update(epoch=p['epoch'], check_name=p['check_name'])
+        for key in ('acceptance_rule', 'updates_rule'):
+            if key in value['resources']:
+                expected['resources'][key] = value['resources'][key]
+        require(value == expected and value['state'] == 'qualification' and value['qualification'] is None and
+                all(p['epoch'] != c['epoch'] and p['check_name'] != c['check_name'] for c in before['fence']['contexts']),
+                'native handover permits only a fresh unqualified context')
+
+    @staticmethod
+    def _handover_deadline(before, clock, before_effect):
+        require(callable(clock) and callable(before_effect), 'native handover requires fresh ownership and time guards')
+        fence = before['fence']
+        old = fence['retained']['operation'] if fence['schema_version'] == 3 else fence['pending']
+        pending = fence['pending']
+        def guard():
+            before_effect()
+            now = clock()
+            require(type(now) is int and max(old['created'], pending['created']) <= now <
+                    min(old['execution_deadline'], pending['execution_deadline'], before['deployment']['expires']),
+                    'native handover original deadline expired')
+        return guard
+
+    def handover_operation(self, expected_head, expected_configuration, pending, intent_digest, before_effect, clock):
+        """Native caller authenticates the paused Session and exact approval first.
+
+        Retain our actual live binding, never a caller-provided historical object.
+        An uncertain write is recovered through exact immutable readback only.
+        """
+        operation_fence.operation(pending)
+        before = self.binding()
+        fence = copy.deepcopy(before['fence'])
+        require(fence['schema_version'] == 2 and before['branch_head'] == expected_head and
+                before['configuration_revision'] == expected_configuration and fence['pending'] is not None,
+                'exact original merge owner required for native handover')
+        fence.update(schema_version=3, sequence=fence['sequence'] + 1, pending=copy.deepcopy(pending),
+                     retained=dict(sequence=before['fence']['sequence'], operation=copy.deepcopy(before['fence']['pending']),
+                                   binding=copy.deepcopy(before), intent_digest=intent_digest))
+        operation_fence.validate(fence)
+        guard = self._handover_deadline(dict(before, fence=fence), clock, before_effect)
+        guard()
+        return self._replace(before, {OPERATION: fence}, before_effect=guard)
+
+    def finalize_handover(self, expected_head, merge_terminal, configuration_terminal, before_effect, clock):
+        """Pinned native recovery supplies CLOSED proof; this validates pair storage."""
+        before = self.binding(check_software=False)
+        require(before['branch_head'] == expected_head and before['fence']['schema_version'] == 3,
+                'exact native handover required for paired terminal recovery')
+        self._native_context_change(before['fence']['retained']['binding'], before['deployment'])
+        fence = copy.deepcopy(before['fence'])
+        retained, pending = fence['retained'], fence['pending']
+        for terminal in (merge_terminal, configuration_terminal): operation_fence.terminal(terminal)
+        require(merge_terminal['operation_id'] == retained['operation']['operation_id'] and
+                merge_terminal['sequence'] == retained['sequence'] and merge_terminal['kind'] == 'not-submitted' and
+                configuration_terminal['operation_id'] == pending['operation_id'] and
+                configuration_terminal['sequence'] == fence['sequence'] and
+                configuration_terminal['kind'] == 'configuration-complete', 'ordered native terminal pair differs')
+        fence['completed'].extend((dict(merge_terminal), dict(configuration_terminal)))
+        fence.update(schema_version=2, pending=None)
+        del fence['retained']
+        operation_fence.validate(fence)
+        guard = self._handover_deadline(before, clock, before_effect)
+        guard()
+        return self._replace(before, {OPERATION: fence}, before_effect=guard, paired_terminal=True)
 
     def authenticate_setup_progress(self, before, documents):
         """Authenticate one retained native CAS intent, never arbitrary latest state."""
@@ -294,7 +371,7 @@ class Registry:
         require(unrelated(old_entries) == unrelated(new_entries), 'unrelated registry data changed')
         return current
 
-    def _replace(self, before, documents, before_effect=None, terminal_only=False, trial_branch=None):
+    def _replace(self, before, documents, before_effect=None, terminal_only=False, trial_branch=None, paired_terminal=False):
         """Only fixed registry documents; sibling commits race by nonforce CAS."""
         c = self.coordinates
         require(set(documents) <= {DOCUMENT, OPERATION} or
@@ -303,12 +380,27 @@ class Registry:
                 before['fence']['pending'] is not None and trial_branch == trial_reference(documents[TRIAL]),
                 'unknown or unqualified registry document')
         require(trial_branch is None or set(documents) == {TRIAL}, 'trial branch only accepts its handoff record')
-        require(not terminal_only or set(documents) == {OPERATION} and
+        require(not terminal_only or before['fence']['schema_version'] == 2 and set(documents) == {OPERATION} and
                 before['fence']['pending'] is not None and documents[OPERATION]['pending'] is None and
                 documents[OPERATION]['completed'][:-1] == before['fence']['completed'] and
                 len(documents[OPERATION]['completed']) == len(before['fence']['completed']) + 1 and
                 documents[OPERATION]['sequence'] == before['fence']['sequence'] and
                 documents[OPERATION]['contexts'] == before['fence']['contexts'], 'terminal-only fence write required')
+        require(not paired_terminal or not terminal_only and trial_branch is None and callable(before_effect) and
+                set(documents) == {OPERATION} and before['fence']['schema_version'] == 3 and
+                documents[OPERATION]['schema_version'] == 2 and documents[OPERATION]['pending'] is None and
+                documents[OPERATION]['completed'][:-2] == before['fence']['completed'] and
+                len(documents[OPERATION]['completed']) == len(before['fence']['completed']) + 2 and
+                documents[OPERATION]['sequence'] == before['fence']['sequence'] and
+                documents[OPERATION]['contexts'] == before['fence']['contexts'], 'paired terminal-only fence write required')
+        if paired_terminal:
+            operation_fence.validate(documents[OPERATION])
+            retained, pending = before['fence']['retained'], before['fence']['pending']
+            old, new = documents[OPERATION]['completed'][-2:]
+            require(old['operation_id'] == retained['operation']['operation_id'] and old['sequence'] == retained['sequence'] and
+                    old['kind'] == 'not-submitted' and new['operation_id'] == pending['operation_id'] and
+                    new['sequence'] == before['fence']['sequence'] and new['kind'] == 'configuration-complete',
+                    'paired terminal operation identities differ')
         serialized = {}
         for path, value in documents.items():
             raw = (json.dumps(value, sort_keys=True, allow_nan=False) + '\n').encode()
@@ -365,9 +457,9 @@ class Registry:
             else:
                 self.api.post(self.root + '/git/refs', {'ref': 'refs/heads/' + c['registry_branch'], 'sha': commit})
         except Exception:
-            if not terminal_only: raise
+            if not (terminal_only or paired_terminal): raise
             return terminal_readback()  # Never repeat the write or the merge.
-        if terminal_only: return terminal_readback()
+        if terminal_only or paired_terminal: return terminal_readback()
         if trial_branch is not None:
             require(self.ref(trial_branch) == commit and self.binding() == before and
                     self.blob(commit, TRIAL)[0] == documents[TRIAL], 'trial publication readback differs')

@@ -132,6 +132,11 @@ def live_trial_readiness(api, d, locator, key, now):
     return _authenticated_document(api, d, locator, 'trial-task-ready', key, now, live=True)
 
 
+def live_context_recovery(api, d, locator, key, now):
+    """One live finalizer issuance intent; never terminal or merge authority."""
+    return _authenticated_document(api,d,locator,'trial-context-recovery-intent',key,now,live=True)
+
+
 def _authenticated_document(api, d, locator, role, key, now, live=False):
     validate_deployment(d)
     object_fields(locator, ('run_id', 'attempt', 'job_id', 'artifact_id'), 'authority artifact locator')
@@ -139,7 +144,8 @@ def _authenticated_document(api, d, locator, role, key, now, live=False):
             'current authority artifact coordinates required')
     require(role in ('evidence', 'controls', 'publication-controls', 'proof', 'final-proof', 'task', 'task-ready', 'task-controls',
                     'model-lease', 'qualification', 'credential-proof', 'trial-task', 'trial-task-ready',
-            'trial-task-controls', 'trial-handoff', 'trial-case-handoff', 'trial-case-certificate', 'trial-case-ready', 'trial-host-intent', 'trial-host-denial', 'trial-case-terminal', 'trial-broker-intent', 'trial-broker-denial', 'trial-publication-intent', 'trial-publication-denial', 'trial-publication-observation') and live == (role in ('task-ready', 'trial-task-ready')),
+            'trial-task-controls', 'trial-handoff', 'trial-case-handoff', 'trial-case-certificate', 'trial-case-ready', 'trial-host-intent', 'trial-host-denial', 'trial-case-terminal', 'trial-context-recovery-intent', 'trial-broker-intent', 'trial-broker-denial', 'trial-publication-intent', 'trial-publication-denial', 'trial-publication-observation') and
+            (role=='trial-context-recovery-intent' or live == (role in ('task-ready', 'trial-task-ready'))),
             'unknown authority producer role')
     if role.startswith('trial-'):
         require(d['state'] == 'qualification' and d['qualification'] is None and
@@ -173,7 +179,7 @@ def _authenticated_document(api, d, locator, role, key, now, live=False):
         job_name, prefix = 'broker (' + str(key) + ')', role + '-' + str(key)
     elif role in ('trial-publication-intent','trial-publication-denial','trial-publication-observation'):
         job_name, prefix = 'publish (' + str(key) + ')', role + '-' + str(key)
-    elif role == 'trial-case-terminal':
+    elif role in ('trial-case-terminal','trial-context-recovery-intent'):
         job_name, prefix = 'finalize', role + '-' + key
     elif role == 'credential-proof':
         require(key in ('admin', 'reader', 'issuer', 'coding', 'merge', 'model_vault', 'model_delivery'),

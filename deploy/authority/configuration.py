@@ -93,6 +93,17 @@ class SetupConfigurationSession(ConfigurationSession):
     """
 
     @classmethod
+    def broker_context(cls, native, operator_api, admin_api, document):
+        from trial_broker_context import configuration_preview
+        preview, before = configuration_preview(native,document)
+        result = cls.__new__(cls)
+        result.native_broker_context = (native,document)
+        cls.__init__(result,native.registry,before['fence']['pending']['operation_id'],before['fence']['sequence'],
+            operator_api,admin_api,document['value']['record']['pair']['identities'],preview,preview['effects'],
+            {k:before[k] for k in ('configuration_revision','deployment_digest','branch_head')},native.provision.clock)
+        return result
+
+    @classmethod
     def trial_transition(cls, native, name, operator_api, admin_api, document):
         """Finite protected native context admission, never a setup-preview waiver."""
         from trial_transition import configuration_preview
@@ -134,6 +145,12 @@ class SetupConfigurationSession(ConfigurationSession):
     def _authenticate(self, current):
         import app_proofs
         preview, d = self.preview, current['deployment']
+        if hasattr(self, 'native_broker_context'):
+            from trial_broker_context import configuration_preview
+            native,document = self.native_broker_context
+            expected,_ = configuration_preview(native,document)
+            require(preview == expected, 'native broker context preview changed')
+            return self._native_identity(d)
         if hasattr(self, 'native_transition'):
             from trial_transition import configuration_preview
             native, name, document = self.native_transition

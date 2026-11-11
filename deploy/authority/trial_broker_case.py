@@ -11,7 +11,7 @@ from trusted_ci_policy import digest, object_fields, positive, require
 def selected(admission):
     from trial_controller import authenticated
     authenticated(admission)
-    return admission.candidate['name'] in ('expired-proof','authority-outage','revoked-qualification')
+    return admission.candidate['name'] in ('expired-proof','authority-outage','revoked-qualification','context-transition')
 
 
 def _identity(a):
@@ -116,6 +116,9 @@ def _outage(a, authority, intent, collection, refusal, observed, job, terminal=N
 def run(a, authority, session, uploader, sleeper):
     """Only admission differs from the ordinary broker Session implementation."""
     import service
+    if a.candidate['name']=='context-transition':
+        from trial_broker_context import run
+        return run(a, authority, session, uploader)
     if a.candidate['name']=='revoked-qualification':
         return run_revocation(a,authority,session,uploader)
     identity=_identity(a); a.guard()
@@ -272,6 +275,9 @@ def live_certificate(a, authority):
 def validate_preloaded(a, value, job, now):
     from trial_controller import authenticated
     authenticated(a)
+    if a.candidate['name']=='context-transition':
+        from trial_broker_context import validate_preloaded
+        return validate_preloaded(a, value, job, now)
     require(a.candidate['name']=='revoked-qualification','native revocation preload only')
     object_fields(value,('schema_version kind request_digest certificate prepared_digest job_id issued').split(),'native preload marker')
     require(type(value['schema_version']) is int and value['schema_version']==1 and value['kind']=='trial-preloaded' and

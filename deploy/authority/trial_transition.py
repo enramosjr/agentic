@@ -149,7 +149,7 @@ def prepare(preparer, completed, reservation, history, before, phase, source, pr
     native, record = preparer.native, completed['record']
     c, worker = native.provision, completed['result']
     name = reservation['name']
-    require((name in STALE_CASES and phase in ('prior', 'current') or name in ('human-update','revoked-qualification') and phase=='fixture') and len(history) == CASE_CHAIN.index(name),
+    require((name in STALE_CASES and phase in ('prior', 'current') or name in ('human-update','revoked-qualification','context-transition') and phase=='fixture') and len(history) == CASE_CHAIN.index(name),
             'only the exact original stale transition is admitted')
     root = '/repos/' + before['deployment']['policy']['repository']
     prior = None
@@ -258,7 +258,7 @@ def validate(candidate, record, worker, history, source, original, registry, clo
                   'source transition intent')
     from trial_controller import CASE_CHAIN
     name = candidate['name']
-    require((name in STALE_CASES and i['phase'] in ('prior', 'current') or name in ('human-update','revoked-qualification') and i['phase']=='fixture') and len(history) == CASE_CHAIN.index(name) and
+    require((name in STALE_CASES and i['phase'] in ('prior', 'current') or name in ('human-update','revoked-qualification','context-transition') and i['phase']=='fixture') and len(history) == CASE_CHAIN.index(name) and
             positive(i['issued']) and i['issued'] <= clock() < i['expires'], 'transition identity or deadline differs')
     reservation = i['reservation']
     require(reservation['name'] == name and reservation['controls_digest'] == candidate['controls_digest'] and
@@ -321,7 +321,8 @@ def read_native(original, link, record):
     object_fields(link, ('kind','revision'), 'native publication link')
     require(link['kind'] in ('native-trial-context-intent','native-trial-context-complete',
             'native-trial-human-intent','native-trial-human-result',
-            'native-trial-revocation-intent','native-trial-revocation-result') and sha(link['revision']),
+            'native-trial-revocation-intent','native-trial-revocation-result',
+            'native-trial-broker-context-intent','native-trial-broker-context-result') and sha(link['revision']),
             'fixed native publication required')
     value = original.blob(link['revision'],TRIAL)[0]
     require(value['kind']==link['kind'] and value['record_digest']==digest(record) and

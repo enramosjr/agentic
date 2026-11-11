@@ -274,8 +274,8 @@ class RevocationInventory(unittest.TestCase):
         self.assertIsNone(GitHub('token',Opener(204,b'')).fetch('/repos/owner/repo/actions/artifacts/1',method='DELETE',expected_status=204))
 
     def test_fourteenth_reservation_is_after_the_genuine_thirteen(self):
-        self.assertEqual(trial_controller.CASE_CHAIN[-2:], ('human-update', 'revoked-qualification'))
-        self.assertEqual(len(trial_controller.CASE_CHAIN), 14)
+        self.assertEqual(trial_controller.CASE_CHAIN[12:14], ('human-update', 'revoked-qualification'))
+        self.assertEqual(trial_controller.CASE_CHAIN.index('revoked-qualification'), 13)
 
 
 if __name__ == '__main__':

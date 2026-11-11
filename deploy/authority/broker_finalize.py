@@ -56,6 +56,9 @@ class Finalizer:
         require(isinstance(operation_id, str) and re.fullmatch('[0-9a-f]{32}', operation_id) and
                 positive(sequence) and positive(broker_job_id), 'exact terminal operation required')
         recovery = self._admit()  # Before reading the administrative registry.
+        if _admission is not None and _admission.candidate['name']=='context-transition':
+            from trial_broker_context import finalize
+            return finalize(self,_admission,operation_id,sequence,broker_job_id,recovery)
         before = self.registry.binding(check_software=False)
         d, fence = before['deployment'], before['fence']
         p, op = d['policy'], fence['pending']

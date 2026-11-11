@@ -853,8 +853,61 @@ separate native revocation prerequisite. It is a bounded
 prerequisite, not completion of the ordered eleven-case host consumer, five-case
 broker suffix or qualification. Earlier base/epoch facts remain historical; they
 cannot be assembled into current-policy facts for `HostCases._run`.
-Native broker context-transition recovery and positive terminal history remain
-unimplemented. An ACTIVE qualification receipt cannot substitute for these designs.
+The fifteenth original reservation, `context-transition`, composes the genuine
+fourteen-case progression with the shared broker Session and existing native
+configuration engine. After actual preload, the Session enters a fixed negative
+branch that cannot produce a gate or dispatch, including absent-result, timeout
+and reentry paths. A native approval binds the exact old operation, prepared
+digest, source snapshot, next context, protections and original finalizer role.
+
+One conditional Registry handover installs a native configuration owner at
+sequence N+1 while retaining the unresolved merge at N. This transient fence
+schema v3 does not complete either operation or create simultaneous merge
+authority. Ordinary acquisition, dispatch and single-operation finalization
+refuse it; existing schema v2 operations retain their previous semantics. The
+existing `SetupConfigurationSession` and `ContextTransition` install the approved
+never-used epoch/check context, establishing effective new protections before
+removing old controls. The source target, base, head and merge stay fixed;
+unrelated protections stay pinned. Native intent and acknowledged per-effect
+results are retained before subsequent effects. Matching names or absence cannot
+resolve an unknown create or delete, and neither operation's deadline is renewed.
+
+Fence movement alone cannot establish the named case. The same preloaded Session
+must observe the actual new configuration revision, epoch and check context and
+report `configuration_changed`. Its restricted `trial-context-refusal` receipt
+attests only that pre-dispatch negative; historical ownership cannot create
+ordinary broker receipts, publish acceptance or authorize collection/dispatch.
+The independently pinned Finalizer requires the exact CLOSED broker, actual
+preload/refusal archives, immutable native publications, current source and
+protections, and original/current case pointers.
+
+Fresh finalization is restricted to the original run, attempt 1 and unique
+`finalize` job under the approved main-runtime finalization pin. Before any
+source, proof or authority credential mint, that job writes a one-shot intent to
+existing owner-only `Store` storage in a deterministic child of its persistent
+`RUNNER_TEMP`, then creates and authenticates its exact recovery-intent artifact.
+An existing protected attempt or remote intent cannot become fresh issuance;
+removing an artifact does not erase the protected attempt. Unknown persistence,
+upload or mint acknowledgements remain held without reminting. A later failure
+after issuance consumes the attempt; it does not authorize another recovery job.
+
+After complete proof authentication, the protected job journal retains the
+canonical recovery envelope and proposed terminal pair before one conditional
+commit appends N `not-submitted`, then N+1 `configuration-complete`, and returns
+the fence to schema v2. The ordinary one-terminal storage rule is unchanged.
+Fresh reconstruction authenticates every conditional step, CLOSED producer,
+actual marker/refusal/issuance artifact, and both terminal receipt digests. All
+fresh effects, including paired settlement and terminal publication, must meet
+the original minimum delegation/operation/configuration deadline. After expiry,
+only exact already-committed readback and retained-capability revocation are
+permitted. Missing terminal publication or an unresolved expired handover cannot
+be inferred complete from artifact absence or a settled pointer; the original
+native trial remains held without fabricated history or replay.
+
+Positive terminal history remains unimplemented. This fifteen-case progression
+does not complete the original broker suffix, full current-policy coordination,
+qualification or hosted acceptance. An ACTIVE qualification receipt cannot
+substitute for those remaining designs.
 The launcher passes only the fresh read capability and each role's existing
 purpose credentials; READY/preparation/consumer jobs receive no App root or model
 key. The terminal job can close a failed broker's genuine no-dispatch receipt or

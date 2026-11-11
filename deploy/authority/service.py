@@ -554,9 +554,10 @@ def _producer_environment(environment, purpose, broker=False):
 
 
 @contextmanager
-def _admin_authority(root, authority, registry, binding, identities, token_factory):
+def _admin_authority(root, authority, registry, binding, identities, token_factory, before_effect=None):
     """Only source-free administrative jobs borrow authority CAS rights."""
     record = identities['apps']['admin']
+    if before_effect is not None: before_effect()
     result = root.post('/app/installations/' + str(record['installation_id']) + '/access_tokens',
         dict(repository_ids=[binding['deployment']['policy']['authority_repository_id']],
              permissions={'contents':'write', 'actions':'read'}))
@@ -913,7 +914,12 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
         while True:
             require(time.monotonic()<deadline and clock()<initial['certificate']['expires'],'CLOSED case binding remains pending')
             original.unchanged(record['origin']['binding'])
-            registry.authenticate_setup_progress(trial_case.case_baseline(original,registry,record,initial,clock),{OPERATION:initial['pending']})
+            baseline=trial_case.case_baseline(original,registry,record,initial,clock)
+            if role=='finalize' and initial['candidate']['name']=='context-transition':
+                from trial_broker_context import pending_binding
+                pending_binding(registry,baseline,initial['pending'])
+            else:
+                registry.authenticate_setup_progress(baseline,{OPERATION:initial['pending']})
             try:
                 from registry import trial_reference
                 revision=original.ref(trial_reference(dict(initial,execution=True)))
@@ -927,6 +933,9 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
     # Authenticate scope, CLOSED consumption, exact pending fence and pinned job
     # before constructing a role root or minting its source credentials.
     admitted = trial_case.Hosted(registry,origin_reader,None,environment,hint,role,clock)
+    if role=='finalize' and admitted.candidate['name']=='context-transition':
+        from trial_broker_context import begin_recovery
+        begin_recovery(admitted,api,environment,uploader_factory(node,environment))
     if role == 'host-denial':
         from trial_transition import historical
         require(not historical(admitted.candidate) and host_case in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head','new-base','policy-transition','human-update') and host_case==admitted.candidate['name'],
@@ -956,7 +965,8 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
             import trial_broker_case
             # Administrative write authority is borrowed only by this separately
             # pinned terminal role, using the existing finalizer and fence engine.
-            with _admin_authority(root,api,registry,before,identities,token_factory) as writer:
+            with _admin_authority(root,api,registry,before,identities,token_factory,
+                                  before_effect=admitted.guard if admitted.candidate['name']=='context-transition' else None) as writer:
                 admitted.guard()
                 result=Finalizer(writer,api,source,pin,environment,clock)._finalize(
                     admitted.request['operation_id'],admitted.request['sequence'],
@@ -968,6 +978,10 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
                     certificate_digest=digest(admitted.value['certificate']),before=before,after=result,completed=clock())
                 if admitted.candidate['name']=='revoked-qualification':
                     document['revocation']=copy.deepcopy(admitted._revocation_links)
+                if admitted.candidate['name']=='context-transition':
+                    from trial_broker_context import terminal_context
+                    document['before']=copy.deepcopy(admitted.binding)
+                    document['context']=terminal_context(admitted,api,_case_broker_job(api,admitted),before)
                 _upload_document(uploader_factory(node,environment),'trial-case-terminal-'+admitted.record['task_id']+'-1',document)
             return result
         return _trial_producer(admitted,environment,admitted.request,node,role,clock,api_factory,app_factory,

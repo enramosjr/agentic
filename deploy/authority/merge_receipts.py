@@ -17,7 +17,7 @@ from operation_fence import validate as validate_fence
 from trusted_ci_deployment import timestamp
 from trusted_ci_policy import Refusal, digest, loads, object_fields, positive, require
 
-KINDS = ('gate', 'dispatch', 'outcome', 'control-ready', 'not-submitted', 'host-denied', 'trial-preloaded')
+KINDS = ('gate', 'dispatch', 'outcome', 'control-ready', 'not-submitted', 'host-denied', 'trial-preloaded', 'trial-context-refusal')
 MAX_DOCUMENT = 1024 * 1024
 MAX_ARCHIVE = 2 * MAX_DOCUMENT
 
@@ -40,6 +40,7 @@ class ActionsReceipts:
         self.api, self.read_binding, self.job_id, self.clock = api, read_binding, job_id, clock
         self.uploader, self.recovery = uploader, recovery
         self._admission = None
+        self._context_evidence = False
         self.binding = copy.deepcopy(read_binding())
         fence = validate_fence(self.binding['fence'])
         self.op, self.sequence = fence['pending'], fence['sequence']
@@ -57,9 +58,56 @@ class ActionsReceipts:
         return result
 
     def _owned(self):
+        if hasattr(self,'_context_history'):
+            # This object can authenticate only two exact CLOSED historical
+            # documents. It has no uploader, live job or creation capability.
+            return self.binding
+        if self._context_evidence:
+            from trial_broker_context import guard
+            guard(self._admission)
+            return self.binding
         current = self.read_binding()
         same(current, self.binding, 'receipt operation or configuration changed')
         return current
+
+    @classmethod
+    def _historical_context(cls, api, binding, job_id, clock, documents):
+        """Read-only archive authentication after immutable history validation."""
+        require(set(documents)=={'trial-preloaded','trial-context-refusal'} and positive(job_id),
+                'only exact native context history documents are readable')
+        fence=validate_fence(binding['fence'])
+        require(fence['schema_version']==2 and fence['pending'] is not None and fence['pending']['kind']=='merge' and
+                binding['deployment']['state']=='qualification' and binding['deployment']['qualification'] is None,
+                'historical native context operation required')
+        result=cls.__new__(cls)
+        result.api,result.read_binding,result.job_id,result.clock=api,None,job_id,clock
+        result.uploader,result.recovery=None,True
+        result._admission,result._context_evidence=None,False
+        result._context_history=copy.deepcopy(documents)
+        result.binding=copy.deepcopy(binding); result.op=fence['pending']; result.sequence=fence['sequence']
+        result.policy=result.binding['deployment']['policy']; result.root='/repos/'+result.policy['authority_repository']
+        result.terminal_job()
+        return result
+
+    @classmethod
+    def _context(cls, api, admission, job_id, clock, uploader=None, recovery=False):
+        """Only transition evidence may read retained ownership after handover."""
+        from trial_controller import authenticated
+        from trial_broker_context import guard, selected
+        authenticated(admission)
+        require(selected(admission), 'native context evidence only')
+        guard(admission)
+        result = cls.__new__(cls)
+        result.api,result.read_binding,result.job_id,result.clock = api,admission.registry.binding,job_id,clock
+        result.uploader,result.recovery = uploader,recovery
+        result._admission,result._context_evidence = admission,True
+        result.binding = copy.deepcopy(admission.binding)
+        result.op = result.binding['fence']['pending']
+        result.sequence = result.binding['fence']['sequence']
+        result.policy = result.binding['deployment']['policy']
+        result.root = '/repos/'+result.policy['authority_repository']
+        require(positive(job_id) and type(recovery) is bool, 'exact context evidence producer required')
+        return result
 
     def _name(self, kind):
         require(kind in KINDS, 'unsupported broker receipt kind')
@@ -114,6 +162,16 @@ class ActionsReceipts:
 
     def _document(self, kind, value, historical=False):
         require(isinstance(value, dict), 'broker receipt object required')
+        if hasattr(self,'_context_history'):
+            require(historical and kind in self._context_history and value==self._context_history[kind],
+                    'historical context receipt differs or grants ordinary rights')
+            return value
+        if self._context_evidence:
+            require(kind in ('trial-preloaded','trial-context-refusal'), 'retained context has evidence rights only')
+        if kind == 'trial-context-refusal':
+            require(self._context_evidence, 'ordinary receipt cannot attest a retained transition')
+            from trial_broker_context import validate_refusal
+            return validate_refusal(self._admission,value,self.job_id)
         if kind=='trial-preloaded':
             from trial_broker_case import validate_preloaded
             return validate_preloaded(self._admission,value,self.job_id,self.clock())
@@ -159,6 +217,10 @@ class ActionsReceipts:
 
     def append(self, kind, document):
         require(not self.recovery and callable(self.uploader), 'receipt creation capability unavailable')
+        if self._context_evidence:
+            require(kind == 'trial-context-refusal', 'retained context cannot create ordinary broker evidence')
+            require(all(not self._matches(k) for k in ('gate','dispatch','outcome','control-ready','not-submitted','host-denied')),
+                    'transition refusal contradicts ordinary dispatch evidence')
         self._name(kind)
         self._job()
         self._document(kind, document)
@@ -177,7 +239,9 @@ class ActionsReceipts:
         require(0 < len(raw) <= MAX_DOCUMENT and not self._matches(kind), 'receipt already exists or exceeds limit')
         # Provider-side create conflict is the atomic guard. Lost acknowledgement
         # propagates: finding the artifact later is audit, never permission to retry.
-        if self._admission is not None:
+        if self._context_evidence:
+            self._owned()
+        elif self._admission is not None:
             self._admission.guard(self.binding)
         artifact_id = self.uploader(self._name(kind), raw)
         require(positive(artifact_id), 'artifact upload acknowledgement missing')

@@ -44,6 +44,9 @@ def _predecessor(original,registry,record,history,index,before,clock):
     proof=provenance.authenticated_document(registry.api,before['deployment'],location,
                                           'trial-case-terminal',record['task_id'],clock())
     value=proof['document']
+    if prior['candidate']['name']=='context-transition':
+        from trial_broker_context import reconstruct
+        return reconstruct(original,registry,record,prior,value,before,clock,proof)
     revocation=['revocation'] if prior['candidate']['name']=='revoked-qualification' else []
     object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split()+revocation,'prior closed terminal')
     if revocation:
@@ -378,12 +381,18 @@ class Hosted:
         self.candidate, self.request = copy.deepcopy(value['candidate']), copy.deepcopy(value['request'])
         self.binding = baseline_binding
         self._retained()
-        self.binding = registry.authenticate_setup_progress(self.binding, {OPERATION:value['pending']})
+        if self.candidate['name']=='context-transition' and role=='finalize':
+            from trial_broker_context import pending_binding
+            self.binding = pending_binding(registry,self.binding,value['pending'])
+        else:
+            self.binding = registry.authenticate_setup_progress(self.binding, {OPERATION:value['pending']})
         require(locator['run_id'] == self.request['snapshot']['run_id'] and locator['attempt'] == 1,
                 'case consumed execution differs')
         self.worker = None
         self._human_links = None
         self._revocation_links = None
+        self._context_recovery = self.candidate['name']=='context-transition' and role=='finalize'
+        self._context_issuance = None
         self._seal = copy.deepcopy(self._state())
         if role == 'finalize':
             from broker_finalize import Finalizer
@@ -417,7 +426,9 @@ class Hosted:
 
     def _state(self):
         return dict(case=self.case,record=self.record,value=self.value,candidate=self.candidate,request=self.request,
-                    binding=self.binding,worker=self.worker,human_links=self._human_links,revocation_links=self._revocation_links)
+                    binding=self.binding,worker=self.worker,human_links=self._human_links,revocation_links=self._revocation_links,
+                    context_recovery=self._context_recovery,context_terminal=getattr(self,'_context_terminal_evidence',None),
+                    context_issuance=self._context_issuance)
 
     def local_guard(self, binding=None):
         require(self._state() == self._seal and (binding is None or binding == self.binding), 'case admission object changed')
@@ -426,6 +437,10 @@ class Hosted:
                 digest(getattr(self.original.api,'token',None)) == credential['token_digest'], 'case delegation expired or changed')
 
     def guard(self, binding=None, force=False):
+        if self._context_recovery:
+            from trial_broker_context import guard
+            if binding is not None: require(binding == self.binding, 'context retained binding differs')
+            return guard(self)
         self.local_guard(binding)
         r = self.record
         origin = r['origin']['binding']

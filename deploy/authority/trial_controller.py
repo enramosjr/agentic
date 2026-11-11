@@ -15,7 +15,7 @@ from trial_setup import Provision
 from trusted_ci_policy import digest, object_fields, positive, require
 
 
-CASE_CHAIN = ('direct-push','coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head','new-base','policy-transition','human-update','revoked-qualification')
+CASE_CHAIN = ('direct-push','coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head','new-base','policy-transition','human-update','revoked-qualification','context-transition')
 
 
 def predecessor(name):
@@ -68,6 +68,9 @@ class Native:
 
     def transition_context(self, prompt, name, operator_api, admin_api, approve, token_factory=None):
         authority_release.authorize('qualify-live')
+        if name == 'context-transition':
+            from trial_broker_context import move
+            return move(self, prompt, operator_api, admin_api, approve)
         from trial_transition import move_context
         from trusted_ci_github import GitHub
         return move_context(self, prompt, name, operator_api, admin_api, approve, token_factory or GitHub)
@@ -108,6 +111,9 @@ class Native:
         return self._recover_terminal(prompt,name,phase=phase)
 
     def _recover_terminal(self, prompt, name, source=None, phase=None):
+        if name=='context-transition':
+            from trial_broker_context import recover_native
+            return recover_native(self,prompt,source)
         require(phase is None or name in ('new-head','new-base','policy-transition') and phase=='prior', 'only stale cases have historical recovery')
         require(type(self.candidates) is Prepare, 'actual native candidate preparer required')
         native=self.candidates.native
@@ -122,6 +128,9 @@ class Native:
         return self._observe_terminal(prompt,name,locator,phase=phase)
 
     def _observe_terminal(self, prompt, name, locator, source=None, phase=None):
+        if name=='context-transition':
+            from trial_broker_context import observe_native
+            return observe_native(self,prompt,locator,source)
         require(phase is None or name in ('new-head','new-base','policy-transition') and phase=='prior', 'only stale cases have historical observation')
         require(type(self.candidates) is Prepare, 'actual native candidate preparer required')
         native=self.candidates.native
@@ -202,10 +211,10 @@ class Native:
             matches = [v for v in result['candidates'] if v['name'] == name]
             require(len(matches) == 1 and completed['result'] == result['worker'], 'exact prepared trial case required')
             candidate=matches[0]
-            if name in ('new-head','new-base','policy-transition','human-update','revoked-qualification'):
+            if name in ('new-head','new-base','policy-transition','human-update','revoked-qualification','context-transition'):
                 from trial_transition import prepare
                 candidate,_=prepare(preparer,completed,candidate,history,settled,
-                    'fixture' if name in ('human-update','revoked-qualification') else phase or 'current',source,prompt,previous)
+                    'fixture' if name in ('human-update','revoked-qualification','context-transition') else phase or 'current',source,prompt,previous)
             value = dict(kind='native-trial-controller', prompt_digest=digest(prompt), name=name,
                 record=completed['record'], workflow=completed['retained'], candidates=candidates,
                 provisioning=copy.deepcopy(c.document), candidate=candidate, worker=completed['result'],
@@ -314,7 +323,11 @@ class Admission:
             return
         if self.value['phase'] in ('fencing', 'bound'):
             self._retained()
-            self.binding = self.registry.authenticate_setup_progress(self.binding, {OPERATION:self.value['pending']})
+            if self.candidate['name']=='context-transition':
+                from trial_broker_context import pending_binding
+                self.binding = pending_binding(self.registry,self.binding,self.value['pending'])
+            else:
+                self.binding = self.registry.authenticate_setup_progress(self.binding, {OPERATION:self.value['pending']})
             if self.value['phase'] == 'fencing':
                 self.value['phase'] = 'bound'
                 self._save()
