@@ -15,7 +15,7 @@ from trial_setup import Provision
 from trusted_ci_policy import digest, object_fields, positive, require
 
 
-CASE_CHAIN = ('direct-push','coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head','new-base','policy-transition','human-update')
+CASE_CHAIN = ('direct-push','coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head','new-base','policy-transition','human-update','revoked-qualification')
 
 
 def predecessor(name):
@@ -89,6 +89,19 @@ class Native:
         require(retained is not None and retained['value']['phase']=='bound','existing bound native human case required')
         admission=self._open(prompt,'human-update')
         return native_human(admission,human_api)
+
+    def revoke_certificate(self, prompt, operator_api, admin_api, token_factory=None):
+        authority_release.authorize('qualify-live')
+        from trial_broker_case import native_revoke
+        from trusted_ci_github import GitHub
+        admission=self._open(prompt,'revoked-qualification')
+        return native_revoke(admission,operator_api,admin_api,token_factory or GitHub)
+
+    def cleanup_certificate(self, operator_api, admin_api, token_factory=None):
+        authority_release.authorize('bootstrap')
+        from trial_broker_case import cleanup_revocation
+        from trusted_ci_github import GitHub
+        return cleanup_revocation(self.candidates.native,operator_api,admin_api,token_factory or GitHub)
 
     def recover_terminal(self, prompt, name, phase=None):
         authority_release.authorize('qualify-live')
@@ -189,10 +202,10 @@ class Native:
             matches = [v for v in result['candidates'] if v['name'] == name]
             require(len(matches) == 1 and completed['result'] == result['worker'], 'exact prepared trial case required')
             candidate=matches[0]
-            if name in ('new-head','new-base','policy-transition','human-update'):
+            if name in ('new-head','new-base','policy-transition','human-update','revoked-qualification'):
                 from trial_transition import prepare
                 candidate,_=prepare(preparer,completed,candidate,history,settled,
-                    'fixture' if name=='human-update' else phase or 'current',source,prompt,previous)
+                    'fixture' if name in ('human-update','revoked-qualification') else phase or 'current',source,prompt,previous)
             value = dict(kind='native-trial-controller', prompt_digest=digest(prompt), name=name,
                 record=completed['record'], workflow=completed['retained'], candidates=candidates,
                 provisioning=copy.deepcopy(c.document), candidate=candidate, worker=completed['result'],
@@ -252,7 +265,15 @@ class Admission:
             proof=authenticated_document(self.registry.api,self.binding['deployment'],terminal_locator,
                                          'trial-case-terminal',self.record['task_id'],self.clock())
             value=proof['document']
-            object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split(),'closed case terminal')
+            revocation=['revocation'] if self.candidate['name']=='revoked-qualification' else []
+            object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split()+revocation,'closed case terminal')
+            if revocation:
+                from trial_broker_case import history_revocation
+                from trial_case import read as read_case
+                publication=c.store(c.root/case_journal('trial-case-publication',self.candidate)).read()
+                case,record=read_case(c.session.registry,publication['value']['revision_bound'],self.clock)
+                history_revocation(c.session.registry,record,case,value['revocation'])
+                self._revocation_links=copy.deepcopy(value['revocation'])
             require(type(value['schema_version']) is int and value['schema_version']==1 and value['kind']=='trial-case-terminal' and
                     value['request_digest']==digest(self.request) and value['certificate_digest']==digest(self.value['certificate']) and
                     type(value['completed']) is int and proof['job_started']<=value['completed']<=proof['artifact_created']<=proof['job_completed'],
@@ -395,7 +416,7 @@ class Admission:
         require(self.registry.ref(self.registry.coordinates['registry_branch']) == self.binding['branch_head'] and
                 self.registry.ref(trial_branch) == self.binding['software_revision'], 'trial changed during original observation')
         from trial_case import history_guard
-        history_guard(original,r,self.value['history'])
+        history_guard(original,r,self.value['history'],self.clock,self.registry.api)
         from trial_transition import guard as transition_guard
         transition_guard(self)
         d = self.binding['deployment']

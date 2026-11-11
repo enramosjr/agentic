@@ -85,8 +85,12 @@ def _preload(registry, source, authority, identities, job_id, locators, clock, a
         require(locators['qualification'] == admission.request['qualification'], 'exact native trial certificate required')
         qualification = admission.qualification(binding)
     _same(registry.binding(), binding)
-    return {'schema_version': 2, 'binding': binding, 'snapshot': s, 'job_id': job_id,
-            'evidence': evidence, 'proofs': proofs, 'task': task, 'qualification': qualification}
+    prepared = {'schema_version': 2, 'binding': binding, 'snapshot': s, 'job_id': job_id,
+                'evidence': evidence, 'proofs': proofs, 'task': task, 'qualification': qualification}
+    if admission is not None and admission.candidate['name']=='revoked-qualification':
+        from trial_broker_case import live_certificate
+        prepared['trial_certificate']=live_certificate(admission,authority)
+    return prepared
 
 
 def _artifact_readback(authority, d, references):
@@ -190,6 +194,9 @@ def _finish(registry, source, authority, identities, prepared, request, control_
     references = [evidence, *([qualification] if admission is None else []), task['provenance'],
                   *prepared['proofs']['provenance'].values(), *proofs['provenance'].values(), controls['provenance']]
     artifact_digest = _artifact_readback(authority, d, references)
+    if admission is not None and admission.candidate['name']=='revoked-qualification':
+        from trial_broker_case import certificate_readback
+        certificate_readback(admission,authority,prepared['trial_certificate'])
     commit = source.get(root + '/git/commits/' + current['merge'])
     require(commit.get('sha') == current['merge'] and sha(commit['tree']['sha']) and
             [p['sha'] for p in commit['parents']] == [current['base'], current['head']],

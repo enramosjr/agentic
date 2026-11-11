@@ -139,7 +139,7 @@ def _authenticated_document(api, d, locator, role, key, now, live=False):
             'current authority artifact coordinates required')
     require(role in ('evidence', 'controls', 'publication-controls', 'proof', 'final-proof', 'task', 'task-ready', 'task-controls',
                     'model-lease', 'qualification', 'credential-proof', 'trial-task', 'trial-task-ready',
-            'trial-task-controls', 'trial-handoff', 'trial-case-handoff', 'trial-case-ready', 'trial-host-intent', 'trial-host-denial', 'trial-case-terminal', 'trial-broker-intent', 'trial-broker-denial', 'trial-publication-intent', 'trial-publication-denial', 'trial-publication-observation') and live == (role in ('task-ready', 'trial-task-ready')),
+            'trial-task-controls', 'trial-handoff', 'trial-case-handoff', 'trial-case-certificate', 'trial-case-ready', 'trial-host-intent', 'trial-host-denial', 'trial-case-terminal', 'trial-broker-intent', 'trial-broker-denial', 'trial-publication-intent', 'trial-publication-denial', 'trial-publication-observation') and live == (role in ('task-ready', 'trial-task-ready')),
             'unknown authority producer role')
     if role.startswith('trial-'):
         require(d['state'] == 'qualification' and d['qualification'] is None and
@@ -163,8 +163,8 @@ def _authenticated_document(api, d, locator, role, key, now, live=False):
         prefix = role + '-' + key
     elif role == 'trial-handoff':
         job_name, prefix = 'trial handoff', 'trial-handoff-' + key
-    elif role == 'trial-case-handoff':
-        job_name, prefix = 'trial case handoff', 'trial-case-handoff-' + key
+    elif role in ('trial-case-handoff','trial-case-certificate'):
+        job_name, prefix = 'trial case handoff', role+'-' + key
     elif role == 'trial-case-ready':
         job_name, prefix = 'trial case ready', 'trial-case-ready-' + key
     elif role in ('trial-host-intent','trial-host-denial'):

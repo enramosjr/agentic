@@ -25,15 +25,16 @@ MAX_DOCUMENT = 512 * 1024
 def trial_reference(record):
     kind = record.get('kind')
     native = {'native-trial-context-intent':'context-intent', 'native-trial-context-complete':'context-complete',
-              'native-trial-human-intent':'human-intent', 'native-trial-human-result':'human-result'}
+              'native-trial-human-intent':'human-intent', 'native-trial-human-result':'human-result',
+              'native-trial-revocation-intent':'revocation-intent', 'native-trial-revocation-result':'revocation-result'}
     if kind in native:
-        require(record.get('name') in (('human-update',) if kind.startswith('native-trial-human-') else
+        require(record.get('name') in (('revoked-qualification',) if kind.startswith('native-trial-revocation-') else ('human-update',) if kind.startswith('native-trial-human-') else
                 ('new-base','policy-transition')) and record.get('execution') is None,
                 'fixed native context publication identity required')
         return 'agentic-trial-'+record['task_id']+'-'+record['name']+'-'+native[kind]
     require(kind in ('native-trial-handoff','trial-case-handoff','trial-case-ready'), 'unknown native publication kind')
     suffix = '-case' if record.get('kind') == 'trial-case-handoff' else '-case-ready' if record.get('kind') == 'trial-case-ready' else ''
-    if suffix and record.get('candidate',{}).get('name') in ('coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head','new-base','policy-transition','human-update'):
+    if suffix and record.get('candidate',{}).get('name') in ('coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head','new-base','policy-transition','human-update','revoked-qualification'):
         suffix += '-'+record['candidate']['name']
         if record['candidate'].get('transition',{}).get('intent',{}).get('phase')=='prior': suffix += '-prior'
     return 'agentic-trial-' + record['task_id'] + suffix + ('-execution' if record['execution'] else '')

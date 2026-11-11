@@ -54,7 +54,7 @@ class GitHub:
         self.token = token
         self.opener = opener or request.build_opener(NoRedirect())
 
-    def fetch(self, path, method='GET', data=None, binary=False, limit=1024 * 1024):
+    def fetch(self, path, method='GET', data=None, binary=False, limit=1024 * 1024, expected_status=None):
         require(path.startswith('/') and not path.startswith('//') and '\r' not in path and '\n' not in path,
                 'invalid API path')
         url = 'https://api.github.com' + path
@@ -66,6 +66,8 @@ class GitHub:
         for redirects in range(4):
             try:
                 with self.opener.open(request.Request(url, body, headers, method=method), timeout=30) as response:
+                    require(expected_status is None or type(expected_status) is int and response.status == expected_status,
+                            'GitHub API response status differs')
                     raw = response.read(limit + 1)
                     require(len(raw) <= limit, 'API response exceeds limit')
                     if not binary and not raw and response.status == 204:

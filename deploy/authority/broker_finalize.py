@@ -120,7 +120,10 @@ class Finalizer:
             def guard():
                 _admission.guard(before)
                 if trial_broker_case.selected(_admission):
-                    trial_broker_case.guard(_admission)
+                    if _admission.candidate['name']=='revoked-qualification':
+                        trial_broker_case.read_revocation_outcome(_admission,self.authority,broker_job_id)
+                    else:
+                        trial_broker_case.guard(_admission)
                 else:
                     import trial_host_case
                     if trial_host_case.selected(_admission): trial_host_case.guard(_admission)

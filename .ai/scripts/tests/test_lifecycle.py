@@ -748,14 +748,15 @@ class ConvergeTests(LifecycleCase):
         return path, json.loads(path.read_text())
 
     def test_converge_runs_acceptance_commands_and_records_results(self) -> None:  # R4
+        command_seconds = 1 if os.name != "nt" else 10
         self.converge_spec(
             f"`{PY} -c pass` exits 0.",
             f"`{PY} -c \"print('TAIL-' + 'R2-MARKER'); raise SystemExit(3)\"` exits 0.",
-            f"`{PY} -c \"import time; time.sleep(5)\"` exits 0.",
+            f"`{PY} -c \"import time; time.sleep({command_seconds + 5})\"` exits 0.",
             "A reviewer reads the output.",
         )
         self.approve()
-        code, out, err = self.run_cli("converge", "spec.md", "--timeout", "1")
+        code, out, err = self.run_cli("converge", "spec.md", "--timeout", str(command_seconds))
         self.assertEqual(code, 1, out + err)
         lines = out.splitlines()
         for line in ("R1 PASS", "R2 FAIL (exit 3)", "R3 FAIL (timeout)", "R4 MANUAL"):

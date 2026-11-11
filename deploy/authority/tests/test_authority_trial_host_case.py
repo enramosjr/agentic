@@ -84,7 +84,7 @@ class Sequential(HostFixture):
         from artifact_uploader import document_member
         import json
         if any(a['name']==name for a in self.remote.artifacts): raise Refusal('fixture artifact conflict')
-        identity=self.remote.run['id']*100+50000+len(self.remote.artifacts)
+        identity=max([self.remote.run['id']*100+50000-1,*self.remote.raw])+1
         self.remote.artifacts.append(dict(id=identity,name=name,expired=False,created_at=stamp(self.clock[0]),
             workflow_run=dict(id=self.remote.run['id'],repository_id=self.p['authority_repository_id'],
                 head_repository_id=self.p['authority_repository_id'],head_sha=self.p['workflow_sha'])))

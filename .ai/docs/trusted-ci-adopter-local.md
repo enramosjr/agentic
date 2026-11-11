@@ -814,12 +814,47 @@ errors and uncertain human requests cannot establish the named denial or replay 
 Only exact `protected_update` HTTP 403/422 evidence can reach the existing named
 host receipt and pinned Finalizer.
 
-This thirteen-case progression includes two broker negatives. It is a bounded
+The fourteenth original reservation, `revoked-qualification`, is a distinct native
+certificate-revocation prerequisite. The candidate uses the existing native
+baseline-tree preparation under that
+reservation, retaining the original CLOSED worker and its export as history;
+it does not claim that the worker export passed verification. The existing CLOSED
+case handoff job publishes
+a separate `trial-case-certificate` observation of the actual native certificate,
+request and consumed execution delegation. Publisher acceptance, broker preload,
+final collection and both dispatch validations require that exact observation to
+remain present. The immutable case handoff itself is never deleted.
+
+After real shared-Session preload, a broker receipt pins the exact authenticated
+certificate reference and prepared collection digest. Independently authenticated
+native administration can then mint one authority-only `actions:write` capability
+and delete only the pinned observation artifact. Protected intent precedes mint,
+DELETE and publication effects; immutable original-Registry intent and result
+publications retain the certificate preimage and preload identity. Only exact HTTP
+204 plus independent inventory absence establishes deletion. Unknown effects never
+authorize replay or reminting; artifact absence alone cannot resolve an unknown
+DELETE. A lost Registry publication acknowledgement can be resolved only by
+independently authenticating the exact existing immutable claim, without writing.
+Independent expired cleanup can
+only revoke the exact retained capability. Ordinary runtime admin proofs remain
+read-only; no native deletion credential reaches an Actions consumer.
+
+The shared collector reports `trial_certificate_revoked`, explicitly originating
+from a native trial certificate. It does not report the production
+`qualification_revoked` semantics of a deleted hosted qualification artifact.
+The existing pinned Finalizer requires the exact CLOSED typed refusal, native
+intent/result, retained preimage and genuine no-dispatch receipt, with current
+source, context, approval, proof, history and deadline checks. Historical preimages
+never authorize publication or dispatch. Terminal history pins the revocation
+publications through fresh reconstruction.
+
+This fourteen-case progression includes two original broker negatives and this
+separate native revocation prerequisite. It is a bounded
 prerequisite, not completion of the ordered eleven-case host consumer, five-case
 broker suffix or qualification. Earlier base/epoch facts remain historical; they
 cannot be assembled into current-policy facts for `HostCases._run`.
-In particular, initial-unqualified revocation remains unimplemented; an ACTIVE
-qualification receipt cannot substitute for that design.
+Native broker context-transition recovery and positive terminal history remain
+unimplemented. An ACTIVE qualification receipt cannot substitute for these designs.
 The launcher passes only the fresh read capability and each role's existing
 purpose credentials; READY/preparation/consumer jobs receive no App root or model
 key. The terminal job can close a failed broker's genuine no-dispatch receipt or

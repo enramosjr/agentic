@@ -42,6 +42,9 @@ def guard(admission):
     links=getattr(admission,'_human_links',None)
     if links is not None:
         for link in links.values(): read_native(original,link,admission.record)
+    links=getattr(admission,'_revocation_links',None)
+    if links is not None:
+        for link in links.values(): read_native(original,link,admission.record)
     if hasattr(admission,'native') and admission.candidate['name']=='human-update':
         c=admission.native.provision
         human=c.store(c.root/'trial-native-human').read()
@@ -58,7 +61,7 @@ def guard(admission):
     i = transition['intent']
     require(positive(i['issued']) and i['issued'] <= admission.clock() < i['expires'], 'transition deadline expired')
     if i['phase'] == 'current':
-        history_guard(original, admission.record, admission.value['history'] + [i['prior']])
+        history_guard(original, admission.record, admission.value['history'] + [i['prior']],admission.clock,admission.registry.api)
         if hasattr(admission, 'native'):
             require(prior_entry(admission.native.provision,admission.candidate['name']) == i['prior'], 'owned historical terminal changed')
 
@@ -146,7 +149,7 @@ def prepare(preparer, completed, reservation, history, before, phase, source, pr
     native, record = preparer.native, completed['record']
     c, worker = native.provision, completed['result']
     name = reservation['name']
-    require((name in STALE_CASES and phase in ('prior', 'current') or name=='human-update' and phase=='fixture') and len(history) == CASE_CHAIN.index(name),
+    require((name in STALE_CASES and phase in ('prior', 'current') or name in ('human-update','revoked-qualification') and phase=='fixture') and len(history) == CASE_CHAIN.index(name),
             'only the exact original stale transition is admitted')
     root = '/repos/' + before['deployment']['policy']['repository']
     prior = None
@@ -193,10 +196,10 @@ def prepare(preparer, completed, reservation, history, before, phase, source, pr
         require(c.store(c.root / ('trial-controller-'+predecessor(name))).read() == previous,
                 'owned preceding completion changed')
         owned_history(c, previous['value'])
-        history_guard(c.session.registry, record, history)
+        history_guard(c.session.registry, record, history,c.clock,native.registry.api)
         if prior is not None:
             require(prior_entry(c,name) == prior, 'owned historical terminal changed')
-            history_guard(c.session.registry, record, history + [prior])
+            history_guard(c.session.registry, record, history + [prior],c.clock,native.registry.api)
             if force:
                 require(digest(prior_acceptance(c.session.registry,native.registry.api,record,prior,c.clock))==digest(accepted),
                         'prior acceptance moved before source effect')
@@ -255,7 +258,7 @@ def validate(candidate, record, worker, history, source, original, registry, clo
                   'source transition intent')
     from trial_controller import CASE_CHAIN
     name = candidate['name']
-    require((name in STALE_CASES and i['phase'] in ('prior', 'current') or name=='human-update' and i['phase']=='fixture') and len(history) == CASE_CHAIN.index(name) and
+    require((name in STALE_CASES and i['phase'] in ('prior', 'current') or name in ('human-update','revoked-qualification') and i['phase']=='fixture') and len(history) == CASE_CHAIN.index(name) and
             positive(i['issued']) and i['issued'] <= clock() < i['expires'], 'transition identity or deadline differs')
     reservation = i['reservation']
     require(reservation['name'] == name and reservation['controls_digest'] == candidate['controls_digest'] and
@@ -317,7 +320,8 @@ def read_native(original, link, record):
     from trusted_ci_policy import sha
     object_fields(link, ('kind','revision'), 'native publication link')
     require(link['kind'] in ('native-trial-context-intent','native-trial-context-complete',
-            'native-trial-human-intent','native-trial-human-result') and sha(link['revision']),
+            'native-trial-human-intent','native-trial-human-result',
+            'native-trial-revocation-intent','native-trial-revocation-result') and sha(link['revision']),
             'fixed native publication required')
     value = original.blob(link['revision'],TRIAL)[0]
     require(value['kind']==link['kind'] and value['record_digest']==digest(record) and
@@ -496,7 +500,7 @@ def cleanup_context(native, name, operator_api, admin_api, token_factory):
                 c.store(c.root/'trial-workflow').read()==v['workflow'] and c.store(c.root/'trial-candidates').read()==v['candidates'] and
                 c.session.owner==r['origin']['owner'] and c.session.scope==r['origin']['scope'], 'native cleanup ownership changed')
         c.session.registry.unchanged(r['origin']['binding'])
-        history_guard(c.session.registry,r,v['history']+[v['prior']])
+        history_guard(c.session.registry,r,v['history']+[v['prior']],c.clock,native.registry.api)
         require(v['intent'] is not None, 'no published native allowance intent to clean')
         claim=read_native(c.session.registry,v['intent'],r)
         require(digest(claim['preview'])==digest(v['preview']) and digest(claim['before'])==digest(v['before']),
@@ -587,7 +591,7 @@ def configuration_preview(native, name, document):
     c.session._owned(r['origin']['binding']); c.session.registry.unchanged(r['origin']['binding'])
     require(prior_entry(c,name)==v['prior'], 'native transition historical acceptance changed')
     owned_history(c,c.store(c.root/('trial-controller-'+name+'-prior')).read()['value'])
-    history_guard(c.session.registry,r,v['history']+[v['prior']])
+    history_guard(c.session.registry,r,v['history']+[v['prior']],c.clock,native.registry.api)
     p = v['before']['deployment']['policy']
     require(digest(preview['effects'])==digest(dict(rules=[p['repository']],
             registry=[native.registry.coordinates['repository']+':'+native.registry.coordinates['registry_branch']],
@@ -694,7 +698,7 @@ def move_context(controller, prompt, name, operator_api, admin_api, approve, tok
         require(positive(repo.get('id')) and repo['id']==p['repository_id'] and repo.get('private') is True and
                 positive(repo.get('owner',{}).get('id')) and repo['owner']['id']==r['pair']['identities']['owner_id'] and
                 repo.get('default_branch')==p['target'], 'native transition source identity changed')
-        history_guard(c.session.registry,r,history+[prior])
+        history_guard(c.session.registry,r,history+[prior],c.clock,native.registry.api)
         if not cleanup:
             probe._success(accepted['snapshot'],accepted['evidence'],accepted['coordinates'],accepted['deployment'])
     def live_source(expected, cleanup=False):

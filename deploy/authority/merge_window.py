@@ -24,6 +24,9 @@ def _validate(gate, binding, now, admission=None, clock=None):
         from trial_controller import authenticated
         authenticated(admission, binding)
         admission.guard(binding)
+        if clock is not None:
+            from trial_broker_case import live_certificate
+            live_certificate(admission,admission.registry.api)
     """Check exact authenticated gate/fence bindings and remaining dispatch time."""
     object_fields(gate, FIELDS, 'broker authorization')
     d = validate_deployment(binding['deployment'])

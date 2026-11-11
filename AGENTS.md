@@ -17,7 +17,7 @@ The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", and "MAY" in this docu
 In adopter projects, agents MUST keep `knowledge/` synchronized with code, specification, architecture and workflow changes.
 
 ### Rationale & Purpose
-The OKF corpus (`knowledge/`) is the repository's persistent knowledge graph. Synchronization gives future agents and contributors reliable context.
+`knowledge/` is the persistent project knowledge graph for future agents and contributors.
 
 - **Requirement**: Any agent change that alters functionality, contracts, specifications, dependencies, or architectural patterns MUST update the corresponding OKF document(s) and append a log entry to `knowledge/log.md`.
 - **Scope**: Code changes are not considered complete until OKF synchronization is verified and updated where relevant.

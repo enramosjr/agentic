@@ -576,8 +576,9 @@ def _locator(authority, d, run_id, attempt, role, key):
     from provenance import execution_job
     prefix = role if key is None else role + '-' + str(key)
     name = ('verify' if role == 'evidence' else 'publication controls' if role == 'publication-controls' else
-            'hosted qualification' if role == 'qualification' else role)
+            'hosted qualification' if role == 'qualification' else 'final proof' if role=='final-proof' else role)
     if role in ('trial-host-intent','trial-host-denial'): name = 'trial host denial'
+    elif role=='trial-case-certificate': name = 'trial case handoff'
     elif role in ('trial-publication-intent','trial-publication-denial','trial-publication-observation'): name = 'publish (' + str(key) + ')'
     elif role in ('trial-broker-intent','trial-broker-denial'): name = 'broker (' + str(key) + ')'
     elif key is not None: name += ' (' + str(key) + ')'
@@ -896,6 +897,11 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
         Finalizer(None,api,None,loads(environment.get('AGENTIC_RECOVERY_PIN','')),environment,clock)._admit()
     if role == 'handoff':
         value = trial_case.consume(registry,origin_reader,environment,hint,clock)
+        initial,record=trial_case.read(Registry(origin_reader,hint['origin']),hint['revision'],clock)
+        if initial['candidate']['name']=='revoked-qualification':
+            from trial_broker_case import certificate_document
+            _upload_document(uploader_factory(node,environment),'trial-case-certificate-'+value['task_id']+'-1',
+                             certificate_document(initial,value))
         artifact = _upload_document(uploader_factory(node,environment),'trial-case-handoff-'+value['task_id']+'-1',value)
         return dict(run_id=value['run_id'],attempt=1,job_id=value['job_id'],artifact_id=artifact)
     # Launched jobs receive the immutable pending lookup. Binding is a later
@@ -960,6 +966,8 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
             if selected(admitted) or trial_broker_case.selected(admitted) or historical(admitted.candidate):
                 document=dict(schema_version=1,kind='trial-case-terminal',request_digest=digest(admitted.request),
                     certificate_digest=digest(admitted.value['certificate']),before=before,after=result,completed=clock())
+                if admitted.candidate['name']=='revoked-qualification':
+                    document['revocation']=copy.deepcopy(admitted._revocation_links)
                 _upload_document(uploader_factory(node,environment),'trial-case-terminal-'+admitted.record['task_id']+'-1',document)
             return result
         return _trial_producer(admitted,environment,admitted.request,node,role,clock,api_factory,app_factory,
@@ -1110,12 +1118,16 @@ def _publish_bound(source, api, registry, binding, identities, request, clock, g
     else:
         require(locators['qualification'] == admission.request['qualification'], 'exact trial certificate required')
         admission.qualification(binding,facts['controls_digest'])
+        from trial_broker_case import live_certificate
+        live_certificate(admission,api)
     require(current_snapshot(Readers(source,api,d),d,s['pr'],s['run_id'],s['run_attempt']) == s, 'candidate changed before publication')
     coordinates = dict(configuration_revision=binding['configuration_revision'],operation=binding['fence']['pending'],
         sequence=binding['fence']['sequence'], issuer_installation_id=identities['apps']['issuer']['installation_id'],
         evidence_job_id=evidence['job_id'], evidence_digest=digest(evidence['document']), task_digest=task['task_digest'])
     guard()
     _bound_validate_publication_observation(controls['document'],binding,s,controls,clock(),admission)
+    if admission is not None:
+        live_certificate(admission,api)
     body = checks.publication_body(d,s,evidence['document'],coordinates,clock())
     source.post('/repos/'+d['policy']['repository']+'/check-runs',body)
     guard()

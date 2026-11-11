@@ -130,6 +130,9 @@ class Session:
         prepared = (broker_evidence.preload(*arguments) if self._admission is None else
                     broker_evidence._preload(*arguments,admission=self._admission))
         self._guard()
+        if self._admission is not None and self._admission.candidate['name']=='revoked-qualification':
+            from trial_broker_case import preloaded
+            preloaded(self,prepared)
         request = control_rendezvous._ready(self.binding, self.job_id, secrets.token_hex(16), self.clock(), self._admission)
         self.receipts.append('control-ready', request)
         jobs = self._wait(request['expires'] - 60, warm=False)

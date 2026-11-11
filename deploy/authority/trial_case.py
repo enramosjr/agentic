@@ -44,7 +44,11 @@ def _predecessor(original,registry,record,history,index,before,clock):
     proof=provenance.authenticated_document(registry.api,before['deployment'],location,
                                           'trial-case-terminal',record['task_id'],clock())
     value=proof['document']
-    object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split(),'prior closed terminal')
+    revocation=['revocation'] if prior['candidate']['name']=='revoked-qualification' else []
+    object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split()+revocation,'prior closed terminal')
+    if revocation:
+        from trial_broker_case import history_revocation
+        history_revocation(original,record,prior,value['revocation'])
     require(type(value['schema_version']) is int and value['schema_version']==1 and value['kind']=='trial-case-terminal' and
             value['request_digest']==digest(prior['request']) and value['certificate_digest']==digest(prior['certificate']) and
             type(value['completed']) is int and proof['job_started']<=value['completed']<=proof['artifact_created']<=proof['job_completed'],
@@ -88,7 +92,7 @@ def fresh_capability(original,value,record,token,clock):
         require(digest(token)!=prior['execution']['credential']['token_digest'], 'historical capability cannot authorize current transition')
 
 
-def history_guard(original,record,history):
+def history_guard(original,record,history,clock=None,authority=None):
     require(isinstance(history,list) and len(history)<=len(CASE_CHAIN),'bounded native progression history required')
     for index,entry in enumerate(history):
         # The immutable execution document was authenticated at admission. Keep
@@ -99,9 +103,16 @@ def history_guard(original,record,history):
                 'authenticated prior case identity changed')
         transition = prior['candidate'].get('transition')
         if transition is not None and transition['intent']['phase'] == 'current':
-            history_guard(original,record,history[:index]+[transition['intent']['prior']])
+            history_guard(original,record,history[:index]+[transition['intent']['prior']],clock,authority)
         from trial_transition import context_guard
         context_guard(original,record,prior['candidate'])
+        if prior['candidate']['name']=='revoked-qualification':
+            from trial_broker_case import history_revocation
+            from trial_transition import current_deployment
+            require(callable(clock) and authority is not None,'current clock and disposable reader required for revocation history')
+            terminal=provenance.authenticated_document(authority,current_deployment(original,record,prior['history'],prior['candidate']),
+                entry['terminal'],'trial-case-terminal',record['task_id'],clock())
+            history_revocation(original,record,prior,terminal['document']['revocation'])
         require(original.ref(trial_reference(prior))==entry['revision'] and
                 original.ref(trial_reference(dict(prior,execution=None)))==prior['execution']['publication_revision'] and
                 original.ref(trial_reference(dict(prior,kind='trial-case-ready',execution=None)))==prior['launch']['revision'],
@@ -320,7 +331,7 @@ def consume(registry, origin_reader, environment, hint, clock):
     require(environment.get('GITHUB_RUN_ID') == str(value['request']['snapshot']['run_id']) and
             environment.get('GITHUB_RUN_ATTEMPT') == '1', 'case consumer differs from prepared execution')
     original.unchanged(record['origin']['binding']); registry.unchanged(binding)
-    history_guard(original,record,value['history'])
+    history_guard(original,record,value['history'],clock,registry.api)
     require(original.ref(trial_reference(value)) == hint['revision'] and clock() < value['certificate']['expires'],
             'case changed during consumption')
     return consumption(value,hint['revision'],dict(token_digest=digest(token),repository_id=original.coordinates['repository_id'],
@@ -372,6 +383,7 @@ class Hosted:
                 'case consumed execution differs')
         self.worker = None
         self._human_links = None
+        self._revocation_links = None
         self._seal = copy.deepcopy(self._state())
         if role == 'finalize':
             from broker_finalize import Finalizer
@@ -405,7 +417,7 @@ class Hosted:
 
     def _state(self):
         return dict(case=self.case,record=self.record,value=self.value,candidate=self.candidate,request=self.request,
-                    binding=self.binding,worker=self.worker,human_links=self._human_links)
+                    binding=self.binding,worker=self.worker,human_links=self._human_links,revocation_links=self._revocation_links)
 
     def local_guard(self, binding=None):
         require(self._state() == self._seal and (binding is None or binding == self.binding), 'case admission object changed')
@@ -433,7 +445,7 @@ class Hosted:
                 self.original.ref(trial_reference(self.case)) == self.revision and
                 self.registry.ref(self.registry.coordinates['registry_branch']) == self.binding['branch_head'] and
                 self.registry.ref(trial_branch) == self.binding['software_revision'], 'case pointers moved during live observation')
-        history_guard(self.original,r,self.case['history'])
+        history_guard(self.original,r,self.case['history'],self.clock,self.registry.api)
         from trial_transition import guard as transition_guard
         transition_guard(self)
         from trial_transition import context_guard

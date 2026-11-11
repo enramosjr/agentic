@@ -77,7 +77,7 @@ def consume(registry, original, environment, hint, clock):
     fresh_capability(original,value,record,token,clock)
     original.unchanged(record['origin']['binding']); registry.unchanged(binding)
     from trial_case import history_guard
-    history_guard(original,record,value['history'])
+    history_guard(original,record,value['history'],clock,registry.api)
     require(original.ref(trial_reference(value))==hint['revision'] and clock()<record['expires'],'READY changed during consumption')
     return consumption(value,hint['revision'],dict(token_digest=digest(token),repository_id=original.coordinates['repository_id'],
         permissions=dict(contents='read')),dict(run_id=int(environment['GITHUB_RUN_ID']),attempt=1,job_id=job['id']))

@@ -17,7 +17,7 @@ from operation_fence import validate as validate_fence
 from trusted_ci_deployment import timestamp
 from trusted_ci_policy import Refusal, digest, loads, object_fields, positive, require
 
-KINDS = ('gate', 'dispatch', 'outcome', 'control-ready', 'not-submitted', 'host-denied')
+KINDS = ('gate', 'dispatch', 'outcome', 'control-ready', 'not-submitted', 'host-denied', 'trial-preloaded')
 MAX_DOCUMENT = 1024 * 1024
 MAX_ARCHIVE = 2 * MAX_DOCUMENT
 
@@ -114,6 +114,9 @@ class ActionsReceipts:
 
     def _document(self, kind, value, historical=False):
         require(isinstance(value, dict), 'broker receipt object required')
+        if kind=='trial-preloaded':
+            from trial_broker_case import validate_preloaded
+            return validate_preloaded(self._admission,value,self.job_id,self.clock())
         if kind == 'host-denied':
             from trial_host_case import validate_receipt
             require(self._admission is not None, 'host terminal evidence is trial-only')
