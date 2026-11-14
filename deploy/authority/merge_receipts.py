@@ -289,6 +289,15 @@ class ActionsReceipts:
         return locator
 
     def authenticate(self, locator):
+        document,created = self._archive(locator)
+        kind=locator['kind']
+        document = self._document(kind, document, historical=True)
+        if kind in ('control-ready', 'not-submitted', 'host-denied'):
+            require(document['issued'] <= created, 'ready request postdates artifact creation')
+        return document
+
+    def _archive(self, locator):
+        """Authenticate immutable archive bytes; grants no receipt semantics."""
         object_fields(locator, ('kind', 'name', 'artifact_id', 'archive_digest'), 'broker receipt locator')
         kind = locator['kind']
         require(locator['name'] == self._name(kind) and positive(locator['artifact_id']), 'receipt locator differs')
@@ -319,10 +328,7 @@ class ActionsReceipts:
                 document = loads(archive.read(item))
         except (zipfile.BadZipFile, OSError, RuntimeError):
             raise Refusal('invalid broker receipt archive') from None
-        document = self._document(kind, document, historical=True)
-        if kind in ('control-ready', 'not-submitted', 'host-denied'):
-            require(document['issued'] <= created, 'ready request postdates artifact creation')
-        return document
+        return document,created
 
     def find_for_recovery(self, kind):
         require(self.recovery, 'recovery-only receipt inspection')

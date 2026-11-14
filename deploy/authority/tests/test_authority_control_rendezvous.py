@@ -20,6 +20,19 @@ import merge_receipts
 
 
 class RendezvousContracts(unittest.TestCase):
+    def test_document_semantics_grant_no_qualification_admission_or_extra_time(self):
+        b=binding(); request=control_rendezvous.ready(b,77,'c'*32,1002)
+        b['deployment'].update(state='qualification',qualification=None)
+        b['deployment_digest']=digest(b['deployment'])
+        b['fence']['pending']['deployment_digest']=b['deployment_digest']
+        request['deployment_digest']=b['deployment_digest']
+        self.assertEqual(control_rendezvous._ready_document(request,b,77,1002),request)
+        for now in (1063,1122):
+            with self.subTest(now=now), self.assertRaises(Refusal):
+                control_rendezvous._ready_document(request,b,77,now)
+        with self.assertRaises(Refusal): control_rendezvous.validate_ready(request,b,77,1002)
+        with self.assertRaises(Refusal): control_rendezvous._validate_ready(request,b,77,1002,admission=object())
+
     def test_ready_non_object_is_refused_after_archive_authentication(self):
         b, api = binding(), ReceiptAPI()
         store = merge_receipts.ActionsReceipts(api, lambda: b, 77, lambda: 1002, uploader=api.upload)

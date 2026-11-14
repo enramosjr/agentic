@@ -29,11 +29,17 @@ def _validate_ready(value, binding, broker_job_id, now, historical=False, admiss
     if admission is not None:
         from trial_controller import authenticated
         authenticated(admission, binding)
+    require(admission is not None or binding['deployment']['state']=='active','current warm broker required')
+    return _ready_document(value,binding,broker_job_id,now,historical)
+
+
+def _ready_document(value, binding, broker_job_id, now, historical=False):
+    """Document semantics only; no admission or dispatch rights."""
     object_fields(value, READY_FIELDS, 'broker ready request')
     d = validate_deployment(binding['deployment'])
     fence = validate_fence(binding['fence'])
     op = fence['pending']
-    require((admission is not None or d['state'] == 'active') and op is not None and op['kind'] == 'merge' and
+    require(op is not None and op['kind'] == 'merge' and
             type(value['schema_version']) is int and value['schema_version'] == 2 and
             value['kind'] == 'control-ready' and positive(broker_job_id) and value['broker_job_id'] == broker_job_id and
             type(value['sequence']) is int and value['sequence'] == fence['sequence'], 'current warm broker required')
@@ -117,8 +123,14 @@ def validate_response(value, request, binding, proof, now):
 
 
 def _validate_response(value, request, binding, proof, now, admission=None):
-    object_fields(value, RESPONSE_FIELDS, 'administrative rendezvous response')
     _validate_ready(request, binding, request['broker_job_id'], now, admission=admission)
+    return _response_document(value,request,binding,proof,now)
+
+
+def _response_document(value, request, binding, proof, now):
+    """Original-time response semantics; never establishes active authority."""
+    object_fields(value, RESPONSE_FIELDS, 'administrative rendezvous response')
+    _ready_document(request, binding, request['broker_job_id'], now)
     require(type(value['schema_version']) is int and value['schema_version'] == 2 and
             value['kind'] == 'control-response' and value['ready_digest'] == digest(request) and
             all(value[k] == request[k] for k in ('nonce', 'operation_id', 'sequence',

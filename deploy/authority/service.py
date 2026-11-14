@@ -1004,6 +1004,9 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
                 if admitted.candidate['name']=='expired-proof':
                     document.update(schema_version=2,**finalizer._expired_evidence(
                         admitted.request['operation_id'],admitted.request['sequence'],result))
+                if admitted.candidate['name']=='authority-outage':
+                    document.update(schema_version=2,**finalizer._outage_evidence(
+                        admitted.request['operation_id'],admitted.request['sequence'],result))
                 if admitted.candidate['name']=='revoked-qualification':
                     document['revocation']=copy.deepcopy(admitted._revocation_links)
                 if admitted.candidate['name']=='context-transition':

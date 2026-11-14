@@ -647,6 +647,29 @@ authority. Missing, unknown, substituted or still-unavailable evidence leaves th
 fence pending. The final source snapshot follows blocking admission reads before
 terminal effects, and native observation retains all five exact history entries.
 
+The fifth terminal uses strict `trial-case-terminal` schema v2 with the acknowledged
+recovery envelope and original `broker_receipt`; it never carries a host receipt.
+Both native observation and subsequent history reject legacy v1 fifth terminals.
+The evidence reader reauthenticates the successful CLOSED broker's original intent,
+denial, readiness archive, collection inputs, publication, controls and own-App
+proofs. Readiness is required for this case, unlike the fourth pre-readiness expiry
+case. Original event ordering, nonce/digest bindings, credential deadlines and
+freshness windows remain enforced. Historical reads may follow short evidence
+expiry but still require the original record, certificate and deployment to be
+current; they create neither admission nor a dispatch gate. The transient HTTP
+failure is an attestation by the authenticated broker, not a later reproduction
+of the past outage.
+
+Native fifth observation checks the original exported candidate and current
+verifier/issuer success, human approval, competing checks and snapshot without
+minting a coding token. A lost finalizer acknowledgement cannot export or publish
+terminal evidence. A lost native observation acknowledgement cannot be adopted to
+select the sixth case; exact owned capability cleanup remains available after
+expiry. Connected source-local fixtures exercise the original first-five chain,
+the actual Session readback refusal, terminal observation and cleanup, then stop
+at sixth-case selection. They do not establish hosted process or credential
+isolation, hosted qualification, or sixth-case execution.
+
 The sixth distinct reservation, `bad-acceptance`, authenticates all five exact
 CLOSED histories and owned native completions against the immutable original
 trial. Separate journals and READY/pending/execution refs retain the original

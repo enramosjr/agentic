@@ -60,6 +60,19 @@ def dispatch_document():
 
 
 class ReceiptContracts(unittest.TestCase):
+    def test_archive_reader_authenticates_without_granting_ready_admission(self):
+        import control_rendezvous
+        store, api = self.store()
+        request=control_rendezvous.ready(binding(),77,'c'*32,1002)
+        locator=store.append('control-ready',request)
+        b=binding(); b['deployment'].update(state='qualification',qualification=None)
+        reader=merge_receipts.ActionsReceipts(api,lambda:b,77,lambda:1003,recovery=True)
+        value,created=reader._archive(locator)
+        self.assertEqual(value,request); self.assertEqual(created,1002)
+        with self.assertRaises(Refusal): reader.authenticate(locator)
+        api.artifacts[0]['digest']='sha256:'+'0'*64
+        with self.assertRaises(Refusal): reader._archive(locator)
+
     def test_historical_host_receipt_has_only_exact_closed_read_rights(self):
         b, api = binding(), ReceiptAPI()
         b['deployment'].update(state='qualification', qualification=None)
