@@ -1,0 +1,693 @@
+"""Held native, one-candidate admission into the existing authority controllers.
+
+The certificate is a protected native journal claim backed by the actual native
+handoff, CLOSED worker, exact candidate and retained conditional fence commit.
+It is not a production qualification receipt or a cross-job hosted handoff.
+This source-local composition never transports native objects into Actions jobs.
+"""
+import copy
+
+import authority_release
+from registry import OPERATION
+from trial_candidates import Prepare
+from trial_handoff import Native as NativeHandoff, read
+from trial_setup import Provision
+from trusted_ci_policy import digest, object_fields, positive, require
+
+
+CASE_CHAIN = ('direct-push','coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head','new-base','policy-transition','human-update','revoked-qualification','context-transition','positive')
+
+
+def predecessor(name):
+    return CASE_CHAIN[CASE_CHAIN.index(name)-1] if name in CASE_CHAIN[1:] else None
+
+
+def case_journal(base, candidate):
+    from trial_transition import historical
+    return base + ('-'+candidate['name'] if candidate['name'] in CASE_CHAIN[1:] else '') + ('-prior' if historical(candidate) else '')
+
+
+def owned_history(c, value):
+    """Freshly verify each bounded predecessor, retaining transition authority."""
+    from trial_storage import predecessors
+    for previous in predecessors(c,value):
+        if 'transition' in previous['value']['candidate']:
+            from trial_transition import ownership
+            require(ownership(c,previous['value']['candidate'])==previous['value']['transition_ownership'],
+                    'owned prior transition completion changed')
+
+
+def authenticated(value, binding=None):
+    from trial_case import Hosted
+    require(type(value) in (Admission, Hosted), 'actual authenticated trial controller admission required')
+    require(not getattr(value,'_terminal_read_only',False),'terminal inspection cannot authorize active continuation')
+    require(value.worker is not None, 'authenticated CLOSED worker required')
+    value.local_guard(binding)
+    return value
+
+
+class Native:
+    def __init__(self, candidates):
+        self.candidates = candidates
+
+    def open(self, prompt, name):
+        authority_release.authorize('qualify-live')
+        return self._open(prompt, name)
+
+    def prepare_negative(self, prompt, name, approve):
+        authority_release.authorize('qualify-live')
+        return self._open(prompt,name,negative_approve=approve)
+
+    def approve_positive(self, prompt, pin, approve):
+        authority_release.authorize('qualify-live')
+        from trial_broker_positive import approve_native
+        return approve_native(self._open(prompt,'positive'),pin,approve)
+
+    def bind_positive_job(self,prompt,role,temporary):
+        authority_release.authorize('qualify-live')
+        from trial_broker_positive import bind_native_job
+        return bind_native_job(self._open(prompt,'positive'),role,temporary)
+
+    def open_prior(self, prompt, name='new-head'):
+        authority_release.authorize('qualify-live')
+        return self._open_prior(prompt, name=name)
+
+    def _open_prior(self, prompt, source=None, name='new-head'):
+        return self._open(prompt, name, source, phase='prior')
+
+    def transition_context(self, prompt, name, operator_api, admin_api, approve, token_factory=None):
+        authority_release.authorize('qualify-live')
+        if name == 'context-transition':
+            from trial_broker_context import move
+            return move(self, prompt, operator_api, admin_api, approve)
+        from trial_transition import move_context
+        from trusted_ci_github import GitHub
+        return move_context(self, prompt, name, operator_api, admin_api, approve, token_factory or GitHub)
+
+    def cleanup_context(self, name, operator_api, admin_api, token_factory=None):
+        authority_release.authorize('bootstrap')
+        from trial_transition import cleanup_context
+        from trusted_ci_github import GitHub
+        return cleanup_context(self.candidates.native,name,operator_api,admin_api,token_factory or GitHub)
+
+    def human_attempt(self, prompt, human_api):
+        authority_release.authorize('qualify-live')
+        from trial_host_case import native_human
+        require(callable(getattr(human_api,'get',None)) and callable(getattr(human_api,'fetch',None)),
+                'actual independently authenticated human transport required')
+        require(type(self.candidates) is Prepare,'actual native human case preparer required')
+        c=self.candidates.native.provision
+        retained=c.store(c.root/'trial-controller-human-update').read()
+        require(retained is not None and retained['value']['phase']=='bound','existing bound native human case required')
+        admission=self._open(prompt,'human-update')
+        return native_human(admission,human_api)
+
+    def revoke_certificate(self, prompt, operator_api, admin_api, token_factory=None):
+        authority_release.authorize('qualify-live')
+        from trial_broker_case import native_revoke
+        from trusted_ci_github import GitHub
+        admission=self._open(prompt,'revoked-qualification')
+        return native_revoke(admission,operator_api,admin_api,token_factory or GitHub)
+
+    def cleanup_certificate(self, operator_api, admin_api, token_factory=None):
+        authority_release.authorize('bootstrap')
+        from trial_broker_case import cleanup_revocation
+        from trusted_ci_github import GitHub
+        return cleanup_revocation(self.candidates.native,operator_api,admin_api,token_factory or GitHub)
+
+    def recover_terminal(self, prompt, name, phase=None):
+        authority_release.authorize('qualify-live')
+        return self._recover_terminal(prompt,name,phase=phase)
+
+    def _recover_terminal(self, prompt, name, source=None, phase=None):
+        if name=='positive':
+            from trial_broker_positive import observe_native
+            native=self.candidates.native
+            value=native.provision.store(native.provision.root/'trial-controller-positive').read()
+            require(value is not None and value['value']['phase']=='terminal','positive completion is not independently observed; preserve hold')
+            return observe_native(self,prompt,value['value']['terminal']['locator'],source,recovering=True)
+        if name=='context-transition':
+            from trial_broker_context import recover_native
+            return recover_native(self,prompt,source)
+        require(phase is None or name in ('new-head','new-base','policy-transition') and phase=='prior', 'only stale cases have historical recovery')
+        require(type(self.candidates) is Prepare, 'actual native candidate preparer required')
+        native=self.candidates.native
+        retained=native.provision.store(native.provision.root/case_journal('trial-controller',dict(name=name,transition=dict(intent=dict(phase=phase))))).read()
+        require(retained is not None and retained['value']['prompt_digest']==digest(prompt) and retained['value']['name']==name,
+                'resume only the exact retained native terminal case')
+        result=Admission(native,source or native.provision.api,recover_terminal=True,name=name,phase=phase)
+        return copy.deepcopy(result.value['terminal'])
+
+    def observe_terminal(self, prompt, name, locator, phase=None):
+        authority_release.authorize('qualify-live')
+        return self._observe_terminal(prompt,name,locator,phase=phase)
+
+    def _observe_terminal(self, prompt, name, locator, source=None, phase=None):
+        if name=='positive':
+            from trial_broker_positive import observe_native
+            return observe_native(self,prompt,locator,source)
+        if name=='context-transition':
+            from trial_broker_context import observe_native
+            return observe_native(self,prompt,locator,source)
+        require(phase is None or name in ('new-head','new-base','policy-transition') and phase=='prior', 'only stale cases have historical observation')
+        require(type(self.candidates) is Prepare, 'actual native candidate preparer required')
+        native=self.candidates.native
+        hint=dict(name=name, transition=dict(intent=dict(phase=phase)))
+        retained=native.provision.store(native.provision.root/case_journal('trial-controller',hint)).read()
+        require(retained is not None and retained['value']['prompt_digest']==digest(prompt) and retained['value']['name']==name and
+                name in CASE_CHAIN,
+                'exact native host case terminal observation required')
+        admission=Admission(native,source or native.provision.api,terminal_locator=locator,name=name,phase=phase)
+        completed=native._worker_completion(admission.record,prompt,admission.source)
+        require(completed['result']==admission.value['worker'], 'retained CLOSED worker changed')
+        admission.worker=completed
+        if name in ('direct-push','coding-update','missing-approval'):
+            admission._direct_terminal_candidate()
+        else:
+            admission._candidate(self.candidates)
+        if name in ('direct-push','coding-update','missing-approval'):
+            from trial_host_case import direct_terminal
+            direct_terminal(admission.registry.api,admission.record,admission.value,
+                            admission.terminal_proof['document'],dict(admission.terminal_proof['producer']),
+                            admission.clock(),admission.source)
+        from authority_github import Readers,current_snapshot
+        s=admission.request['snapshot']; d=admission.binding['deployment']
+        require(current_snapshot(Readers(admission.source,admission.registry.api,d),d,s['pr'],s['run_id'],s['run_attempt'])==s,
+                'host candidate or target changed before native terminal observation')
+        admission.guard()
+        result=dict(binding=copy.deepcopy(admission.binding),**admission.terminal_proof)
+        admission.value.update(phase='terminal',terminal=result); admission._save()
+        return copy.deepcopy(result)
+
+    def _open(self, prompt, name, source=None, phase=None, negative_approve=None):
+        require(type(self.candidates) is Prepare, 'actual native candidate preparer required')
+        preparer, native = self.candidates, self.candidates.native
+        require(type(native) is NativeHandoff and type(native.provision) is Provision, 'actual authenticated native trial required')
+        c = native.provision
+        from trial_storage import namespace, pin, predecessors, write_controller, acknowledged, install
+        install(c)
+        namespace(c)
+        source = source or c.api
+        require(phase is None or name in ('new-head','new-base','policy-transition') and phase == 'prior', 'only stale cases have historical preparation')
+        hint=dict(name=name, transition=dict(intent=dict(phase=phase)))
+        journal = c.store(c.root / case_journal('trial-controller',hint))
+        document = journal.read()
+        key=case_journal('trial-controller',hint)
+        if document is not None:
+            acknowledged(c,key,journal,document)
+        if document is None:
+            history=[]
+            if predecessor(name) is not None:
+                prior_name=predecessor(name)
+                previous=c.store(c.root/case_journal('trial-controller',dict(name=prior_name))).read()
+                require(previous is not None and previous['value']['phase']=='terminal' and
+                        previous['value']['name']==prior_name and previous['value']['prompt_digest']==digest(prompt) and
+                        'locator' in previous['value']['terminal'], 'owned independently observed first terminal required')
+                if prior_name=='missing-approval':
+                    # Historical proof cannot adopt an uncertain native observation.
+                    prior_key=case_journal('trial-controller',dict(name=prior_name))
+                    acknowledged(c,prior_key,c.store(c.root/prior_key),previous)
+                prior=previous['value']
+                publication=c.store(c.root/case_journal('trial-case-publication',dict(name=prior_name))).read()
+                require(publication is not None and publication['value']['phase']=='bound' and
+                        publication['value']['initial']['request']==prior['request'] and
+                        publication['value']['initial']['certificate']==prior['certificate'], 'owned first execution publication required')
+                history=copy.deepcopy(prior['history'])+[dict(revision=publication['value']['revision_bound'],terminal=prior['terminal']['locator'])]
+                from trial_case import baseline
+                settled=baseline(c.session.registry,native.registry,prior['record'],history,c.clock)
+                require(settled==prior['terminal']['binding'], 'owned first native completion differs')
+                owned_history(c,prior)
+                for index,ancestor_document in zip(reversed(range(len(prior['history']))),predecessors(c,prior)):
+                    ancestor=ancestor_document['value']
+                    require(baseline(c.session.registry,native.registry,prior['record'],history[:index+1],c.clock)==ancestor['terminal']['binding'],
+                            'owned prior native terminal differs')
+                current_settled=settled
+                if name in ('new-head','new-base','policy-transition') and phase is None:
+                    from trial_transition import prior_entry, terminal_baseline
+                    current_settled=terminal_baseline(c.session.registry,native.registry,prior['record'],history,prior_entry(c,name),settled,c.clock)
+                    if name!='new-head':
+                        from trial_transition import context_link, authenticate_context
+                        current_settled=authenticate_context(c.session.registry,native.registry,prior['record'],
+                            dict(name=name,submitted=c.store(c.root/('trial-controller-'+name+'-prior')).read()['value']['candidate']['submitted'],
+                                 context=context_link(c,name),transition=dict(intent=dict(prior=prior_entry(c,name)))),
+                            history,current_settled,c.clock)
+                native.registry.unchanged(current_settled)
+                candidates=c.store(c.root/'trial-candidates').read()
+                require(candidates==prior['candidates'] and c.store(c.root/'trial-workflow').read()==prior['workflow'] and
+                        c.store(c.root/'trial').read()==prior['provisioning'], 'original native trial ownership changed')
+                completed=native._worker_completion(prior['record'],prompt,source)
+                require(completed['result']==prior['worker'], 'original CLOSED worker differs')
+                result=dict(candidates=candidates['value']['candidates'],worker=prior['worker'])
+                completed=dict(completed,record=prior['record'],retained=prior['workflow'])
+            else:
+                result = preparer._run(prompt, source)
+                completed = native._completion(prompt, source)
+                candidates = c.store(c.root / 'trial-candidates').read()
+            matches = [v for v in result['candidates'] if v['name'] == name]
+            require(len(matches) == 1 and completed['result'] == result['worker'], 'exact prepared trial case required')
+            candidate=matches[0]
+            if name in ('new-head','new-base','policy-transition','human-update','revoked-qualification','context-transition'):
+                from trial_transition import prepare
+                candidate,_=prepare(preparer,completed,candidate,history,settled,
+                    'fixture' if name in ('human-update','revoked-qualification','context-transition') else phase or 'current',source,prompt,previous)
+            value = dict(kind='native-trial-controller', storage_version=2,prompt_digest=digest(prompt), name=name,
+                record=completed['record'], workflow=completed['retained'], candidates=candidates,
+                provisioning=copy.deepcopy(c.document), candidate=candidate, worker=completed['result'],
+                phase='ready', certificate=None, request=None, pending=None, terminal=None,history=history)
+            if history:
+                if name in ('new-head','new-base','policy-transition') and phase is None:
+                    # prior_entry already authenticated this completed historical
+                    # root. Reuse its committed reference, never adopt an orphan
+                    # archive merely because a previous write became visible.
+                    from trial_storage import resolve
+                    historical_root=c.store(c.root/('trial-controller-'+name+'-prior')).read()
+                    reference=historical_root['value']['previous']
+                    require(resolve(c,reference)==previous,'committed historical predecessor changed')
+                    value['previous']=copy.deepcopy(reference)
+                else:
+                    value['previous']=pin(c,case_journal('trial-controller',previous['value']['candidate']),previous)
+            if 'transition' in candidate:
+                from trial_transition import ownership
+                value['transition_ownership']=ownership(c,candidate,create=True)
+            document = write_controller(c,key,journal,None,value)
+        value = document['value']
+        require(value['kind'] == 'native-trial-controller' and value['prompt_digest'] == digest(prompt) and
+                value['name'] == name, 'resume only the exact retained native case')
+        admission = Admission(native, source,name=name,phase=phase)
+        admission.guard()
+        # Same-process reentry reauthenticates the immutable worker and candidate.
+        # A restarted active controller remains held under the ACK requirement.
+        completed = native._worker_completion(value['record'], prompt, source)
+        require(completed['result'] == value['worker'], 'retained CLOSED worker changed')
+        admission.worker = completed
+        if negative_approve is not None:
+            from trial_mutation import prepare
+            prepare(admission,preparer,negative_approve)
+        admission._candidate(preparer)
+        admission.guard()
+        return admission
+
+
+class Admission:
+    def __init__(self, native, source, recover_terminal=False, terminal_locator=None,name=None,phase=None):
+        require(type(native) is NativeHandoff and type(native.provision) is Provision, 'actual authenticated native trial required')
+        self.native, self.source = native, source
+        c = native.provision
+        from trial_storage import install
+        install(c)
+        self._terminal_read_only=bool(recover_terminal or terminal_locator is not None)
+        self._journal_key=case_journal('trial-controller',dict(name=name,transition=dict(intent=dict(phase=phase))))
+        self.journal = c.store(c.root / case_journal('trial-controller',dict(name=name,transition=dict(intent=dict(phase=phase)))))
+        self.document = self.journal.read()
+        require(self.document is not None, 'native case intent required')
+        if not self._terminal_read_only:
+            from trial_storage import acknowledged
+            acknowledged(c,self._journal_key,self.journal,self.document)
+        self.value = copy.deepcopy(self.document['value'])
+        object_fields(self.value, ('kind storage_version prompt_digest name record workflow candidates provisioning candidate worker '
+            'phase certificate request pending terminal history').split()+(['previous'] if self.value.get('history') else [])+
+            (['transition_ownership'] if 'transition' in self.value['candidate'] else []), 'retained native case')
+        require(type(self.value['storage_version']) is int and self.value['storage_version']==2,
+                'fresh version-2 controller required; retained trials remain held')
+        from trial_storage import namespace
+        namespace(c)
+        self.registry, self.clock = native.registry, native.provision.clock
+        self.record = self.value['record']
+        record, _ = read(c.session.registry,self.value['workflow']['value']['revision_bound'],self.clock())
+        require(record == self.record and self.value['workflow']['value']['execution'] == record['execution'],
+                'retained native case substituted authenticated handoff')
+        self.candidate = copy.deepcopy(self.value['candidate'])
+        self.request = copy.deepcopy(self.value['request'])
+        self.worker = None
+        from trial_case import case_baseline
+        self.baseline=case_baseline(c.session.registry,self.registry,self.record,self.value,self.clock)
+        self.binding = copy.deepcopy(self.baseline)
+        if terminal_locator is not None:
+            require(not recover_terminal and self.value['phase']=='bound' and self.candidate['name'] in CASE_CHAIN,
+                    'only an owned bound host case can observe a terminal producer')
+            self._retained()
+            from provenance import authenticated_document
+            s=self.request['snapshot']
+            require(terminal_locator['run_id']==s['run_id'] and terminal_locator['attempt']==s['run_attempt'],
+                    'terminal producer belongs to another case run')
+            authority=self.registry.api
+            if self.candidate['name'] in ('direct-push','coding-update','missing-approval'):
+                from trial_host_case import _ClosedDirectAPI
+                authority=_ClosedDirectAPI(authority)
+            proof=authenticated_document(authority,self.binding['deployment'],terminal_locator,
+                                         'trial-case-terminal',self.record['task_id'],self.clock())
+            value=proof['document']
+            revocation=['revocation'] if self.candidate['name']=='revoked-qualification' else []
+            direct=['recovery','host_receipt'] if self.candidate['name'] in ('direct-push','coding-update','missing-approval') else []
+            object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split()+revocation+direct,'closed case terminal')
+            if revocation:
+                from trial_broker_case import history_revocation
+                from trial_case import read as read_case
+                publication=c.store(c.root/case_journal('trial-case-publication',self.candidate)).read()
+                case,record=read_case(c.session.registry,publication['value']['revision_bound'],self.clock)
+                history_revocation(c.session.registry,record,case,value['revocation'])
+                self._revocation_links=copy.deepcopy(value['revocation'])
+            require(type(value['schema_version']) is int and value['schema_version']==(2 if direct else 1) and value['kind']=='trial-case-terminal' and
+                    value['request_digest']==digest(self.request) and value['certificate_digest']==digest(self.value['certificate']) and
+                    type(value['completed']) is int and proof['job_started']<=value['completed']<=proof['artifact_created']<=proof['job_completed'],
+                    'closed terminal substituted case or producer interval')
+            before=value['before']
+            require(before['fence']==self.value['pending'] and
+                    {k:v for k,v in before.items() if k not in ('branch_head','fence')}==
+                    {k:v for k,v in self.binding.items() if k not in ('branch_head','fence')}, 'closed terminal parent differs')
+            fence=copy.deepcopy(before['fence']); fence['pending']=None
+            receipt=value['after']['fence']['completed'][-1]
+            require(receipt['operation_id']==self.request['operation_id'] and receipt['sequence']==self.request['sequence'] and
+                    receipt['kind']=='not-submitted', 'closed host terminal operation differs')
+            fence['completed'].append(receipt)
+            self.binding=self.registry.authenticate_setup_progress(before,{OPERATION:fence})
+            require(self.binding==value['after'], 'closed host terminal commit differs')
+            self.terminal_proof=dict(locator=copy.deepcopy(terminal_locator),document=value,
+                                     producer={k:v for k,v in proof.items() if k!='document'})
+            self.guard()
+            return
+        if recover_terminal:
+            require(self.value['phase']=='closing', 'exact retained terminal intent required; never repeat finalization')
+            self._retained()
+            retained=self.value['terminal']
+            object_fields(retained,('before','receipt'),'native terminal intent')
+            before=retained['before']
+            require(before['fence']==self.value['pending'] and
+                    {k:v for k,v in before.items() if k not in ('branch_head','fence')}==
+                    {k:v for k,v in self.binding.items() if k not in ('branch_head','fence')}, 'native terminal parent differs')
+            from operation_fence import terminal
+            receipt=terminal(retained['receipt'])
+            op=self.value['pending']['pending']
+            require(receipt['operation_id']==op['operation_id'] and receipt['sequence']==before['fence']['sequence'],
+                    'native terminal receipt substituted operation')
+            fence=copy.deepcopy(before['fence']); fence['pending']=None; fence['completed'].append(receipt)
+            self.binding=self.registry.authenticate_setup_progress(before,{OPERATION:fence})
+            self.guard()
+            self.value.update(phase='terminal',terminal=copy.deepcopy(self.binding)); self._save()
+            return
+        if self.value['phase'] in ('fencing', 'bound'):
+            self._retained()
+            if self.candidate['name']=='context-transition':
+                from trial_broker_context import pending_binding
+                self.binding = pending_binding(self.registry,self.binding,self.value['pending'])
+            else:
+                self.binding = self.registry.authenticate_setup_progress(self.binding, {OPERATION:self.value['pending']})
+            if self.value['phase'] == 'fencing':
+                self.value['phase'] = 'bound'
+                self._save()
+        require(self.value['phase'] in ('ready','bound'), 'native case is terminal; never replay')
+
+    def _retained(self):
+        from operation_fence import operation
+        b, r, certificate, request = self.binding, self.record, self.value['certificate'], self.value['request']
+        pending = self.value['pending']
+        if 'eligibility' in self.candidate:
+            from trial_eligibility import authenticate
+            original=self.original if hasattr(self,'original') else self.native.provision.session.registry
+            authenticate(original,r,self.value['worker'],self.candidate['eligibility'],self.clock if hasattr(self,'clock') else lambda:certificate['issued'])
+        op = operation(pending['pending'])
+        expected = copy.deepcopy(b['fence']); expected['sequence'] += 1; expected['pending'] = op
+        require(pending == expected and op['kind'] == 'merge' and op['configuration_revision'] == b['configuration_revision'] and
+                op['deployment_digest'] == b['deployment_digest'] and op['repository_id'] == r['pair']['fixture_repository_id'] and
+                op['target'] == b['deployment']['policy']['target'] and op['workflow_sha'] == b['software_revision'] and
+                op['pr'] == self.candidate['submitted']['pr'] and op['head'] == self.candidate['submitted']['head'] and
+                op['base'] == __import__('trial_transition').current_base(
+                    self.original if hasattr(self,'original') else self.native.provision.session.registry,
+                    r,self.value['history'],self.candidate), 'retained trial operation substituted candidate or configuration')
+        object_fields(certificate, ('schema_version kind record_digest worker candidate configuration_revision deployment_digest '
+            'operation sequence controls_digest issued expires hosted_qualified enforcement_active').split(), 'native trial certificate')
+        require(type(certificate['schema_version']) is int and certificate['schema_version'] == 1 and
+                certificate['kind'] == 'native-trial-certificate' and certificate['record_digest'] == digest(r) and
+                certificate['worker'] == self.value['worker'] and certificate['candidate'] == self.candidate and
+                certificate['configuration_revision'] == b['configuration_revision'] and certificate['deployment_digest'] == b['deployment_digest'] and
+                certificate['operation'] == op and certificate['sequence'] == pending['sequence'] and
+                certificate['issued'] == op['created'] and certificate['expires'] == min(r['expires'],op['execution_deadline']) and
+                certificate['hosted_qualified'] is False and certificate['enforcement_active'] is False,
+                'retained native certificate changed')
+        from trusted_ci_policy import validate_snapshot
+        snapshot = validate_snapshot(request['snapshot'],b['deployment']['policy'])
+        require(all(snapshot[k] == op[k] for k in ('pr','head','base','merge','run_id','workflow_sha')) and snapshot['run_attempt'] == op['attempt'],
+                'retained trial snapshot differs from operation')
+        task = dict(task_id=self.candidate['submitted']['task_id'],locator=self.value['worker']['locator'])
+        require(request == dict(schema_version=2,configuration_revision=b['configuration_revision'],deployment_digest=b['deployment_digest'],
+            operation_id=op['operation_id'],sequence=pending['sequence'],snapshot=snapshot,task=task,
+            qualification=dict(kind='native-trial-certificate',digest=digest(certificate))), 'retained trial request substituted')
+
+    def _save(self):
+        from trial_storage import write_controller
+        self.document = write_controller(self.native.provision,self._journal_key,self.journal,self.document,self.value)
+        self.request = copy.deepcopy(self.value['request'])
+
+    def local_guard(self, binding=None):
+        c, r = self.native.provision, self.record
+        if not self._terminal_read_only:
+            from trial_storage import acknowledged
+            acknowledged(c,self._journal_key,self.journal,self.document)
+        require(self.journal.read() == self.document and self.document['value'] == self.value and
+                c.store(c.root / 'trial-candidates').read() == self.value['candidates'] and
+                c.store(c.root / 'trial-workflow').read() == self.value['workflow'] and
+                c.store(c.root / 'trial').read() == self.value['provisioning'], 'native case ownership changed')
+        require(self.value['phase'] in ('ready','fencing','bound','closing') and
+                r['created'] <= self.clock() < min(r['expires'], r['trial']['deployment']['expires'],
+                    r['origin']['binding']['fence']['pending']['execution_deadline']), 'native case expired or terminal')
+        require(c.session.owner == r['origin']['owner'] and c.session.scope == r['origin']['scope'],
+                'native case original owner or scope changed')
+        require(self.record == self.value['record'] and self.candidate == self.value['candidate'] and
+                self.request == self.value['request'], 'native case object changed')
+        if 'transition' in self.candidate:
+            from trial_transition import ownership
+            require(ownership(c,self.candidate)==self.value['transition_ownership'], 'owned transition journals changed')
+        if self.value['history']:
+            owned_history(c,self.value)
+            from trial_transition import historical
+            transition=self.candidate.get('transition')
+            from trial_storage import resolve
+            expected=(c.store(c.root/('trial-controller-'+self.candidate['name']+'-prior')).read()['value']['terminal']['binding']
+                      if transition is not None and transition['intent']['phase']=='current' else resolve(c,self.value['previous'])['value']['terminal']['binding'])
+            if 'context' in self.candidate:
+                expected=c.store(c.root/('trial-context-'+self.candidate['name'])).read()['value']['steps'][-1]['after']
+            require(expected==self.baseline,
+                    'owned prior native completion changed')
+        launch=c.store(c.root/case_journal('trial-case-launch',self.candidate)).read()
+        if launch is not None and self.value['phase'] in ('bound','closing'):
+            from trial_case import CaseReadStaging
+            staging=c.store(c.root/case_journal(CaseReadStaging.JOURNAL,self.candidate)).read()
+            link=launch['value']['link']
+            require(launch['value']['phase']=='consumed' and launch['value']['ready']['candidate']==self.candidate and
+                    staging is not None and staging['value']['phase'] in ('secret-started','staged') and
+                    staging['value']['revision']==link['revision'] and
+                    digest(staging['value']['credential']['token'])==link['credential']['token_digest'] and
+                    self.clock()<min(link['credential']['expires'],staging['value']['credential']['expires'],self.value['certificate']['expires']),
+                    'native case launch delegation changed or expired')
+        if binding is not None: require(binding == self.binding, 'trial controller binding differs')
+
+    def guard(self, binding=None, force=False):
+        self.local_guard(binding)
+        c, r = self.native.provision, self.record
+        origin = r['origin']['binding']
+        c.session._owned(origin)
+        original = c.session.registry
+        original_branch = original.unchanged(origin)
+        trial_branch = self.registry.unchanged(self.binding)
+        p = self.binding['deployment']['policy']
+        repo = self.source.get('/repos/'+p['repository'])
+        require(positive(repo.get('id')) and repo.get('id') == p['repository_id'] and repo.get('private') is True and
+                positive(repo.get('owner',{}).get('id')) and repo.get('owner',{}).get('id') == r['pair']['identities']['owner_id'] and repo.get('default_branch') == p['target'],
+                'native disposable source identity changed')
+        require(original.ref(original.coordinates['registry_branch']) == origin['branch_head'] and
+                original.ref(original_branch) == origin['software_revision'] and
+                original.ref('agentic-trial-'+r['task_id']) == r['execution']['publication_revision'] and
+                original.ref('agentic-trial-'+r['task_id']+'-execution') == self.value['workflow']['value']['revision_bound'],
+                'original trial handoff changed')
+        require(self.registry.ref(self.registry.coordinates['registry_branch']) == self.binding['branch_head'] and
+                self.registry.ref(trial_branch) == self.binding['software_revision'], 'trial changed during original observation')
+        from trial_case import history_guard
+        history_guard(original,r,self.value['history'],self.clock,self.registry.api,self.source)
+        from trial_transition import guard as transition_guard
+        transition_guard(self)
+        d = self.binding['deployment']
+        from trial_transition import current_deployment
+        require(digest(d)==digest(current_deployment(original,r,self.value['history'],self.candidate)) and
+                d['state'] == 'qualification' and d['qualification'] is None,
+                'only the authenticated unqualified disposable configuration is admitted')
+        from trial_transition import context_guard
+        context_guard(original,r,self.candidate)
+        if self.value['phase'] == 'ready':
+            require(self.value['certificate'] is None and self.value['pending'] is None and self.request is None and
+                    self.binding == self.baseline, 'unowned trial preparation state')
+        self.local_guard(binding)
+
+    def _direct_terminal_candidate(self):
+        """Read-only counterpart to submission readback; no coding token mint."""
+        from datetime import datetime, timezone
+        import submission
+        require(self._terminal_read_only and self.candidate['name'] in ('direct-push','coding-update','missing-approval'),
+                'accepted host denial terminal inspection only')
+        candidates=self.value['candidates']['value']
+        require(candidates['pending'] is None and len(candidates['candidates'])==len(candidates['requests']) and
+                self.candidate in candidates['candidates'],'complete unchanged candidate preparation required')
+        request=candidates['requests'][candidates['candidates'].index(self.candidate)]
+        submitted=self.candidate['submitted']; d=self.record['trial']['deployment']; p=d['policy']
+        manifest=submission.export_manifest(self.worker['files'])
+        expected={name:{'mode':item['mode'],'sha':item['sha']} for name,item in manifest.items()}
+        slug,bot=d['resources']['coding_slug'],d['resources']['coding_bot_id']
+        from urllib.parse import quote
+        actor=self.source.get('/users/'+quote(slug+'[bot]',safe=''))
+        require(actor['id']==int(bot) and actor.get('type')=='Bot' and p['coding_actors']==[int(bot)],
+                'terminal coding bot identity changed')
+        self.task(self.binding,self.request['snapshot'],self.value['worker']['locator'],submitted['task_id'])
+        root='/repos/'+p['repository']; commit=self.source.get(root+'/git/commits/'+submitted['head'])
+        author=dict(name=slug+'[bot]',email=bot+'+'+slug+'[bot]@users.noreply.github.com',
+                    date=datetime.fromtimestamp(request['issued'],timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
+        require(commit.get('sha')==submitted['head'] and commit.get('message')==
+                'AGENTIC task '+request['task_id']+'\n\n'+digest(dict(request=request,files=manifest)) and
+                commit.get('author')==author==commit.get('committer') and
+                [v['sha'] for v in commit['parents']]==[request['base']] and
+                submission.tree_files(self.source,root,commit['tree']['sha'])==expected and
+                submitted['export_digest']==digest(manifest),'terminal candidate differs from authorized export')
+        from urllib.parse import urlencode
+        query=urlencode(dict(state='all',head=p['repository'].split('/')[0]+':'+submitted['branch'],base=p['target']))
+        prs=self.source.pages(root+'/pulls?'+query)
+        require(len(prs)==1 and prs[0]['number']==submitted['pr'] and
+                '<!-- agentic-task:'+digest(request)+' -->' in prs[0].get('body',''),
+                'terminal task pull request differs')
+        self.guard()
+
+    def _candidate(self, preparer):
+        import submission
+        from coding_parent import _FencedSource
+        candidates = self.value['candidates']['value']
+        if 'transition' in self.candidate:
+            from trial_transition import validate
+            require(self.candidate['transition']['intent']['reservation'] in candidates['candidates'],
+                    'original reserved transition candidate required')
+            validate(self.candidate,self.record,self.value['worker'],self.value['history'],self.source,
+                     self.native.provision.session.registry,self.registry,self.clock)
+            return
+        require(candidates['pending'] is None and len(candidates['candidates']) == len(candidates['requests']) and
+                self.candidate in candidates['candidates'], 'complete unchanged candidate preparation required')
+        index = candidates['candidates'].index(self.candidate)
+        def denied(): require(False, 'trial admission may not repair or resubmit candidates')
+        from service import _source_token
+        d = self.record['trial']['deployment']
+        with _source_token('coding',preparer.coding,self.registry.api,d,self.record['pair']['identities'],
+                          self.binding['configuration_revision'],self.clock,preparer.token_factory,self.guard) as scoped:
+            submitted = self.candidate['submitted']
+            root = '/repos/'+d['policy']['repository']
+            pr = scoped.get(root+'/pulls/'+str(submitted['pr']))
+            if pr['state'] == 'open':
+                result = submission._submit(_FencedSource(scoped, self.guard, denied),d,
+                    candidates['requests'][index], self.worker['files'])
+                require(result == submitted, 'prepared trial candidate changed')
+            else:
+                # Closed/merged readback grants only access to the existing
+                # terminal recovery path. It cannot pass task() or dispatch.
+                require(self.value['phase'] == 'bound' and pr.get('merged') is True and
+                        pr['head']['sha'] == submitted['head'] and pr['head']['ref'] == submitted['branch'] and
+                        pr['head']['repo']['id'] == d['policy']['repository_id'] == pr['base']['repo']['id'] and
+                        pr['base']['ref'] == d['policy']['target'] and
+                        pr['user']['id'] == submitted['bot_id'] and pr['user'].get('type') == 'Bot' and
+                        '<!-- agentic-task:'+digest(candidates['requests'][index])+' -->' in pr.get('body','') and
+                        submission.existing_ref(scoped,root,submitted['branch']) == submitted['head'], 'closed trial candidate differs')
+                commit = scoped.get(root+'/git/commits/'+submitted['head'])
+                require(commit['sha'] == submitted['head'] and commit['tree']['sha'] == submitted['tree'] and
+                        [v['sha'] for v in commit['parents']] == [self.record['pair']['fixture_revision']] and
+                        submission._read_tree(scoped,root,submitted['tree'],self.guard) == self.worker['files'],
+                        'closed trial candidate export changed')
+
+    def task(self, binding, snapshot, locator, task_id):
+        self.local_guard(binding)
+        submitted = self.candidate['submitted']
+        require(locator == self.value['worker']['locator'] and task_id == submitted['task_id'] and
+                all(snapshot[k] == submitted[k] for k in ('pr','head')) and
+                snapshot['base'] == __import__('trial_transition').current_base(
+                    self.original if hasattr(self,'original') else self.native.provision.session.registry,
+                    self.record,self.value['history'],self.candidate), 'trial candidate is not the admitted worker export')
+        p = binding['deployment']['policy']
+        root = '/repos/'+p['repository']
+        pr = self.source.get(root+'/pulls/'+str(submitted['pr']))
+        commit = self.source.get(root+'/git/commits/'+submitted['head'])
+        from submission import existing_ref
+        parent=snapshot['base']
+        if self.candidate['name']=='positive': parent=self.record['pair']['fixture_revision']
+        if 'transition' in self.candidate:
+            from trial_transition import validate
+            original=self.original if hasattr(self,'original') else self.native.provision.session.registry
+            validate(self.candidate,self.record,self.value['worker'],self.value['history'],self.source,original,self.registry,self.clock)
+            parent=self.candidate['transition']['intent']['previous']['head']
+            if self.candidate['name'] in ('new-base','policy-transition') and self.candidate['transition']['intent']['phase']=='current':
+                parent=self.candidate['transition']['intent']['reservation']['submitted']['head']
+        require(pr['state'] == 'open' and pr.get('draft') is False and pr.get('merged') is False and
+                pr['head']['sha'] == submitted['head'] and pr['head']['ref'] == submitted['branch'] and
+                pr['head']['repo']['id'] == p['repository_id'] == pr['base']['repo']['id'] and
+                pr['base']['ref'] == p['target'] and pr['user'].get('id') == submitted['bot_id'] and pr['user'].get('type') == 'Bot' and
+                existing_ref(self.source,root,submitted['branch']) == submitted['head'] and
+                commit['tree']['sha'] == submitted['tree'] and [v['sha'] for v in commit['parents']] == [parent],
+                'current trial candidate changed')
+        document = dict(kind='native-trial-case-task', submitted=copy.deepcopy(submitted),
+            worker=self.value['worker'], certificate_digest=digest(self.value['certificate']))
+        if 'transition' in self.candidate:
+            document.update(kind='native-trial-transition-task',transition=copy.deepcopy(self.candidate['transition']))
+        self.local_guard(binding)
+        return dict(document=document, provenance={k:v for k,v in self.worker['proof'].items() if k != 'document'},
+            task_digest=digest(document), expires=self.record['expires'], admission_established=False)
+
+    def qualification(self, binding, controls_digest=None):
+        self.local_guard(binding)
+        certificate = self.value['certificate']
+        require(self.value['phase'] == 'bound' and certificate is not None and
+                certificate['operation'] == binding['fence']['pending'] and certificate['sequence'] == binding['fence']['sequence'] and
+                (controls_digest is None or controls_digest == certificate['controls_digest']), 'native trial certificate differs or controls moved')
+        return dict(document=copy.deepcopy(certificate), qualification_digest=digest(certificate), expires=certificate['expires'])
+
+    def acquire(self, writer, before, op, snapshot, task, facts, before_effect=None):
+        self.guard(before)
+        def guard():
+            self.guard()
+            if before_effect is not None: before_effect()
+        guard()
+        require(self.value['phase'] == 'ready', 'trial fence already attempted; never repeat writes')
+        pending = copy.deepcopy(before['fence'])
+        pending['sequence'] += 1; pending['pending'] = copy.deepcopy(op)
+        certificate = dict(schema_version=1,kind='native-trial-certificate',record_digest=digest(self.record),
+            worker=self.value['worker'],candidate=self.candidate,configuration_revision=before['configuration_revision'],
+            deployment_digest=before['deployment_digest'],operation=op,sequence=pending['sequence'],
+            controls_digest=facts['controls_digest'],issued=op['created'],expires=min(self.record['expires'],op['execution_deadline']),
+            hosted_qualified=False,enforcement_active=False)
+        request = dict(schema_version=2,configuration_revision=before['configuration_revision'],deployment_digest=before['deployment_digest'],
+            operation_id=op['operation_id'],sequence=pending['sequence'],snapshot=snapshot,task=task,
+            qualification=dict(kind='native-trial-certificate',digest=digest(certificate)))
+        self.value.update(phase='fencing',pending=pending,certificate=certificate,request=request)
+        self._save()  # Intent precedes every authority effect, including Git objects.
+        after = writer.acquire_operation(before['branch_head'],before['configuration_revision'],op,before_effect=guard)
+        self.binding = self.registry.authenticate_setup_progress(before,{OPERATION:pending})
+        require(after == self.binding, 'retained native fence differs')
+        self.value['phase']='bound'; self._save(); self.guard()
+        return after
+
+    def finalize(self, environment, broker_job_id):
+        authority_release.authorize('broker-merge')
+        return self._finalize(environment,broker_job_id)
+
+    def _finalize(self, environment, broker_job_id):
+        from broker_finalize import Finalizer
+        from trusted_ci_policy import loads
+        # The existing independently approved finalization/recovery variable is
+        # supplied by the trusted caller, never inferred from a current branch.
+        pin = loads(environment.get('AGENTIC_RECOVERY_PIN',''))
+        Finalizer(None,self.registry.api,None,pin,environment,self.clock)._admit()
+        self.guard()
+        require(self.value['phase']=='bound', 'terminal intent already retained; recover read-only without replay')
+        before = copy.deepcopy(self.binding)
+        result = Finalizer(self.registry,self.registry.api,self.source,pin,environment,self.clock)._finalize(
+            self.request['operation_id'],self.request['sequence'],broker_job_id,_admission=self)
+        self.registry.authenticate_setup_progress(before,{OPERATION:result['fence']})
+        self.value.update(phase='terminal',terminal=result)
+        self._save()
+        return result
+
+    def _retain_terminal(self, before, terminal):
+        self.guard(before)
+        require(self.value['phase']=='bound', 'native terminal intent already exists')
+        self.value.update(phase='closing',terminal=dict(before=copy.deepcopy(before),receipt=copy.deepcopy(terminal)))
+        self._save()

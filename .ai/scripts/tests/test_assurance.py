@@ -81,9 +81,9 @@ class Case(unittest.TestCase):
         self.git('add', '-A')
         self.git('commit', '-qm', message)
 
-    def cli(self, script, *args, code=0):
+    def cli(self, script, *args, code=0, timeout=120):
         result = subprocess.run([sys.executable, str(self.scripts / script), *args], cwd=self.root,
-                                env=self.env, capture_output=True, text=True, timeout=120)
+                                env=self.env, capture_output=True, text=True, timeout=timeout)
         if code is not None:
             self.assertEqual(result.returncode, code, result.stdout + result.stderr)
         return result

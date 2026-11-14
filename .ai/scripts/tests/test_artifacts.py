@@ -8,6 +8,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from test_lifecycle import LifecycleCase
+import process_runtime
 
 
 class ArtifactTests(LifecycleCase):
@@ -85,14 +86,59 @@ class ArtifactTests(LifecycleCase):
     def test_timeout_stops_descendants_before_post_run_verification(self):
         receipt = self.freeze()
         ready, escaped = self.repo / '.git/child-ready', self.repo / '.git/escaped'
-        child = (f'from pathlib import Path; import time; Path({str(ready)!r}).touch(); '
-                 f'time.sleep(2); Path({str(escaped)!r}).write_text("escaped")')
-        parent = f'import subprocess,sys,time; subprocess.Popen([sys.executable,"-c",{child!r}]); time.sleep(10)'
-        result = self.cli('run', '--bundle', receipt['bundle'], '--sha256', receipt['sha256'],
-                          '--timeout', '1', '--', sys.executable, '-c', parent, '{artifact:app.py}')
-        self.assertNotEqual(result.returncode, 0)
-        self.assertTrue(ready.exists(), 'descendant was not started, so cleanup was not exercised')
-        self.assertFalse(escaped.exists(), 'descendant outlived the artifact timeout')
+        release = self.repo / '.git/release-child'
+        scripts = str(Path(__file__).resolve().parents[1])
+        child = (f'import sys; sys.path.insert(0,{scripts!r}); '
+                 'from pathlib import Path; import json,time,process_runtime; '
+                 f'Path({str(ready)!r}).write_text(json.dumps(process_runtime.identity())); '
+                 f'release=Path({str(release)!r})\n'
+                 'while not release.exists(): time.sleep(.01)\n'
+                 f'Path({str(escaped)!r}).write_text("escaped")')
+        parent = f'import subprocess,sys,time; subprocess.Popen([sys.executable,"-c",{child!r}]); time.sleep(60)'
+        # Arm the real timeout after readiness, excluding interpreter startup.
+        wrapper = f'''
+import sys, time, json
+from pathlib import Path
+sys.path.insert(0, {scripts!r})
+import artifacts, process_runtime
+process_runtime.configure_windows_environment()
+ready = Path({str(ready)!r})
+start, verify = process_runtime.ProcessTree.start, artifacts.verify
+def ready_start(self, *args, **kwargs):
+    process = start(self, *args, **kwargs)
+    try:
+        deadline = time.monotonic() + 30
+        while not ready.exists():
+            assert process.poll() is None, 'parent exited before descendant readiness'
+            assert time.monotonic() < deadline, 'descendant readiness timed out'
+            time.sleep(.01)
+        return process
+    except BaseException:
+        self.close()
+        raise
+def checked_verify(*args, **kwargs):
+    if ready.exists():
+        identity = json.loads(ready.read_text())
+        assert not process_runtime.alive(**identity), 'verification preceded descendant cleanup'
+    return verify(*args, **kwargs)
+process_runtime.ProcessTree.start = ready_start
+artifacts.verify = checked_verify
+raise SystemExit(artifacts.main())
+'''
+        try:
+            result = subprocess.run([sys.executable, '-c', wrapper, 'run', '--bundle', receipt['bundle'],
+                                     '--sha256', receipt['sha256'], '--timeout', '1', '--',
+                                     sys.executable, '-c', parent, '{artifact:app.py}'],
+                                    cwd=self.repo, capture_output=True, text=True, timeout=45)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('timed out', result.stderr)
+            self.assertTrue(ready.exists(), 'descendant was not started, so cleanup was not exercised')
+            self.assertFalse(process_runtime.alive(**json.loads(ready.read_text())))
+            self.assertNotIn('verification preceded descendant cleanup', result.stderr)
+            self.assertFalse(escaped.exists(), 'descendant outlived the artifact timeout')
+        finally:
+            if ready.exists():
+                process_runtime.terminate_tree(**json.loads(ready.read_text()))
 
 
 if __name__ == '__main__':

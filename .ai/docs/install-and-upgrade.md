@@ -28,6 +28,12 @@ All scripts, roles, skills and hook settings are project-local. Codex requires
 trusting the project's .codex layer and reviewing hooks with `/hooks`; copying
 files does not activate trust. Global agent settings remain unchanged.
 
+Trusted CI tooling and templates are distributed with the local kit. They require
+[independent authority provisioning and hosted qualification](trusted-ci.md).
+Installation and upgrade do not create credentials, change hosting protections or
+activate external merge enforcement. Keep adopter configuration outside owned assets
+at `.agentic/trusted-ci.json`.
+
 ## Framework source hygiene
 
 Framework maintainers validate source with `python .ai/scripts/framework_policy.py`

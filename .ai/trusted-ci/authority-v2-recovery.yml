@@ -1,0 +1,37 @@
+# Separate trusted recovery pin; no dispatch input selects code or an operation.
+# Held source template. Installation/activation is not authorized by its presence.
+name: AGENTIC v2 terminal recovery
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: agentic-authority
+  cancel-in-progress: false
+jobs:
+  finalize:
+    name: finalize
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: finalize
+          task: '{}'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_ADMIN_PRIVATE_KEY: ${{ secrets.AGENTIC_ADMIN_PRIVATE_KEY }}
+          AGENTIC_RECOVERY_PIN: ${{ vars.AGENTIC_RECOVERY_PIN }}

@@ -660,7 +660,10 @@ class FreshnessTests(NativeCase):  # R6
             stdout, stderr = child.communicate(timeout=15)
             self.assertEqual(child.returncode, 0, stdout + stderr)
         self.lc('retrospect', '--no-new-lessons', 'fixture validation complete')
-        self.lc('stage', 'verify')
+        # This deliberately retains 100 broad receipts. The Windows diagnostic
+        # completed the full fixture in 327.842s; keep its assertions and history
+        # while allowing the real repeated Git inventories to finish.
+        self.cli('lifecycle.py', 'stage', 'verify', timeout=600)
         state = lifecycle.load(self.root)
         self.assertIn('verify', state['stages'])
         self.assertEqual(guard.read(self.root)['interval']['id'], interval)

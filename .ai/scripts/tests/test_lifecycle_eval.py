@@ -674,34 +674,51 @@ class ProcessTests(unittest.TestCase):
         reviewer_started = self.scratch / "reviewer-started"
         parent_late = self.scratch / "parent-late"
         reviewer_late = self.scratch / "reviewer-late"
-        reviewer = (f"from pathlib import Path; import time; Path({str(reviewer_started)!r}).touch(); "
-                    f"time.sleep(1.5); Path({str(reviewer_late)!r}).touch()")
-        agent = self.agent(f"import subprocess, sys, time\nfrom pathlib import Path\n"
-                           f"Path({str(parent_started)!r}).touch()\n"
+        owner = self.scratch / "deadline-owner.json"
+        owner_seconds = .7 if os.name != "nt" else 10
+        imports = (f"import sys; sys.path.insert(0, {str(SCRIPTS)!r}); "
+                   "from pathlib import Path; import json,os,time,process_runtime; ")
+        until_late = "time.sleep(max(0, float(os.environ['LIFECYCLE_EVAL_DEADLINE']) - time.time()) + 2)"
+        reviewer = (imports + f"Path({str(reviewer_started)!r}).write_text(json.dumps(process_runtime.identity())); "
+                    f"{until_late}; Path({str(reviewer_late)!r}).touch()")
+        agent = self.agent(imports + "import subprocess\n"
+                           f"Path({str(parent_started)!r}).write_text(json.dumps(process_runtime.identity()))\n"
                            f"subprocess.Popen([sys.executable, '-c', {reviewer!r}])\n"
-                           f"time.sleep(1.5)\nPath({str(parent_late)!r}).touch()\n")
+                           f"{until_late}\nPath({str(parent_late)!r}).touch()\n")
         wrapper = self.scratch / "runner.py"
         wrapper.write_text(f"import sys, os\nfrom pathlib import Path\nsys.path.insert(0, {str(SCRIPTS)!r})\n"
                            f"import eval_process\neval_process.run({agent!r}, Path({str(self.scratch)!r}), dict(os.environ), "
-                           f"Path({str(self.scratch)!r}), timeout=0.7)\n")
+                           f"Path({str(self.scratch)!r}), timeout={owner_seconds}, "
+                           f"before_launch=lambda identity: eval_process.publish(Path({str(owner)!r}), identity))\n")
         runner = subprocess.Popen([sys.executable, str(wrapper)], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         try:
-            deadline = time.monotonic() + 5
+            deadline = time.monotonic() + owner_seconds + 5
             while not reviewer_started.exists() and runner.poll() is None and time.monotonic() < deadline:
                 time.sleep(0.01)
             self.assertTrue(parent_started.exists())
             self.assertTrue(reviewer_started.exists())
             runner.kill(); runner.wait(timeout=5)
-            time.sleep(1.7)
-            self.assertFalse(parent_late.exists())
-            self.assertFalse(reviewer_late.exists())
+            deadline = float(json.loads(owner.read_text())["deadline"]) + 10
+            while not list(self.scratch.glob("eval-process-*/result.json")) and time.time() < deadline:
+                time.sleep(.01)
             reports = list(self.scratch.glob("eval-process-*/result.json"))
             self.assertEqual(len(reports), 1)
             self.assertEqual(json.loads(reports[0].read_text())["code"], "timeout")
+            for ready in (parent_started, reviewer_started):
+                self.assertFalse(eval_process.process_runtime.alive(**json.loads(ready.read_text())))
+            self.assertFalse(parent_late.exists())
+            self.assertFalse(reviewer_late.exists())
         finally:
             if runner.poll() is None:
                 runner.kill(); runner.wait()
             runner.stderr.close()
+            for ready in (parent_started, reviewer_started):
+                if ready.exists():
+                    eval_process.process_runtime.terminate_tree(**json.loads(ready.read_text()))
+            if owner.exists():
+                identity = json.loads(owner.read_text())
+                if eval_process.alive(identity):
+                    eval_process.process_runtime.terminate_tree(identity["pid"], identity["start_ticks"])
 
     def test_failed_launch_publication_prevents_command(self):
         marker = self.scratch / "launched"
@@ -1364,17 +1381,18 @@ class ProvenanceTests(unittest.TestCase):
         wrapper = self.scratch / "fault-runner.py"
         args = self.command()
         wrapper.write_text(f"import sys\nsys.path.insert(0, {str(SCRIPTS)!r})\nimport eval_results, lifecycle_eval\n"
+            "import process_runtime; process_runtime.configure_windows_environment()\n"
             "original = eval_results.publish\n"
             "def publish(path, report):\n"
             "    if any(c['status'] == 'PASS' for c in report['attempts']): raise OSError('injected terminal publication failure')\n"
             "    return original(path, report)\n"
             f"eval_results.publish = publish\nraise SystemExit(lifecycle_eval.main({args[2:]!r}))\n")
-        result = subprocess.run([sys.executable, str(wrapper)], capture_output=True, text=True, timeout=15)
+        result = subprocess.run([sys.executable, str(wrapper)], capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         path = self.scratch / "results.json"
         self.assertEqual(json.loads(path.read_text())["attempts"][0]["status"], "RUNNING")
         result = subprocess.run([sys.executable, str(SCRIPTS / "lifecycle_eval.py"), "results-check", str(path), "--recover-interrupted"],
-                                capture_output=True, text=True, timeout=10)
+                                capture_output=True, text=True, timeout=CLI_TIMEOUT)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         cell = json.loads(path.read_text())["attempts"][0]
         self.assertEqual(cell["status"], "ERROR")

@@ -1,0 +1,91 @@
+# Adopter-owned authority: registration preflight
+
+This is an unfinished implementation candidate, not a production installer or
+qualified enforcement service. The current build deliberately blocks both
+`bootstrap_stage.py preview` and `apply` before authentication or side effects.
+Privileged setup and live qualification are unavailable in this build.
+The maintainer does not provide a hosted service or fund adopter infrastructure.
+
+## Trust boundary
+
+Run this stage only from a frozen bundle reviewed by the human administrator,
+on a device or OS account inaccessible to coding agents. Another terminal in the
+same agent-accessible account does not establish separation. Do not provide a
+human GitHub token, browser profile or returned App private key to a coding agent.
+The existing unrestricted coding session remains unverified.
+
+The bundle is a candidate, not a signed release. The original
+`authority-bootstrap-preflight.zip` predates the operational holds and is obsolete;
+do not execute it. Newly exported held bundles include `authority_release.py`.
+The installed resolver now implements fixed-origin, immutable-revision and
+archive/file verification before loading the optional native coordinator. No
+bootstrap release is designated by this unfinished build; these exported
+candidates do not become trusted merely because their checksums match.
+
+## Resources and consent
+
+The preflight creates one NEW private authority repository, one separate private
+coding-fixture repository and five private Apps
+owned by the selected user or organization. Administration, read-only verification,
+issuance, coding and merging have different App identities. Private keys go directly into
+the private authority's encrypted secrets. They are not printed or written into
+workspace configuration. Metadata records which steps were reached.
+
+The administrator approves normal GitHub registration and installation screens.
+Install administration and reader Apps on the authority repository, and issuer,
+coding and merge Apps on the separate coding fixture. Coding and merge Apps must
+never have authority access; the preflight explicitly attempts that scope and rejects an
+overbroad installation. Select only the named repository for each purpose.
+No target branch rule or AWS/Azure resource is changed, and no enforcement is
+activated. GitHub storage usage belongs to the selected account and its plan.
+
+The legacy `bootstrap_stage.py` preflight does not implement interrupted-run
+recovery, upgrade or teardown. The newer held `operator_setup.py` composes the
+protected initial-installation and registration journals instead. Unknown
+resource creation or registration exchange is never adopted or repeated.
+Prepared software and captured registrations resume through authenticated
+readback. Complete upgrade/repair/teardown remain separate unfinished work.
+
+The native `connect` and `setup` commands retain account/repository choices and
+exact consent outside the coding checkout. Existing controllers perform model
+consent, provider provisioning, separated secret staging and seven independent
+credential-consumption proofs. An uncertain secret write is never overwritten:
+the remaining intents can proceed, but the consumer must prove the retained exact
+value. Separate finalization/recovery pins are included in configuration consent.
+Source protections are additive and read back before configuration completes.
+The resulting state is `qualification`, never active enforcement. These paths
+have local fixture coverage; no browser/provider/hosted qualification is claimed.
+
+## Future trusted preflight
+
+The separate trusted backend requires Python 3.11+, the pinned optional dependencies
+in `deploy/authority/requirements-auth.txt`, GitHub CLI authenticated as the human
+administrator and a browser. App signing now stays in memory; it does not create
+PEM files or invoke an OpenSSL child. The installed project client remains stdlib
+Python 3.9+. No AWS or Azure account is needed for this preflight.
+
+The future flow previews account ownership, repositories, App permissions and
+cost ownership, then requires approval of the exact preview digest. Its CLI is
+held in this build; there is no environment-variable override. Do not attempt
+registration from the modifying environment.
+
+Registration will use browser consent screens without copying credentials. It
+uses a temporary loopback listener, single-use state and no webhook service.
+After installation, the helper checks scope and verifies that non-administrative
+Apps cannot mint an administrative token. A missing capability or rejected
+callback fails the preflight; it must not be called a completed setup.
+
+When live qualification is separately authorized, return only the non-secret JSON
+result or failure category. Never return tokens,
+private keys, callback URLs/codes, browser data or credential files to the coding
+environment. A successful registration result still says `state: setup` and
+`enforcement_qualified: false`.
+
+## Remaining qualification
+
+Real GitHub consent is pending. Local HTTP tests use a simulated GitHub exchange;
+they verify callback handling, not GitHub's registration support. The dedicated
+Podman WSL2 disk/OCI probe passed, but GitHub-hosted execution remains unqualified.
+Both cloud paths remain unqualified.
+The complete adopted spec, installed launcher, protection/recovery flow and final
+frozen-candidate gate are not complete.

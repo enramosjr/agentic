@@ -1,0 +1,156 @@
+"""Held admin terminal recovery. Consumes proof; never dispatches or retries.
+
+The recovery pin is independently supplied by trusted release configuration,
+not inferred from today's default branch or the candidate. Admin credential
+staging belongs to the separately pinned workflow, which remains unqualified.
+"""
+import copy
+import re
+import time
+
+import authority_release
+from merge_receipts import ActionsReceipts
+from merge_window import recover_merged
+from trusted_ci_github import authority_run
+from trusted_ci_policy import digest, object_fields, positive, require, sha
+
+
+class Finalizer:
+    def __init__(self, registry, authority, source, recovery_pin, environment, clock=None):
+        self.registry, self.authority, self.source = registry, authority, source
+        self.pin, self.environment = copy.deepcopy(recovery_pin), dict(environment)
+        self.clock = clock or (lambda: int(time.time()))
+        self._direct_terminal = None
+
+    def _direct_evidence(self, operation_id, sequence, result):
+        retained = self._direct_terminal
+        require(retained is not None and retained[:3] == (operation_id, sequence, result),
+                'exact acknowledged host-denial finalization required')
+        return copy.deepcopy(retained[3])
+
+    def finalize(self, operation_id, sequence, broker_job_id):
+        authority_release.authorize('broker-merge')
+        return self._finalize(operation_id, sequence, broker_job_id)
+
+    def _admit(self):
+        p, env = self.pin, self.environment
+        object_fields(p, ('authority_repository', 'authority_repository_id', 'workflow', 'workflow_sha'), 'trusted recovery pin')
+        require(isinstance(p['authority_repository'], str) and
+                re.fullmatch('[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', p['authority_repository']) and
+                all(v not in ('.', '..') for v in p['authority_repository'].split('/')) and
+                positive(p['authority_repository_id']) and sha(p['workflow_sha']) and
+                isinstance(p['workflow'], str) and re.fullmatch(r'\.github/workflows/[A-Za-z0-9_-]+\.ya?ml', p['workflow']),
+                'independent recovery runtime pin required')
+        require(env.get('GITHUB_REPOSITORY_ID') == str(p['authority_repository_id']) and
+                env.get('GITHUB_SHA') == p['workflow_sha'] and env.get('GITHUB_JOB') == 'finalize',
+                'not the trusted recovery environment')
+        values = [env.get(k) for k in ('GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT')]
+        require(all(isinstance(v, str) and re.fullmatch('[1-9][0-9]{0,19}', v) for v in values),
+                'exact recovery execution required')
+        run_id, attempt = map(int, values)
+        run = authority_run(self.authority, p, run_id, attempt)
+        require(run['id'] == run_id, 'recovery run identity differs')
+        jobs = self.authority.pages('/repos/' + p['authority_repository'] + '/actions/runs/' + str(run_id) +
+                                    '/attempts/' + str(attempt) + '/jobs', 'jobs')
+        matches = [j for j in jobs if j['name'] == 'finalize']
+        require(len(matches) == 1, 'missing or ambiguous recovery job')
+        job = matches[0]
+        require(positive(job['id']) and job['run_id'] == run_id and job['head_sha'] == p['workflow_sha'] and
+                job['status'] == 'in_progress' and job['conclusion'] is None, 'recovery job provenance differs')
+        return dict(run_id=run_id, attempt=attempt, job_id=job['id'], workflow_sha=p['workflow_sha'])
+
+    def _finalize(self, operation_id, sequence, broker_job_id, _admission=None):
+        self._direct_terminal = None
+        require(isinstance(operation_id, str) and re.fullmatch('[0-9a-f]{32}', operation_id) and
+                positive(sequence) and positive(broker_job_id), 'exact terminal operation required')
+        recovery = self._admit()  # Before reading the administrative registry.
+        if _admission is not None and _admission.candidate['name']=='positive':
+            from trial_broker_positive import finalize
+            return finalize(self,_admission,operation_id,sequence,broker_job_id,recovery)
+        if _admission is not None and _admission.candidate['name']=='context-transition':
+            from trial_broker_context import finalize
+            return finalize(self,_admission,operation_id,sequence,broker_job_id,recovery)
+        before = self.registry.binding(check_software=False)
+        d, fence = before['deployment'], before['fence']
+        p, op = d['policy'], fence['pending']
+        require(p['authority_repository'] == self.pin['authority_repository'] and
+                p['authority_repository_id'] == self.pin['authority_repository_id'] and
+                op is not None and op['kind'] == 'merge' and op['operation_id'] == operation_id and
+                fence['sequence'] == sequence and op['configuration_revision'] == before['configuration_revision'] and
+                op['deployment_digest'] == before['deployment_digest'], 'pending recovery configuration differs')
+        read = lambda: self.registry.binding(check_software=False)
+        receipts = ActionsReceipts._create(self.authority, read, broker_job_id, self.clock, recovery=True, admission=_admission)
+        producer = receipts.terminal_job()
+        if _admission is not None:
+            import trial_broker_case
+            if trial_broker_case.selected(_admission):
+                trial_broker_case.read(_admission,self.authority,broker_job_id)
+        locators = {kind: receipts.find_for_recovery(kind) for kind in ('not-submitted', 'dispatch', 'outcome')}
+        if _admission is not None:
+            locators['host-denied'] = receipts.find_for_recovery('host-denied')
+        host_denied = locators.get('host-denied') is not None
+        if _admission is not None:
+            import trial_host_case
+            require(not trial_host_case.selected(_admission) or host_denied,
+                    'named host outcome is missing; preserve the fence')
+        require(not host_denied or not (locators['not-submitted'] or receipts.find_for_recovery('gate') or
+                                       receipts.find_for_recovery('control-ready')),
+                'contradictory host terminal evidence; preserve the fence')
+        positive_no_dispatch = locators['not-submitted'] is not None or host_denied
+        require(not positive_no_dispatch or not (locators['dispatch'] or locators['outcome']),
+                'contradictory broker terminal evidence; preserve the fence')
+        facts = None
+        if positive_no_dispatch:
+            no_dispatch = receipts.authenticate(locators['host-denied'] if host_denied else locators['not-submitted'])
+            kind = 'not-submitted'
+        else:
+            require(locators['dispatch'] is not None, 'no positive terminal evidence; preserve the fence')
+            dispatch = receipts.authenticate(locators['dispatch'])
+            if locators['outcome'] is not None:
+                outcome = receipts.authenticate(locators['outcome'])
+                require(outcome['gate_digest'] == dispatch['gate_digest'],
+                        'outcome contradicts its dispatch authorization; preserve the fence')
+            root = '/repos/' + p['repository']
+            pr = self.source.get(root + '/pulls/' + str(op['pr']))
+            require(sha(pr.get('merge_commit_sha')), 'exact merged commit unavailable; preserve the fence')
+            commit = self.source.get(root + '/git/commits/' + pr['merge_commit_sha'])
+            facts = recover_merged(dispatch['gate'], pr, commit)
+            facts.update(pr_digest=digest(pr), commit_digest=digest(commit))
+            kind = 'merged'
+        envelope = dict(schema_version=2, kind='broker-terminal-recovery', operation_digest=digest(op),
+            configuration_revision=before['configuration_revision'], deployment_digest=before['deployment_digest'],
+            producer=dict(id=producer['id'], run_id=producer['run_id'], head_sha=producer['head_sha'],
+                          conclusion=producer['conclusion'], completed_at=producer['completed_at']),
+            recovery=recovery, artifacts=locators, facts=facts)
+        terminal = dict(operation_id=operation_id, sequence=sequence, kind=kind, receipt_digest=digest(envelope))
+        require(read() == before, 'registry changed during terminal recovery')
+        # The storage helper checks exact nonforce pointer/parent/tree readback,
+        # including lost acknowledgements. No source mutation exists in this class.
+        if _admission is not None:
+            from trial_controller import Admission
+            if type(_admission) is Admission:
+                _admission._retain_terminal(before,terminal)
+            _admission.guard(before)
+            def guard():
+                _admission.guard(before)
+                if trial_broker_case.selected(_admission):
+                    if _admission.candidate['name']=='revoked-qualification':
+                        trial_broker_case.read_revocation_outcome(_admission,self.authority,broker_job_id)
+                    else:
+                        trial_broker_case.guard(_admission)
+                else:
+                    import trial_host_case
+                    if trial_host_case.selected(_admission): trial_host_case.guard(_admission)
+                    else:
+                        from trial_transition import historical
+                        if historical(_admission.candidate):
+                            from authority_github import Readers, current_snapshot
+                            s=_admission.request['snapshot']
+                            require(current_snapshot(Readers(_admission.source,self.authority,d),d,s['pr'],s['run_id'],s['run_attempt'])==s,
+                                    'historical source moved before terminal effect')
+            result = self.registry.finalize_operation(before['branch_head'], terminal, before_effect=guard)
+            if _admission.candidate['name'] in ('direct-push','coding-update','missing-approval'):
+                self._direct_terminal = (operation_id, sequence, copy.deepcopy(result),
+                                         copy.deepcopy(dict(recovery=envelope,host_receipt=no_dispatch)))
+            return result
+        return self.registry.finalize_operation(before['branch_head'], terminal)
