@@ -60,6 +60,30 @@ def dispatch_document():
 
 
 class ReceiptContracts(unittest.TestCase):
+    def test_historical_host_receipt_has_only_exact_closed_read_rights(self):
+        b, api = binding(), ReceiptAPI()
+        b['deployment'].update(state='qualification', qualification=None)
+        value = dict(schema_version=1, kind='host-denied', operation_id=b['fence']['pending']['operation_id'],
+                     sequence=b['fence']['sequence'], job_id=77, issued=1002,
+                     host=dict(run_id=99, attempt=1, job_id=76, artifact_id=499), host_digest='f'*64)
+        name = 'agentic-merge-' + value['operation_id'] + '-s1-a1-host-denied'
+        identity = api.upload(name, json.dumps(value).encode())
+        a = api.artifacts[0]
+        locator = dict(kind='host-denied', name=name, artifact_id=identity, archive_digest=a['digest'])
+        with self.assertRaises(Refusal):
+            merge_receipts.ActionsReceipts._historical_host(api,b,77,lambda:1003,value)
+        for conclusion in ('success','failure','cancelled','timed_out'):
+            api.job.update(status='completed', conclusion=conclusion, completed_at='1970-01-01T00:16:43Z')
+            reader = merge_receipts.ActionsReceipts._historical_host(api,b,77,lambda:1003,value)
+            self.assertEqual(reader.authenticate(locator), value)
+            with self.assertRaises(Refusal): reader.current_job()
+            with self.assertRaises(Refusal): reader.append('host-denied',value)
+            with self.assertRaises(Refusal): reader._document('dispatch',dispatch_document(),historical=True)
+        for fault in ('operation_id','sequence','job_id'):
+            wrong = dict(value); wrong[fault] = '0'*32 if fault=='operation_id' else 999
+            with self.subTest(fault=fault), self.assertRaises(Refusal):
+                merge_receipts.ActionsReceipts._historical_host(api,b,77,lambda:1003,wrong)
+
     def test_positive_not_submitted_receipt_excludes_dispatch_and_binds_producer(self):
         store, api = self.store()
         document = merge_receipts.not_submitted(binding(), 77, 1002)

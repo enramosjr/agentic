@@ -31,7 +31,7 @@ FILES = (
     'task_admission.py', 'task_controls.py', 'task_control_protocol.py', 'transition.py', 'worker_facts.py', 'requirements-auth.txt', 'requirements-aws.txt',
     'operator_setup.py', 'trial_setup.py', 'trial_configuration.py', 'trial_admission.py',
     'trial_handoff.py', 'trial_controls.py', 'trial_worker.py', 'trial_candidates.py', 'trial_controller.py', 'trial_case.py', 'trial_launch.py', 'trial_host_case.py', 'trial_broker_case.py', 'trial_transition.py', 'trial_broker_context.py',
-    'trial_broker_positive.py', 'trial_eligibility.py', 'trial_mutation.py', 'trial_runtime.py', 'trial_specimen.py', 'trial_storage.py', 'trial_wire.py',
+    'trial_broker_positive.py', 'trial_eligibility.py', 'trial_mutation.py', 'trial_runtime.py', 'trial_specimen.py', 'trial_storage.py', 'trial_wire.py', 'trial_terminal.py',
     'artifact_upload/action.yml', 'artifact_upload/action.mjs', 'artifact_upload/cli.mjs',
     'artifact_upload/upload.mjs', 'artifact_upload/package.json', 'artifact_upload/package-lock.json',
 ))

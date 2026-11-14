@@ -45,7 +45,11 @@ def _predecessor(original,registry,record,history,index,before,clock):
         authenticate(prior['candidate'],record,prior['worker'],history[:index],original,clock,before)
     location=entry['terminal']; s=prior['request']['snapshot']
     require(location['run_id']==s['run_id'] and location['attempt']==s['run_attempt'], 'prior terminal run differs')
-    proof=provenance.authenticated_document(registry.api,before['deployment'],location,
+    authority=registry.api
+    if prior['candidate']['name']=='direct-push':
+        from trial_host_case import _ClosedDirectAPI
+        authority=_ClosedDirectAPI(authority)
+    proof=provenance.authenticated_document(authority,before['deployment'],location,
                                           'trial-case-terminal',record['task_id'],clock())
     value=proof['document']
     if prior['candidate']['name']=='context-transition':
@@ -55,15 +59,19 @@ def _predecessor(original,registry,record,history,index,before,clock):
         from trial_broker_positive import reconstruct
         return reconstruct(original,registry,record,prior,value,before,clock,proof)
     revocation=['revocation'] if prior['candidate']['name']=='revoked-qualification' else []
-    object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split()+revocation,'prior closed terminal')
+    direct=['recovery','host_receipt'] if prior['candidate']['name']=='direct-push' else []
+    object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split()+revocation+direct,'prior closed terminal')
     if revocation:
         from trial_broker_case import history_revocation
         history_revocation(original,record,prior,value['revocation'])
-    require(type(value['schema_version']) is int and value['schema_version']==1 and value['kind']=='trial-case-terminal' and
+    require(type(value['schema_version']) is int and value['schema_version']==(2 if direct else 1) and value['kind']=='trial-case-terminal' and
             value['request_digest']==digest(prior['request']) and value['certificate_digest']==digest(prior['certificate']) and
             type(value['completed']) is int and proof['job_started']<=value['completed']<=proof['artifact_created']<=proof['job_completed'],
             'prior terminal substituted case or interval')
     pending=registry.authenticate_setup_transition(before,{OPERATION:prior['pending']},value['before'])
+    if direct:
+        from trial_host_case import direct_terminal
+        direct_terminal(registry.api,record,prior,value,proof,clock())
     from operation_fence import terminal
     receipt=terminal(value['after']['fence']['completed'][-1])
     require(receipt['kind']=='not-submitted' and receipt['operation_id']==prior['request']['operation_id'] and

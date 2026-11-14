@@ -68,6 +68,13 @@ def fixture(kind='not-submitted'):
 
 
 class BrokerFinalizeContracts(unittest.TestCase):
+    def test_ordinary_terminal_cannot_export_direct_push_evidence(self):
+        controller, host, api, source, store = fixture()
+        after = controller._finalize('1'*32, 1, 77)
+        with self.assertRaises(Refusal): controller._direct_evidence('1'*32, 1, after)
+        with self.assertRaises(Refusal): controller._finalize('invalid', 1, 77)
+        with self.assertRaises(Refusal): controller._direct_evidence('1'*32, 1, after)
+
     def test_public_hold_precedes_all_reads_and_mutations(self):
         controller, host, api, source, store = fixture()
         before = api.calls

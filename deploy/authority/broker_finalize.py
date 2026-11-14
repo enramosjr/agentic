@@ -20,6 +20,13 @@ class Finalizer:
         self.registry, self.authority, self.source = registry, authority, source
         self.pin, self.environment = copy.deepcopy(recovery_pin), dict(environment)
         self.clock = clock or (lambda: int(time.time()))
+        self._direct_terminal = None
+
+    def _direct_evidence(self, operation_id, sequence, result):
+        retained = self._direct_terminal
+        require(retained is not None and retained[:3] == (operation_id, sequence, result),
+                'exact acknowledged direct-push finalization required')
+        return copy.deepcopy(retained[3])
 
     def finalize(self, operation_id, sequence, broker_job_id):
         authority_release.authorize('broker-merge')
@@ -53,6 +60,7 @@ class Finalizer:
         return dict(run_id=run_id, attempt=attempt, job_id=job['id'], workflow_sha=p['workflow_sha'])
 
     def _finalize(self, operation_id, sequence, broker_job_id, _admission=None):
+        self._direct_terminal = None
         require(isinstance(operation_id, str) and re.fullmatch('[0-9a-f]{32}', operation_id) and
                 positive(sequence) and positive(broker_job_id), 'exact terminal operation required')
         recovery = self._admit()  # Before reading the administrative registry.
@@ -93,7 +101,7 @@ class Finalizer:
                 'contradictory broker terminal evidence; preserve the fence')
         facts = None
         if positive_no_dispatch:
-            receipts.authenticate(locators['host-denied'] if host_denied else locators['not-submitted'])
+            no_dispatch = receipts.authenticate(locators['host-denied'] if host_denied else locators['not-submitted'])
             kind = 'not-submitted'
         else:
             require(locators['dispatch'] is not None, 'no positive terminal evidence; preserve the fence')
@@ -140,5 +148,9 @@ class Finalizer:
                             s=_admission.request['snapshot']
                             require(current_snapshot(Readers(_admission.source,self.authority,d),d,s['pr'],s['run_id'],s['run_attempt'])==s,
                                     'historical source moved before terminal effect')
-            return self.registry.finalize_operation(before['branch_head'], terminal, before_effect=guard)
+            result = self.registry.finalize_operation(before['branch_head'], terminal, before_effect=guard)
+            if _admission.candidate['name']=='direct-push':
+                self._direct_terminal = (operation_id, sequence, copy.deepcopy(result),
+                                         copy.deepcopy(dict(recovery=envelope,host_receipt=no_dispatch)))
+            return result
         return self.registry.finalize_operation(before['branch_head'], terminal)

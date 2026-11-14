@@ -962,6 +962,32 @@ It does not require a live case admission, mint, restage or dispatch. The
 source/local fixtures model queued jobs and CLOSED artifact
 transport. They do not establish separate hosted processes or credential isolation,
 and no real workflow is dispatched by this build.
+The held `trial_terminal.Native` collector connects the existing first
+`direct-push` launch to native terminal observation. It derives the original
+attempt-1 run from the retained consumed launch and bound controller, selects the
+exact CLOSED finalizer and terminal artifact from bounded unique inventories,
+and uses the existing authenticated observation before revoking the exact retained
+read capability. Pending or invalid evidence preserves that capability; standalone
+cleanup remains available after expiry. Failed persistence or cleanup cannot return
+collector success, and an already-terminal journal cannot acknowledge an uncertain
+write. The collector never opens active work, launches jobs or renews deadlines.
+For the first `direct-push` case, the finalizer now emits a strict v2 terminal
+carrying the exact recovery envelope and authenticated host receipt. The envelope's
+digest must match the completed fence receipt. Native collection reauthenticates
+the CLOSED intent, host-denial, acceptance and broker archives, exact coding actor,
+protected-update denial, operation and candidate, and current acceptance, rules,
+human review and unchanged target. Its read-only candidate check validates the
+original export without minting a coding token. Collection reports
+`intended_denial_verified` only after terminal persistence and exact-token cleanup
+both acknowledge success. Legacy direct-push v1 terminals remain held for new
+collection and progression; no migration or adoption is provided. Other terminal
+kinds retain their existing formats. Historical progression authenticates the
+closed evidence at its original event times and grants no current freshness or
+active admission. These source-local fixtures model external transport and denial;
+they do not establish real hosted qualification.
+ACK-loss fixtures model restart policy; separate isolated bundle imports do
+not establish native-owner reconstruction or hosted process/credential isolation.
+All public collection and cleanup paths remain release-held.
 Legacy local fixtures drive authenticated job/closed-artifact readers, App
 proofs, verifier cleanup, effective controls and the actual merge request encoder,
 with GitHub/OCI/kernel/model boundaries modeled. The separate strict lane uses

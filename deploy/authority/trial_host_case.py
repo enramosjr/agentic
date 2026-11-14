@@ -83,6 +83,8 @@ def _case(admission, authority):
 
 def _identity(admission):
     b, s, _ = _context(admission)
+    if admission.candidate['name']=='direct-push':
+        return _direct_identity(b,admission.request,admission.value['certificate'])
     return dict(schema_version=1,kind='trial-host-denial',case=admission.candidate['name'],
         operation_id=admission.request['operation_id'],sequence=b['fence']['sequence'],
         operation_digest=digest(b['fence']['pending']),configuration_revision=b['configuration_revision'],
@@ -96,6 +98,143 @@ def _request(d, s, name):
                     method='PUT',data=dict(sha=s['head'],merge_method='merge'))
     return dict(path='/repos/'+d['policy']['repository']+'/git/refs/heads/'+quote(d['policy']['target'],safe=''),
                 method='PATCH',data=dict(sha=s['merge'],force=False))
+
+
+class _ClosedDirectAPI:
+    """Bound all new CLOSED inventory reads without granting write methods."""
+    def __init__(self, api):
+        self.api = api
+
+    def get(self, path):
+        return self.api.get(path)
+
+    def fetch(self, path, **kwargs):
+        require(kwargs.get('method','GET')=='GET','closed evidence transport is read-only')
+        return self.api.fetch(path,**kwargs)
+
+    def pages(self, path, collection=None):
+        entries=self.api.pages(path,collection) if collection is not None else self.api.pages(path)
+        if collection in ('jobs','artifacts'):
+            require(isinstance(entries,list) and len(entries)<=10000 and
+                    all(isinstance(v,dict) and positive(v.get('id')) for v in entries) and
+                    len({v['id'] for v in entries})==len(entries),'bounded unique closed direct-push inventory required')
+        return entries
+
+
+def _direct_identity(binding, request, certificate):
+    return dict(schema_version=1,kind='trial-host-denial',case='direct-push',
+        operation_id=request['operation_id'],sequence=binding['fence']['sequence'],
+        operation_digest=digest(binding['fence']['pending']),configuration_revision=binding['configuration_revision'],
+        deployment_digest=binding['deployment_digest'],certificate_digest=digest(certificate),snapshot=request['snapshot'])
+
+
+def _direct_receipt(value, binding, job_id, now):
+    from authority_protocol import fingerprint
+    object_fields(value,('schema_version kind operation_id sequence job_id issued host host_digest').split(),'closed host receipt')
+    op=binding['fence']['pending']
+    require(op is not None and type(value['schema_version']) is int and value['schema_version']==1 and
+            value['kind']=='host-denied' and value['operation_id']==op['operation_id'] and
+            type(value['sequence']) is int and value['sequence']==binding['fence']['sequence'] and
+            positive(job_id) and value['job_id']==job_id and positive(value['issued']) and
+            op['created']<=value['issued']<=now and fingerprint(value['host_digest']),'closed host receipt operation differs')
+    object_fields(value['host'],('run_id attempt job_id artifact_id').split(),'closed host locator')
+    require(all(positive(v) for v in value['host'].values()) and value['host']['run_id']==op['run_id'] and
+            value['host']['attempt']==op['attempt'],'closed host receipt run differs')
+
+
+def _direct_outcome(binding, record, retained, authority, locator, now, source=None):
+    """Validate immutable direct-push proof; optional source adds current freshness."""
+    import checks
+    from service import _locator
+    from trusted_ci_deployment import timestamp
+    authority=_ClosedDirectAPI(authority)
+    d, request, candidate = binding['deployment'],retained['request'],retained['candidate']
+    s, key = request['snapshot'],record['task_id']
+    require(candidate['name']=='direct-push' and locator['run_id']==s['run_id'] and
+            locator['attempt']==s['run_attempt']==1,'exact first direct-push evidence required')
+    proof=provenance.authenticated_document(authority,d,locator,'trial-host-denial',key,now)
+    value=proof['document']; identity=_direct_identity(binding,request,retained['certificate'])
+    object_fields(value,(*identity,'job_id','intent','record','observation','completed'),'closed direct-push outcome')
+    require(digest({k:value[k] for k in identity})==digest(identity) and positive(value['job_id']) and
+            value['job_id']==proof['job_id'] and positive(value['completed']) and
+            proof['job_started']<=value['completed']<=proof['artifact_created']<=proof['job_completed'],
+            'direct-push identity or interval differs')
+    intent_location=_locator(authority,d,s['run_id'],1,'trial-host-intent',key)
+    intent=provenance.authenticated_document(authority,d,intent_location,'trial-host-intent',key,now)
+    expected=dict(identity,kind='trial-host-intent',job_id=proof['job_id'],
+                  request=_request(d,s,'direct-push'),issued=value['intent'].get('issued'))
+    require(digest(intent['document'])==digest(value['intent'])==digest(expected) and intent['job_id']==proof['job_id'] and
+            positive(expected['issued']) and proof['job_started']<=expected['issued']<=intent['artifact_created']<=value['completed'],
+            'direct-push intent differs or postdates attempt')
+    observation=value['observation']
+    object_fields(observation,('snapshot checks rules reviews synthetic_commit request actor_id before after '
+                              'http_status denial_category denied_obligation acceptance').split(),'closed direct-push observation')
+    actor=record['pair']['identities']['apps']['coding']['actor_id']; commit=observation['synthetic_commit']
+    require(observation['snapshot']==s and observation['request']==expected['request'] and
+            positive(observation['actor_id']) and observation['actor_id']==actor and
+            observation['before']==observation['after']==s['base'] and type(observation['http_status']) is int and
+            observation['http_status'] in (403,405,422) and observation['denial_category']=='protected_update' and
+            observation['denied_obligation'] is None and commit['sha']==s['merge'] and
+            [v['sha'] for v in commit['parents']]==[s['base'],s['head']] and
+            commit['tree']['sha']==candidate['submitted']['tree'],'intended direct-push denial was not established')
+    expected_record=dict(name='direct-push',pr=s['pr'],head=s['head'],base=s['base'],merge=s['merge'],
+        tree=commit['tree']['sha'],before=s['base'],after=s['base'],actor_id=actor,request_sent=True,
+        http_status=observation['http_status'],denial_category='protected_update',denied_obligation=None,broker_refusal=None,
+        merge_commit=None,merge_parents=[],merge_tree=None,evidence_digest=digest(observation))
+    require(digest(value['record'])==digest(expected_record),'closed direct-push record differs')
+    acceptance=observation['acceptance']; coordinates=acceptance['coordinates']; saved=acceptance['proof']
+    evidence_location={k:saved[k] for k in ('run_id','attempt','job_id','artifact_id')}
+    evidence=provenance.authenticated_document(authority,d,evidence_location,'evidence',s['pr'],now)
+    require(evidence==saved and evidence['run_id']==s['run_id'] and evidence['attempt']==1 and
+            evidence['job_completed']<=expected['issued'],
+            'closed direct-push acceptance producer differs')
+    event=expected['issued']
+    provenance.validate_evidence(evidence['document'],d,s,binding['configuration_revision'],evidence['job_id'],event)
+    task=dict(kind='native-trial-case-task',submitted=candidate['submitted'],worker=retained['worker'],
+              certificate_digest=digest(retained['certificate']))
+    require(coordinates==dict(configuration_revision=binding['configuration_revision'],operation=binding['fence']['pending'],
+        sequence=binding['fence']['sequence'],issuer_installation_id=record['pair']['identities']['apps']['issuer']['installation_id'],
+        evidence_job_id=evidence['job_id'],evidence_digest=digest(evidence['document']),task_digest=digest(task)),
+        'closed direct-push acceptance coordinates differ')
+    external=checks.intent(d,s,coordinates,event); p=d['policy']
+    entries=observation['checks']
+    require(isinstance(entries,list),'closed direct-push checks required')
+    matches=[c for c in entries if c.get('name')==p['check_name'] and c.get('app',{}).get('id')==p['app_id'] and c.get('external_id')==external]
+    require(len(matches)==1,'exact closed direct-push issuer check required')
+    check=matches[0]
+    require(positive(check['id']) and check.get('head_sha')==s['merge'] and check.get('status')=='completed' and
+            check.get('conclusion')=='success' and coordinates['operation']['created']<=int(timestamp(check['started_at']).timestamp())<=
+            int(timestamp(check['completed_at']).timestamp())<=event and acceptance['check']==dict(check_id=check['id'],
+            external_id=external,observed=acceptance['check']['observed'],expires=min(d['expires'],coordinates['operation']['execution_deadline'])) and
+            type(acceptance['check']['observed']) is int and coordinates['operation']['created']<=acceptance['check']['observed']<=event,
+            'closed direct-push issuer acceptance differs')
+    rules=observation['rules']; require(isinstance(rules,list),'closed direct-push rules required')
+    obligations=[v for rule in rules if rule['type']=='required_status_checks' for v in rule['parameters']['required_status_checks']]
+    require(any(v['context']==p['check_name'] and v.get('integration_id')==p['app_id'] for v in obligations),
+            'closed direct-push issuer obligation missing')
+    for v in obligations:
+        require(any(c.get('name')==v['context'] and c.get('app',{}).get('id')==v.get('integration_id') and
+                    c.get('head_sha')==s['merge'] and c.get('status')=='completed' and c.get('conclusion')=='success'
+                    for c in entries),'closed direct-push competing obligation failed')
+    reviews=observation['reviews']
+    require(isinstance(reviews,list) and 0<len(reviews)<=10000 and all(isinstance(r,dict) and positive(r.get('id')) for r in reviews) and
+            len({r['id'] for r in reviews})==len(reviews) and all(r['user']['id'] in p['reviewers'] and
+            r['user']['id'] not in p['coding_actors'] and r['user']['id']!=candidate['submitted']['bot_id'] and
+            r['user'].get('type')=='User' and r['state']=='APPROVED' and r['commit_id']==s['head'] for r in reviews),
+            'closed direct-push independent human approval missing')
+    if source is not None:
+        probe=HostCases(None,source,authority,record['pair']['identities'],None,None,None,lambda:now)
+        probe.binding,probe.d=binding,d
+        case=dict(name='direct-push',snapshot=s,evidence=evidence_location,coordinates=coordinates,expected_failure=None,mutations=[],prior=None)
+        current=probe._prerequisites(case)['acceptance']
+        require(current['proof']==saved and current['coordinates']==coordinates and
+                all(current['check'][k]==acceptance['check'][k] for k in ('check_id','external_id','expires')),
+                'current direct-push acceptance differs')
+        from authority_github import Readers,current_snapshot
+        require(current_snapshot(Readers(source,authority,d),d,s['pr'],s['run_id'],1)==s and
+                source.get('/repos/'+p['repository']+'/git/ref/heads/'+quote(p['target'],safe=''))['object']['sha']==s['base'],
+                'direct-push target or candidate changed after denial')
+    return dict(locator=locator,document=value,proof={k:v for k,v in proof.items() if k!='document'})
 
 
 def _acceptance_identity(acceptance):
@@ -396,8 +535,13 @@ def read(admission, authority, locator=None):
     import service
     b, s, d = _context(admission)
     key = admission.record['task_id']
+    if admission.candidate['name']=='direct-push': authority=_ClosedDirectAPI(authority)
     if locator is None:
         locator = service._locator(authority,d,s['run_id'],s['run_attempt'],'trial-host-denial',key)
+    if admission.candidate['name']=='direct-push':
+        result=_direct_outcome(b,admission.record,admission.value,authority,locator,admission.clock(),admission.source)
+        admission.guard()
+        return result
     require(locator['run_id']==s['run_id'] and locator['attempt']==s['run_attempt'], 'host outcome belongs to another run')
     proof = provenance.authenticated_document(authority,d,locator,'trial-host-denial',key,admission.clock())
     value = proof['document']
@@ -497,3 +641,45 @@ def validate_receipt(value, admission, authority, job_id):
     require(digest(outcome['document'])==value['host_digest'] and outcome['proof']['job_completed']<=value['issued'],
             'host receipt substituted its closed outcome')
     return value
+
+
+def direct_terminal(authority, record, retained, terminal, proof, now, source=None):
+    """One CLOSED direct-push evidence chain. No Admission or live continuation."""
+    from merge_receipts import ActionsReceipts
+    from trusted_ci_deployment import timestamp
+    object_fields(terminal,('schema_version kind request_digest certificate_digest before after completed recovery host_receipt').split(),
+                  'direct-push v2 terminal')
+    require(type(terminal['schema_version']) is int and terminal['schema_version']==2 and retained['candidate']['name']=='direct-push',
+            'direct-push v2 denial evidence required; legacy terminals remain held')
+    authority=_ClosedDirectAPI(authority)
+    b=terminal['before']; d=b['deployment']; op=b['fence']['pending']; request=retained['request']
+    require(op==retained['pending']['pending'] and b['fence']==retained['pending'] and
+            request['snapshot']['run_attempt']==op['attempt']==1,'direct-push terminal pending operation differs')
+    envelope=terminal['recovery']; host=terminal['host_receipt']
+    object_fields(envelope,('schema_version kind operation_digest configuration_revision deployment_digest producer recovery artifacts facts').split(),
+                  'direct-push recovery envelope')
+    require(type(envelope['schema_version']) is int and envelope['schema_version']==2 and envelope['kind']=='broker-terminal-recovery' and
+            envelope['operation_digest']==digest(op) and envelope['configuration_revision']==b['configuration_revision'] and
+            envelope['deployment_digest']==b['deployment_digest'] and envelope['facts'] is None and
+            terminal['after']['fence']['completed'][-1]['receipt_digest']==digest(envelope),
+            'direct-push terminal receipt does not bind recovery envelope')
+    expected_recovery=dict(run_id=proof['run_id'],attempt=proof['attempt'],job_id=proof['job_id'],workflow_sha=d['policy']['workflow_sha'])
+    require(envelope['recovery']==expected_recovery and proof['run_id']==op['run_id'] and proof['attempt']==1,
+            'direct-push recovery producer differs')
+    producer=envelope['producer']
+    object_fields(producer,('id run_id head_sha conclusion completed_at').split(),'closed direct-push broker')
+    reader=ActionsReceipts._historical_host(authority,b,producer['id'],lambda:now,host)
+    job=reader.terminal_job()
+    require(producer=={k:job[k] for k in producer} and int(timestamp(job['completed_at']).timestamp())<=proof['job_started'],
+            'direct-push broker did not close before finalizer')
+    artifacts=envelope['artifacts']
+    object_fields(artifacts,('not-submitted dispatch outcome host-denied').split(),'direct-push recovery artifacts')
+    require(artifacts['host-denied'] is not None and all(artifacts[k] is None for k in ('not-submitted','dispatch','outcome')),
+            'direct-push recovery has conflicting evidence')
+    require(all(not reader._matches(k) for k in ('gate','control-ready','not-submitted','dispatch','outcome')),
+            'contradictory direct-push broker inventory')
+    require(reader.authenticate(artifacts['host-denied'])==host,'direct-push broker receipt differs')
+    outcome=_direct_outcome(b,record,retained,authority,host['host'],now,source)
+    require(digest(outcome['document'])==host['host_digest'] and outcome['proof']['job_completed']<=host['issued']<=
+            int(timestamp(job['completed_at']).timestamp()),'direct-push broker substituted host evidence')
+    return outcome

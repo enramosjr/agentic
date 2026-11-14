@@ -96,6 +96,18 @@ class ActionsReceipts:
         return result
 
     @classmethod
+    def _historical_host(cls, api, binding, job_id, clock, document):
+        """One exact CLOSED host receipt; never active admission or creation."""
+        from trial_host_case import _ClosedDirectAPI, _direct_receipt
+        require(binding['deployment']['state']=='qualification' and binding['deployment']['qualification'] is None,
+                'unqualified historical host binding required')
+        _direct_receipt(document,binding,job_id,clock())
+        result=cls(_ClosedDirectAPI(api),lambda:copy.deepcopy(binding),job_id,clock,recovery=True)
+        result._context_history={'host-denied':copy.deepcopy(document)}
+        result.terminal_job()
+        return result
+
+    @classmethod
     def _historical_context(cls, api, binding, job_id, clock, documents):
         """Read-only archive authentication after immutable history validation."""
         require(set(documents)=={'trial-preloaded','trial-context-refusal'} and positive(job_id),

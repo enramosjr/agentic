@@ -976,7 +976,8 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
             with _admin_authority(root,api,registry,before,identities,token_factory,
                                   before_effect=admitted.guard if admitted.candidate['name'] in ('context-transition','positive') else None) as writer:
                 admitted.guard()
-                result=Finalizer(writer,api,source,pin,environment,clock)._finalize(
+                finalizer=Finalizer(writer,api,source,pin,environment,clock)
+                result=finalizer._finalize(
                     admitted.request['operation_id'],admitted.request['sequence'],
                     _case_broker_job(api,admitted),_admission=admitted)
             from trial_host_case import selected
@@ -984,6 +985,9 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
             if selected(admitted) or trial_broker_case.selected(admitted) or historical(admitted.candidate) or admitted.candidate['name']=='positive':
                 document=dict(schema_version=1,kind='trial-case-terminal',request_digest=digest(admitted.request),
                     certificate_digest=digest(admitted.value['certificate']),before=before,after=result,completed=clock())
+                if admitted.candidate['name']=='direct-push':
+                    document.update(schema_version=2,**finalizer._direct_evidence(
+                        admitted.request['operation_id'],admitted.request['sequence'],result))
                 if admitted.candidate['name']=='revoked-qualification':
                     document['revocation']=copy.deepcopy(admitted._revocation_links)
                 if admitted.candidate['name']=='context-transition':

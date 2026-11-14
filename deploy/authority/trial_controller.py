@@ -161,7 +161,15 @@ class Native:
         completed=native._worker_completion(admission.record,prompt,admission.source)
         require(completed['result']==admission.value['worker'], 'retained CLOSED worker changed')
         admission.worker=completed
-        admission._candidate(self.candidates)
+        if name=='direct-push':
+            admission._direct_terminal_candidate()
+        else:
+            admission._candidate(self.candidates)
+        if name=='direct-push':
+            from trial_host_case import direct_terminal
+            direct_terminal(admission.registry.api,admission.record,admission.value,
+                            admission.terminal_proof['document'],dict(admission.terminal_proof['producer']),
+                            admission.clock(),admission.source)
         from authority_github import Readers,current_snapshot
         s=admission.request['snapshot']; d=admission.binding['deployment']
         require(current_snapshot(Readers(admission.source,admission.registry.api,d),d,s['pr'],s['run_id'],s['run_attempt'])==s,
@@ -318,11 +326,16 @@ class Admission:
             s=self.request['snapshot']
             require(terminal_locator['run_id']==s['run_id'] and terminal_locator['attempt']==s['run_attempt'],
                     'terminal producer belongs to another case run')
-            proof=authenticated_document(self.registry.api,self.binding['deployment'],terminal_locator,
+            authority=self.registry.api
+            if self.candidate['name']=='direct-push':
+                from trial_host_case import _ClosedDirectAPI
+                authority=_ClosedDirectAPI(authority)
+            proof=authenticated_document(authority,self.binding['deployment'],terminal_locator,
                                          'trial-case-terminal',self.record['task_id'],self.clock())
             value=proof['document']
             revocation=['revocation'] if self.candidate['name']=='revoked-qualification' else []
-            object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split()+revocation,'closed case terminal')
+            direct=['recovery','host_receipt'] if self.candidate['name']=='direct-push' else []
+            object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split()+revocation+direct,'closed case terminal')
             if revocation:
                 from trial_broker_case import history_revocation
                 from trial_case import read as read_case
@@ -330,7 +343,7 @@ class Admission:
                 case,record=read_case(c.session.registry,publication['value']['revision_bound'],self.clock)
                 history_revocation(c.session.registry,record,case,value['revocation'])
                 self._revocation_links=copy.deepcopy(value['revocation'])
-            require(type(value['schema_version']) is int and value['schema_version']==1 and value['kind']=='trial-case-terminal' and
+            require(type(value['schema_version']) is int and value['schema_version']==(2 if direct else 1) and value['kind']=='trial-case-terminal' and
                     value['request_digest']==digest(self.request) and value['certificate_digest']==digest(self.value['certificate']) and
                     type(value['completed']) is int and proof['job_started']<=value['completed']<=proof['artifact_created']<=proof['job_completed'],
                     'closed terminal substituted case or producer interval')
@@ -499,6 +512,42 @@ class Admission:
             require(self.value['certificate'] is None and self.value['pending'] is None and self.request is None and
                     self.binding == self.baseline, 'unowned trial preparation state')
         self.local_guard(binding)
+
+    def _direct_terminal_candidate(self):
+        """Read-only counterpart to submission readback; no coding token mint."""
+        from datetime import datetime, timezone
+        import submission
+        require(self._terminal_read_only and self.candidate['name']=='direct-push',
+                'first-case terminal inspection only')
+        candidates=self.value['candidates']['value']
+        require(candidates['pending'] is None and len(candidates['candidates'])==len(candidates['requests']) and
+                self.candidate in candidates['candidates'],'complete unchanged candidate preparation required')
+        request=candidates['requests'][candidates['candidates'].index(self.candidate)]
+        submitted=self.candidate['submitted']; d=self.record['trial']['deployment']; p=d['policy']
+        manifest=submission.export_manifest(self.worker['files'])
+        expected={name:{'mode':item['mode'],'sha':item['sha']} for name,item in manifest.items()}
+        slug,bot=d['resources']['coding_slug'],d['resources']['coding_bot_id']
+        from urllib.parse import quote
+        actor=self.source.get('/users/'+quote(slug+'[bot]',safe=''))
+        require(actor['id']==int(bot) and actor.get('type')=='Bot' and p['coding_actors']==[int(bot)],
+                'terminal coding bot identity changed')
+        self.task(self.binding,self.request['snapshot'],self.value['worker']['locator'],submitted['task_id'])
+        root='/repos/'+p['repository']; commit=self.source.get(root+'/git/commits/'+submitted['head'])
+        author=dict(name=slug+'[bot]',email=bot+'+'+slug+'[bot]@users.noreply.github.com',
+                    date=datetime.fromtimestamp(request['issued'],timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
+        require(commit.get('sha')==submitted['head'] and commit.get('message')==
+                'AGENTIC task '+request['task_id']+'\n\n'+digest(dict(request=request,files=manifest)) and
+                commit.get('author')==author==commit.get('committer') and
+                [v['sha'] for v in commit['parents']]==[request['base']] and
+                submission.tree_files(self.source,root,commit['tree']['sha'])==expected and
+                submitted['export_digest']==digest(manifest),'terminal candidate differs from authorized export')
+        from urllib.parse import urlencode
+        query=urlencode(dict(state='all',head=p['repository'].split('/')[0]+':'+submitted['branch'],base=p['target']))
+        prs=self.source.pages(root+'/pulls?'+query)
+        require(len(prs)==1 and prs[0]['number']==submitted['pr'] and
+                '<!-- agentic-task:'+digest(request)+' -->' in prs[0].get('body',''),
+                'terminal task pull request differs')
+        self.guard()
 
     def _candidate(self, preparer):
         import submission
