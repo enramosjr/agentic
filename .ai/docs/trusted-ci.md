@@ -151,6 +151,38 @@ with credentials, identities or policy changes.
 
 ## Hosted qualification and read-only inspection
 
+The native trial remains release-held. Its separate source-only acceptance lane
+requires Linux root, Git, an existing Docker or Podman runtime, the declared
+optional authority-auth dependencies, and an already cached image pinned by
+digest. From the framework source, run:
+
+```text
+python3 deploy/authority/test_trial_positive_runtime.py --required --source-root /path/to/clean/source --source-pin COMMIT --runtime podman --image IMAGE@sha256:DIGEST
+```
+
+The source pin selects the committed framework KIT exported by the original
+CLOSED worker. The restricted initial repository seed stays separate. A fixed
+native eligibility producer executes all four unchanged critical checks over
+that export before any of the sixteen original reservations are created. Its
+immutable approval permits only the six named historical or fixture tree choices;
+it cannot authorize a current positive check. The three negative specimens
+require exact approved byte/mode deltas and conditional updates of their original
+reserved branches. The positive reservation requires the full ordered fifteen-case
+history, current controls and exact-head independent review, original-run one-shot
+broker/finalizer jobs, and actual merge parents, tree and target readback. Terminal
+recovery binds the full canonical envelope to the ordinary v2 registry receipt.
+Missing evidence or an unknown effect without exact readback preserves the hold.
+
+The lane selects a new finite original lifetime before setup and consumes real
+elapsed verification time without renewing deadlines or increasing policy limits.
+Add `--lost-merge-ack` for a separate fresh trial whose actual merge response is
+lost; it must reconcile without another merge request. `--eligibility` is only an
+isolated specimen diagnostic, and `--diagnostic` stops at the original CLOSED
+worker. Neither can satisfy the required sixteen-case acceptance lane. Linux
+critical execution is real; GitHub, Actions, protected-host and native transport
+boundaries in this lane are modeled. No local result grants hosted qualification,
+production activation, release, OCI promotion, or permission to lift existing holds.
+
 Before claiming enforcement, independently provision and explicitly authorize a
 disposable repository with the same policy/checker/image, identities and effective
 control semantics. Explicitly authorize only that disposable target by setting

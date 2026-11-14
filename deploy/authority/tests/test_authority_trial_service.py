@@ -255,8 +255,9 @@ class TrialService(unittest.TestCase):
                 head = coding.commits[receipts[0]['submitted']['head']]
                 self.assertEqual([p['sha'] for p in head['parents']],[base])
                 exported = coding.trees[head['tree']['sha']]
-                self.assertEqual(exported['result.bin'][0],'100755')
-                self.assertEqual(coding.blobs[exported['result.bin'][1]],b'\x00\xfftrial result')
+                specimen=(export_files or {}).get('result.bin',dict(content=b'\x00\xfftrial result',executable=True))
+                self.assertEqual(exported['result.bin'][0],'100755' if specimen['executable'] else '100644')
+                self.assertEqual(coding.blobs[exported['result.bin'][1]],specimen['content'])
                 if latency:
                     self.assertLess(clock[0],1303)  # Original App proof expiry; no window extension.
                 else:

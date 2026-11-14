@@ -20,28 +20,41 @@ def validate(gate, binding, now):
 
 
 def _validate(gate, binding, now, admission=None, clock=None):
+    qualification = None
     if admission is not None:
         from trial_controller import authenticated
         authenticated(admission, binding)
         admission.guard(binding)
+        if admission.candidate['name']=='positive' and clock is not None:
+            from trial_broker_positive import require_broker
+            require_broker(admission)
         if clock is not None:
             from trial_broker_case import live_certificate
             live_certificate(admission,admission.registry.api)
+        qualification = admission.qualification(binding)
+    return _validate_binding(gate,binding,now,qualification,clock)
+
+
+def _validate_binding(gate, binding, now, qualification=None, clock=None):
+    """Pure semantics for already authenticated data; never dispatch authority.
+
+    Historical native readers pass their authenticated exact certificate here.
+    Live dispatch always enters _validate and authenticates an actual admission.
+    """
     """Check exact authenticated gate/fence bindings and remaining dispatch time."""
     object_fields(gate, FIELDS, 'broker authorization')
     d = validate_deployment(binding['deployment'])
     fence = validate_fence(binding['fence'])
     operation = fence['pending']
     require(type(gate['schema_version']) is int and gate['schema_version'] == 2 and
-            type(now) is int and (admission is not None or d['state'] == 'active') and operation is not None and operation['kind'] == 'merge',
+            type(now) is int and (qualification is not None or d['state'] == 'active') and operation is not None and operation['kind'] == 'merge',
             'active deployment and pending merge operation required')
     require(positive(gate['sequence']) and gate['sequence'] == fence['sequence'], 'merge fence sequence differs')
     for key in ('operation_id', 'repository_id', 'target', 'configuration_revision', 'deployment_digest',
                 'pr', 'head', 'base', 'merge', 'workflow_sha', 'run_id', 'attempt'):
         require(gate[key] == operation[key], 'merge operation binding differs: ' + key)
     p = d['policy']
-    qualification = admission.qualification(binding) if admission is not None else None
-    qualification_digest = qualification['qualification_digest'] if admission is not None else d['qualification']
+    qualification_digest = qualification['qualification_digest'] if qualification is not None else d['qualification']
     require(gate['configuration_revision'] == binding['configuration_revision'] and
             gate['deployment_digest'] == binding['deployment_digest'] == digest(d) and
             gate['authority_repository_id'] == p['authority_repository_id'] and
@@ -64,7 +77,7 @@ def _validate(gate, binding, now, admission=None, clock=None):
             gate['expires'] - now >= 60 and operation['created'] <= gate['issued'] and
             operation['execution_deadline'] - now >= 60, 'broker authorization is stale, future or too short')
     object_fields(gate['valid_until'], EXPIRING, 'expiring broker proofs')
-    if admission is not None:
+    if qualification is not None:
         require(gate['valid_until']['qualification'] <= qualification['expires'],
                 'trial authorization extended an admitted capability expiry')
     require(gate['valid_until']['deployment'] == d['expires'] and
@@ -84,6 +97,10 @@ def _dispatch(gate, read_binding, receipts, source, clock, admission=None):
     capability is artifact-only; authenticate checks pinned job/run provenance.
     The caller cannot retry an uncertain operation with the same artifact name.
     """
+    if admission is not None:
+        require(admission.candidate['name']=='positive','only the original positive reservation may enter native dispatch')
+        from trial_broker_positive import require_broker
+        require_broker(admission)
     binding = read_binding()
     _validate(gate, binding, clock(), admission, clock=clock)
     intent = {'schema_version': 2, 'kind': 'dispatch', 'gate_digest': digest(gate),

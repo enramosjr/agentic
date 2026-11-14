@@ -24,6 +24,20 @@ MAX_DOCUMENT = 512 * 1024
 
 def trial_reference(record):
     kind = record.get('kind')
+    if kind=='native-trial-eligibility':
+        require(record.get('name')=='eligibility' and record.get('execution') is None,'fixed native eligibility publication required')
+        return 'agentic-trial-'+record['task_id']+'-eligibility'
+    if kind=='native-trial-positive-job':
+        require(record.get('name')=='positive' and record.get('role') in ('broker','finalize') and record.get('execution') is None,
+                'fixed native positive job binding required')
+        return 'agentic-trial-'+record['task_id']+'-positive-job-'+record['role']
+    if kind=='native-trial-positive-grant':
+        require(record.get('name')=='positive' and record.get('execution') is None,'fixed native positive grant required')
+        return 'agentic-trial-'+record['task_id']+'-positive-grant'
+    if kind in ('native-trial-mutation-intent','native-trial-mutation-result'):
+        require(record.get('name') in ('bad-acceptance','replaced-checks','forged-records') and
+                record.get('execution') is None, 'fixed native mutation publication required')
+        return 'agentic-trial-'+record['task_id']+'-'+record['name']+'-'+kind.removeprefix('native-trial-')
     native = {'native-trial-context-intent':'context-intent', 'native-trial-context-complete':'context-complete',
               'native-trial-human-intent':'human-intent', 'native-trial-human-result':'human-result',
               'native-trial-revocation-intent':'revocation-intent', 'native-trial-revocation-result':'revocation-result',
@@ -36,7 +50,7 @@ def trial_reference(record):
         return 'agentic-trial-'+record['task_id']+'-'+record['name']+'-'+native[kind]
     require(kind in ('native-trial-handoff','trial-case-handoff','trial-case-ready'), 'unknown native publication kind')
     suffix = '-case' if record.get('kind') == 'trial-case-handoff' else '-case-ready' if record.get('kind') == 'trial-case-ready' else ''
-    if suffix and record.get('candidate',{}).get('name') in ('coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head','new-base','policy-transition','human-update','revoked-qualification','context-transition'):
+    if suffix and record.get('candidate',{}).get('name') in ('coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head','new-base','policy-transition','human-update','revoked-qualification','context-transition','positive'):
         suffix += '-'+record['candidate']['name']
         if record['candidate'].get('transition',{}).get('intent',{}).get('phase')=='prior': suffix += '-prior'
     return 'agentic-trial-' + record['task_id'] + suffix + ('-execution' if record['execution'] else '')

@@ -4,7 +4,6 @@ import copy
 import hashlib
 import io
 import json
-import sys
 import tarfile
 import unittest
 import zipfile
@@ -160,9 +159,9 @@ class Connected:
         finally:
             next(j for j in self.remote.jobs if j['name']==name).update(status='completed',conclusion='success',completed_at=stamp(self.clock[0]))
 
-    def prepare(self, before_fence=None):
+    def prepare(self, before_fence=None, name='positive'):
         import trial_controller
-        self.admission = trial_controller.Native(self.preparer)._open('prompt','positive',self.source)
+        self.admission = trial_controller.Native(self.preparer)._open('prompt',name,self.source)
         self.binding = self.registry.binding()
         candidate = self.admission.candidate['submitted']
         pr = next(v for v in self.source.prs if v['number'] == candidate['pr'])
@@ -217,70 +216,44 @@ class TrialController(unittest.TestCase):
     configured = candidates_fixture.Candidates.configured
     exercise = candidates_fixture.Candidates.exercise
     prepare = candidates_fixture.Candidates.prepare
-    def test_native_trial_consumes_shared_graph_and_recovers_actual_merge(self):
+    def test_positive_cannot_skip_the_original_ordered_history(self):
         def check(*args):
             f = Connected(self,args)
             origin = f.origin.binding()
-            f.prepare()
             before = f.registry.binding()
-            self.assertEqual(before['deployment']['state'],'qualification')
-            self.assertIsNone(before['deployment']['qualification'])
-            f.published()
-            with patch.object(merge_transport,'isolated',side_effect=f.transport): outcome=f.run('broker')
-            self.assertEqual(outcome['state'],'submitted')
-            self.assertEqual(len(f.merges),1)
-            broker=next(j for j in f.remote.jobs if j['name'].startswith('broker ('))
-            broker.update(status='completed',conclusion='success',completed_at=stamp(f.clock[0]))
-            env=f.job('finalize','finalize')
-            result=f.admission.finalize(env,broker['id'])
-            self.assertIsNone(result['fence']['pending'])
-            self.assertEqual(result['fence']['completed'][-1]['kind'],'merged')
-            self.assertEqual(result['deployment'],before['deployment'])
+            with self.assertRaisesRegex(Refusal,'owned independently observed first terminal'): f.prepare()
+            self.assertEqual(f.registry.binding(),before)
             self.assertEqual(f.origin.binding(),origin)
-            with self.assertRaises(Refusal): f.run('broker')
-            actual=f.source.refs['main']
-            self.assertEqual(f.source.commits[actual]['tree']['sha'],f.admission.candidate['submitted']['tree'])
-            self.assertNotEqual(actual,f.admission.request['snapshot']['merge'])
-            return actual
+            self.assertEqual(f.merges,[])
+            self.assertEqual(f.remote.artifacts,[])
         self.exercise(continuation=check)
 
-    def test_lost_merge_ack_recovers_in_fresh_native_instance_without_dispatch_replay(self):
+    # Native positive success and unknown-merge recovery require the explicit
+    # strict16 runtime lane. Ordinary denial, stale controls and uncertain merge
+    # mechanics remain covered by test_authority_broker_evidence,
+    # test_authority_merge_window and test_authority_broker_finalize.
+
+    def test_unknown_ready_root_ack_cannot_be_adopted_by_native_reentry(self):
         def check(*args):
             import trial_controller
-            f=Connected(self,args); f.prepare(); f.published(); f.lose_merge_ack=True
-            with patch.object(merge_transport,'isolated',side_effect=f.transport): result=f.run('broker')
-            self.assertEqual(result['state'],'unknown'); self.assertEqual(len(f.merges),1)
-            f.admission=trial_controller.Native(f.preparer)._open('prompt','positive',f.source)
-            with self.assertRaises(Refusal): f.run('broker')
-            broker=next(j for j in f.remote.jobs if j['name'].startswith('broker ('))
-            after=f.admission.finalize(f.job('finalize','finalize'),broker['id'])
-            self.assertEqual(after['fence']['completed'][-1]['kind'],'merged')
-            self.assertIsNone(after['fence']['pending']); self.assertEqual(len(f.merges),1)
-            return f.source.refs['main']
-        self.exercise(continuation=check)
-
-    def test_withdrawn_review_records_genuine_no_dispatch_and_finalizes(self):
-        def check(*args):
-            f=Connected(self,args); f.prepare(); f.published(); f.reviews=[]
-            with patch.object(merge_transport,'isolated',side_effect=AssertionError('must not dispatch')),self.assertRaises(Refusal): f.run('broker')
-            self.assertEqual(f.merges,[])
-            names=[a['name'] for a in f.remote.artifacts]
-            self.assertTrue(any(n.endswith('-not-submitted') for n in names))
-            self.assertFalse(any(n.endswith('-dispatch') for n in names))
-            broker=next(j for j in f.remote.jobs if j['name'].startswith('broker ('))
-            environment=f.job('finalize','finalize')
-            pending=f.registry.binding()
-            for fault in ('missing','wrong-runtime'):
-                bad=copy.deepcopy(environment)
-                if fault=='missing': bad.pop('AGENTIC_RECOVERY_PIN')
-                else:
-                    pin=json.loads(bad['AGENTIC_RECOVERY_PIN']); pin['workflow_sha']='0'*40
-                    bad['AGENTIC_RECOVERY_PIN']=json.dumps(pin)
-                with self.assertRaises(Refusal): f.admission.finalize(bad,broker['id'])
-                self.assertEqual(f.registry.binding(),pending)
-            after=f.admission.finalize(environment,broker['id'])
-            self.assertIsNone(after['fence']['pending'])
-            self.assertEqual(after['fence']['completed'][-1]['kind'],'not-submitted')
+            import trial_storage
+            f=Connected(self,args); c=f.native.provision
+            journal=c.store(c.root/'trial-controller'); write=journal.write
+            def lost(expected,value):
+                write(expected,value)
+                raise OSError('unknown native READY persistence acknowledgement')
+            with patch.object(journal,'write',lost),self.assertRaises(OSError): f.prepare(name='direct-push')
+            self.assertEqual(journal.read()['value']['phase'],'ready')
+            before=f.registry.binding()
+            with self.assertRaisesRegex(Refusal,'acknowledgement unavailable'):
+                trial_controller.Native(f.preparer)._open('prompt','direct-push',f.source)
+            self.assertEqual(f.registry.binding(),before)
+            self.assertEqual(f.merges,[]); self.assertEqual(f.remote.artifacts,[])
+            # Broken control: bypassing only ACK validation makes this same
+            # visible READY root resumable, exposing the original adoption path.
+            with patch.object(trial_storage,'acknowledged',return_value=None):
+                resumed=trial_controller.Native(f.preparer)._open('prompt','direct-push',f.source)
+                self.assertEqual(resumed.value['phase'],'ready')
         self.exercise(continuation=check)
 
     def test_exact_lost_fence_ack_is_read_only_recovery_and_absence_never_replays(self):
@@ -295,20 +268,20 @@ class TrialController(unittest.TestCase):
                         if acknowledged: fetch(path,method=method,**kw)
                         raise OSError('fixture lost fence acknowledgement')
                     return fetch(path,method=method,**kw)
-                with self.assertRaises(OSError): f.prepare(lambda:setattr(f.api,'fetch',lost))
+                with self.assertRaises(OSError): f.prepare(lambda:setattr(f.api,'fetch',lost),name='direct-push')
                 if acknowledged:
-                    resumed=trial_controller.Native(f.preparer)._open('prompt','positive',f.source)
+                    resumed=trial_controller.Native(f.preparer)._open('prompt','direct-push',f.source)
                     self.assertEqual(resumed.value['phase'],'bound')
                     with self.assertRaises(Refusal): service._prepare_trial(resumed,f.job('prepare','prepare'),None)
                 else:
-                    with self.assertRaises(Refusal): trial_controller.Native(f.preparer)._open('prompt','positive',f.source)
+                    with self.assertRaises(Refusal): trial_controller.Native(f.preparer)._open('prompt','direct-push',f.source)
                 self.assertEqual(len(effects),1)
             with self.subTest(committed=acknowledged): self.exercise(continuation=check)
 
     def test_production_rejects_trial_and_plain_json_never_admits(self):
         def check(*args):
             import broker_evidence, broker_proofs, control_rendezvous, merge_window, qualification_record, trial_controller
-            f=Connected(self,args); f.prepare()
+            f=Connected(self,args); f.prepare(name='direct-push')
             b,s=f.registry.binding(),f.admission.request['snapshot']
             with self.assertRaises(Refusal): broker_proofs.current_operation(b,s)
             with self.assertRaises(Refusal): control_rendezvous.ready(b,99,'1'*32,f.clock[0])
@@ -317,57 +290,30 @@ class TrialController(unittest.TestCase):
             with self.assertRaises(Refusal): trial_controller.Admission(None,None)
             with patch.object(service,'context',return_value=(f.api,f.registry,b,f.admission.record['pair']['identities'])):
                 with self.assertRaises(Refusal): service._prepare({},dict(pr=s['pr']),clock=lambda:f.clock[0])
-            f.published()
-            with patch.object(merge_transport,'isolated',side_effect=f.transport): f.run('broker')
-            broker=next(j for j in f.remote.jobs if j['name'].startswith('broker ('))
-            from merge_receipts import ActionsReceipts
-            receipts=ActionsReceipts._create(f.api,f.registry.binding,broker['id'],lambda:f.clock[0],recovery=True,admission=f.admission)
-            gate=receipts.authenticate(receipts.find_for_recovery('dispatch'))['gate']
-            with self.assertRaises(Refusal): merge_window.validate(gate,b,f.clock[0])
             with self.assertRaises(Refusal): qualification_record.validate(f.admission.value['certificate'],b,f.admission.record['pair']['identities'],{},'0'*64,f.clock[0])
-            return f.source.refs['main']
         self.exercise(continuation=check)
 
-    def test_retained_request_substitution_and_late_stale_controls_cannot_dispatch(self):
-        for fault in ('retained-request','stale-controls','origin-moved'):
-            def check(*args):
-                import trial_controller
-                f=Connected(self,args); f.prepare()
-                if fault=='retained-request':
-                    saved=f.admission.journal.read(); changed=copy.deepcopy(saved['value'])
-                    changed['request']['snapshot']['run_id']=102
-                    f.admission.journal.write(saved,changed)
-                    with self.assertRaises(Refusal): trial_controller.Native(f.preparer)._open('prompt','positive',f.source)
-                else:
-                    f.published()
-                    def late():
-                        if fault=='stale-controls': f.clock[0]+=31
-                        else: f.origin.api.refs['main']='9'*40
-                    f.after_final=late
-                    with patch.object(merge_transport,'isolated',side_effect=AssertionError('must not dispatch')),self.assertRaises(Refusal): f.run('broker')
-                self.assertEqual(f.merges,[])
-            with self.subTest(fault=fault): self.exercise(continuation=check)
-
-    def test_final_native_authentication_latency_cannot_use_a_stale_dispatch_clock(self):
+    def test_retained_request_substitution_cannot_dispatch(self):
         def check(*args):
-            f=Connected(self,args); f.prepare(); f.published()
-            guard=f.admission.guard; validations=[0]
-            def late(*a,**kw):
-                result=guard(*a,**kw)
-                frame=sys._getframe(1)
-                if frame.f_code.co_name=='_validate' and frame.f_back.f_code.co_name=='_dispatch':
-                    validations[0]+=1
-                    if validations[0]==2: f.clock[0]+=31
-                return result
-            f.admission.guard=late
-            with patch.object(merge_transport,'isolated',side_effect=f.transport): result=f.run('broker')
-            self.assertEqual(validations[0],2,'final authentication latency was not injected')
-            self.assertEqual(len(f.merges),0)
-            self.assertEqual(result['state'],'unknown')
+            import trial_controller
+            f=Connected(self,args); f.prepare(name='direct-push')
+            saved=f.admission.journal.read(); changed=copy.deepcopy(saved['value'])
+            changed['request']['snapshot']['run_id']=102
+            f.admission.journal.write(saved,changed)
+            with self.assertRaises(Refusal): trial_controller.Native(f.preparer)._open('prompt','direct-push',f.source)
+            self.assertEqual(f.merges,[])
         self.exercise(continuation=check)
 
 
 class Holds(unittest.TestCase):
+    def test_terminal_inspection_object_cannot_authorize_active_continuation(self):
+        import trial_controller
+        admission=object.__new__(trial_controller.Admission)
+        admission._terminal_read_only=True
+        with patch.object(trial_controller.Admission,'local_guard',side_effect=AssertionError('active guard reached')):
+            with self.assertRaisesRegex(Refusal,'terminal inspection'):
+                trial_controller.authenticated(admission)
+
     def test_hold_and_authentication_precede_native_access(self):
         import authority_release, trial_controller
         with self.assertRaises(authority_release.Held): trial_controller.Native(None).open('prompt','positive')

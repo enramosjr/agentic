@@ -182,6 +182,37 @@ class NativeNewHead(unittest.TestCase):
         with patch.object(setup_fixture.TrialProvisionContracts, 'fixture', seed):
             return spoof_fixture.NativeSpoof.fixture(self)
 
+    def test_publication_readback_allows_elapsed_time_but_not_changed_prior_check(self):
+        def check(*args):
+            import trial_host_case
+            f=NewHead(self,args); f.current(observed=False)
+            upload=f.upload
+            def delayed(name,raw):
+                identity=upload(name,raw)
+                if name.startswith('trial-publication-intent-'): f.clock[0]+=1
+                return identity
+            f.upload=delayed
+            f.observed()
+            f.clock[0]+=1
+            attempts=len(f.attempts)
+            f.host()
+            admission=f.fresh[-1]
+            trial_host_case.read_publication(admission,f.api)
+            f.clock[0]+=1
+            self.assertEqual(f.run('broker')['state'],'host-denied')
+            prior=next(c for c in f.checks if c['head_sha']==f.old_snapshot['merge'] and c['app']['id']==f.d['apps']['issuer'])
+            prior['id']+=1
+            with self.assertRaisesRegex(Refusal,'publication outcome differs'):
+                trial_host_case.read_publication(admission,f.api)
+            prior['id']-=1
+            f.clock[0]+=1
+            terminal=f.finalize()
+            f.clock[0]+=1
+            self.assertEqual(f.observe()['binding'],terminal)
+            self.assertEqual(len(f.attempts),attempts+1)
+            self.assertEqual(f.merges,[])
+        self.exercise(continuation=check,export_files=spoof_fixture.forged_fixture.EXPORT)
+
     def test_tenth_uses_genuine_same_pr_prior_acceptance(self):
         def check(*args):
             import trial_controller
@@ -224,7 +255,7 @@ class NativeNewHead(unittest.TestCase):
                 value['terminal']['binding']['fence']['completed'][-1]['receipt_digest']='0'*64
                 store.write(saved,value)
                 writes=copy.deepcopy(f.source.writes)
-                with self.assertRaisesRegex(Refusal,'owned.*(completion|terminal)|first native completion'):
+                with self.assertRaisesRegex(Refusal,'owned.*(completion|terminal)|first native completion|live archived controller changed'):
                     trial_controller.Native(f.preparer)._open_prior('prompt',f.source)
                 self.assertEqual(f.source.writes,writes)
                 self.assertIsNone(f.native.provision.store(f.native.provision.root/'trial-transition-new-head-prior').read())

@@ -39,6 +39,10 @@ def _predecessor(original,registry,record,history,index,before,clock):
         before=authenticate_context(original,registry,record,prior['candidate'],history[:index],before,clock)
     from types import SimpleNamespace
     Admission._retained(SimpleNamespace(binding=before,record=record,value=prior,candidate=prior['candidate'],original=original))
+    from trial_mutation import selected as mutated
+    if mutated(prior['candidate']):
+        from trial_mutation import authenticate
+        authenticate(prior['candidate'],record,prior['worker'],history[:index],original,clock,before)
     location=entry['terminal']; s=prior['request']['snapshot']
     require(location['run_id']==s['run_id'] and location['attempt']==s['run_attempt'], 'prior terminal run differs')
     proof=provenance.authenticated_document(registry.api,before['deployment'],location,
@@ -46,6 +50,9 @@ def _predecessor(original,registry,record,history,index,before,clock):
     value=proof['document']
     if prior['candidate']['name']=='context-transition':
         from trial_broker_context import reconstruct
+        return reconstruct(original,registry,record,prior,value,before,clock,proof)
+    if prior['candidate']['name']=='positive':
+        from trial_broker_positive import reconstruct
         return reconstruct(original,registry,record,prior,value,before,clock,proof)
     revocation=['revocation'] if prior['candidate']['name']=='revoked-qualification' else []
     object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split()+revocation,'prior closed terminal')
@@ -95,31 +102,44 @@ def fresh_capability(original,value,record,token,clock):
         require(digest(token)!=prior['execution']['credential']['token_digest'], 'historical capability cannot authorize current transition')
 
 
-def history_guard(original,record,history,clock=None,authority=None):
+def history_guard(original,record,history,clock=None,authority=None,source=None):
     require(isinstance(history,list) and len(history)<=len(CASE_CHAIN),'bounded native progression history required')
     for index,entry in enumerate(history):
-        # The immutable execution document was authenticated at admission. Keep
-        # all its exact publication pointers fixed across later blocking reads.
-        prior=original.blob(entry['revision'],TRIAL)[0]
-        require(prior['task_id']==record['task_id'] and prior['candidate']['name']==CASE_CHAIN[index] and
-                prior['history']==history[:index] and prior['execution'] is not None and prior['launch'] is not None,
-                'authenticated prior case identity changed')
-        transition = prior['candidate'].get('transition')
-        if transition is not None and transition['intent']['phase'] == 'current':
-            history_guard(original,record,history[:index]+[transition['intent']['prior']],clock,authority)
-        from trial_transition import context_guard
-        context_guard(original,record,prior['candidate'])
-        if prior['candidate']['name']=='revoked-qualification':
-            from trial_broker_case import history_revocation
-            from trial_transition import current_deployment
-            require(callable(clock) and authority is not None,'current clock and disposable reader required for revocation history')
-            terminal=provenance.authenticated_document(authority,current_deployment(original,record,prior['history'],prior['candidate']),
-                entry['terminal'],'trial-case-terminal',record['task_id'],clock())
-            history_revocation(original,record,prior,terminal['document']['revocation'])
-        require(original.ref(trial_reference(prior))==entry['revision'] and
-                original.ref(trial_reference(dict(prior,execution=None)))==prior['execution']['publication_revision'] and
-                original.ref(trial_reference(dict(prior,kind='trial-case-ready',execution=None)))==prior['launch']['revision'],
-                'authenticated prior case reference moved')
+        _history_entry(original,record,history[:index],index,entry,clock,authority,source)
+
+
+def _history_entry(original,record,prefix,index,entry,clock,authority,source,nested_prior=False):
+    # Prefix dependencies have already been checked in this invocation. A
+    # current transition adds one prior node, not another copy of that prefix.
+    prior=original.blob(entry['revision'],TRIAL)[0]
+    require(prior['task_id']==record['task_id'] and prior['candidate']['name']==CASE_CHAIN[index] and
+            prior['history']==prefix and prior['execution'] is not None and prior['launch'] is not None,
+            'authenticated prior case identity changed')
+    transition=prior['candidate'].get('transition')
+    if nested_prior:
+        require(transition is not None and transition['intent']['phase']=='prior','historical dependency must be a prior node')
+    if transition is not None and transition['intent']['phase']=='current':
+        _history_entry(original,record,prefix,index,transition['intent']['prior'],clock,authority,source,nested_prior=True)
+    from trial_mutation import selected as mutated
+    if mutated(prior['candidate']):
+        from trial_mutation import authenticate,validate
+        require(callable(clock),'current clock required for negative history')
+        claim,_=authenticate(prior['candidate'],record,prior['worker'],prefix,original,clock)
+        if source is not None:
+            validate(prior['candidate'],record,prior['worker'],prefix,source,original,None,clock,claim['preview']['baseline'])
+    from trial_transition import context_guard
+    context_guard(original,record,prior['candidate'])
+    if prior['candidate']['name']=='revoked-qualification':
+        from trial_broker_case import history_revocation
+        from trial_transition import current_deployment
+        require(callable(clock) and authority is not None,'current clock and disposable reader required for revocation history')
+        terminal=provenance.authenticated_document(authority,current_deployment(original,record,prior['history'],prior['candidate']),
+            entry['terminal'],'trial-case-terminal',record['task_id'],clock())
+        history_revocation(original,record,prior,terminal['document']['revocation'])
+    require(original.ref(trial_reference(prior))==entry['revision'] and
+            original.ref(trial_reference(dict(prior,execution=None)))==prior['execution']['publication_revision'] and
+            original.ref(trial_reference(dict(prior,kind='trial-case-ready',execution=None)))==prior['launch']['revision'],
+            'authenticated prior case reference moved')
 
 
 def read(original, revision, clock, _initial=False):
@@ -393,6 +413,7 @@ class Hosted:
         self._revocation_links = None
         self._context_recovery = self.candidate['name']=='context-transition' and role=='finalize'
         self._context_issuance = None
+        self._positive = None
         self._seal = copy.deepcopy(self._state())
         if role == 'finalize':
             from broker_finalize import Finalizer
@@ -428,7 +449,7 @@ class Hosted:
         return dict(case=self.case,record=self.record,value=self.value,candidate=self.candidate,request=self.request,
                     binding=self.binding,worker=self.worker,human_links=self._human_links,revocation_links=self._revocation_links,
                     context_recovery=self._context_recovery,context_terminal=getattr(self,'_context_terminal_evidence',None),
-                    context_issuance=self._context_issuance)
+                    context_issuance=self._context_issuance,positive=self._positive)
 
     def local_guard(self, binding=None):
         require(self._state() == self._seal and (binding is None or binding == self.binding), 'case admission object changed')
@@ -437,6 +458,9 @@ class Hosted:
                 digest(getattr(self.original.api,'token',None)) == credential['token_digest'], 'case delegation expired or changed')
 
     def guard(self, binding=None, force=False):
+        if self._positive is not None:
+            from trial_broker_positive import guard
+            return guard(self,binding)
         if self._context_recovery:
             from trial_broker_context import guard
             if binding is not None: require(binding == self.binding, 'context retained binding differs')
@@ -460,7 +484,7 @@ class Hosted:
                 self.original.ref(trial_reference(self.case)) == self.revision and
                 self.registry.ref(self.registry.coordinates['registry_branch']) == self.binding['branch_head'] and
                 self.registry.ref(trial_branch) == self.binding['software_revision'], 'case pointers moved during live observation')
-        history_guard(self.original,r,self.case['history'],self.clock,self.registry.api)
+        history_guard(self.original,r,self.case['history'],self.clock,self.registry.api,self.source)
         from trial_transition import guard as transition_guard
         transition_guard(self)
         from trial_transition import context_guard

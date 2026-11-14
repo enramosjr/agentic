@@ -5,7 +5,6 @@ import json
 import unittest
 from unittest.mock import patch
 
-import merge_transport
 import service
 import trial_case
 import app_proofs
@@ -120,60 +119,9 @@ class TrialCase(unittest.TestCase):
     exercise = controller_fixture.TrialController.exercise
     prepare = controller_fixture.TrialController.prepare
 
-    def test_separate_case_producers_complete_and_recover(self):
-        def check(*args):
-            import trial_case
-            f = Fresh(self, args)
-            f.prepare()
-            f.handoff()
-            self.assertTrue(f.assert_fresh)
-            self.assertEqual(set(f.hint),{'origin','revision'})
-            f.published()
-            with patch.object(merge_transport,'isolated',side_effect=f.transport): result=f.run('broker')
-            self.assertEqual(result['state'],'submitted')
-            terminal=f.finalize()
-            self.assertEqual(terminal['fence']['completed'][-1]['kind'],'merged')
-            self.assertIsNone(terminal['fence']['pending'])
-            self.assertEqual(len(f.merges),1)
-            self.assertEqual(len({id(a) for a in f.fresh}),len(f.fresh))
-            self.assertGreaterEqual(len(f.fresh),15)
-            for value in f.fresh:
-                for name in ('native','provision','journal','session'): self.assertFalse(hasattr(value,name))
-            f.staging.revoke()
-            self.assertIn(f.case_token,f.revoked)
-            with self.assertRaises(Refusal): f.run('broker')
-            return f.source.refs['main']
-        self.exercise(continuation=check)
-
-    def test_withdrawn_review_denies_and_fresh_terminal_role_closes_without_merge(self):
-        def check(*args):
-            f=Fresh(self,args); f.prepare(); f.handoff(); f.published()
-            f.reviews=[]
-            with patch.object(merge_transport,'isolated',side_effect=AssertionError('denial dispatched')),self.assertRaisesRegex(Refusal,'independent approval'):
-                f.run('broker')
-            self.assertEqual(f.merges,[])
-            self.assertTrue(any(a['name'].endswith('-not-submitted') for a in f.remote.artifacts))
-            self.assertFalse(any(a['name'].endswith('-dispatch') for a in f.remote.artifacts))
-            next(j for j in f.remote.jobs if j['name'].startswith('broker ('))['conclusion']='failure'
-            result=f.finalize()
-            self.assertEqual(result['fence']['completed'][-1]['kind'],'not-submitted')
-            self.assertIsNone(result['fence']['pending'])
-            with self.assertRaises(Refusal): f.finalize()
-        self.exercise(continuation=check)
-
-    def test_unknown_merge_recovers_with_only_published_data_and_no_native_owner(self):
-        def check(*args):
-            f=Fresh(self,args); f.prepare(); f.handoff(lost_bind=True); f.published(); f.lose_merge_ack=True
-            with patch.object(merge_transport,'isolated',side_effect=f.transport): result=f.run('broker')
-            self.assertEqual(result['state'],'unknown'); self.assertEqual(len(f.merges),1)
-            # Recovery reads authenticated remote state in a newly constructed
-            # producer. Any accidental native access must fail this regression.
-            with patch.object(f.admission,'guard',side_effect=AssertionError('native owner reached from fresh job')):
-                result=f.finalize()
-            self.assertEqual(result['fence']['completed'][-1]['kind'],'merged')
-            self.assertEqual(len(f.merges),1)
-            return f.source.refs['main']
-        self.exercise(continuation=check)
+    # Fresh positive producers, one actual merge and native recovery now live in
+    # the required strict16 runtime lane. Ordinary review denial and uncertain
+    # merge mechanics remain in broker_evidence/broker_finalize component tests.
 
     def test_public_entrypoint_holds_before_access(self):
         import authority_release
@@ -181,7 +129,7 @@ class TrialCase(unittest.TestCase):
 
     def test_substituted_execution_capability_and_certificate_fail_before_outputs(self):
         def check(*args):
-            f=Fresh(self,args); f.prepare(); f.handoff()
+            f=Fresh(self,args); f.prepare(name='direct-push'); f.handoff()
             before=len(f.remote.artifacts)
             for change in (
                 lambda env:env.update(GITHUB_RUN_ID='100'),
@@ -217,7 +165,7 @@ class TrialCase(unittest.TestCase):
     def test_uncertain_case_publication_recovers_only_exact_committed_ref(self):
         for committed in (True,False):
             def check(*args):
-                f=Fresh(self,args); f.prepare()
+                f=Fresh(self,args); f.prepare(name='direct-push')
                 publication=trial_case.Publication(f.admission)
                 send=f.origin.api.post; writes=[]
                 def post(path,body):
@@ -242,7 +190,7 @@ class TrialCase(unittest.TestCase):
     def test_unknown_case_mint_and_secret_write_never_repeat_effects(self):
         for fault in ('mint','secret'):
             def check(*args):
-                f=Fresh(self,args); f.prepare()
+                f=Fresh(self,args); f.prepare(name='direct-push')
                 with self.assertRaises(OSError): f.stage(fault)
                 if fault == 'mint':
                     with self.assertRaisesRegex(Refusal,'mint remains unknown'): f.staging.run()
@@ -256,14 +204,15 @@ class TrialCase(unittest.TestCase):
 
     def test_terminal_artifact_read_cannot_outlive_consumed_case_delegation(self):
         def check(*args):
-            f=Fresh(self,args); f.prepare(); f.handoff(); f.published(); f.reviews=[]
-            with self.assertRaises(Refusal): f.run('broker')
-            artifact=next(a for a in f.remote.artifacts if a['name'].endswith('-not-submitted'))
+            from test_authority_trial_host_case import HostFixture
+            f=HostFixture(self,args); f.prepared_host(); f.host(); f.run('broker')
+            artifact=next(a for a in f.remote.artifacts if a['name'].endswith('-host-denied'))
+            expiry=f.launch.document['value']['credential']['expires']
             fetch=f.api.fetch; writes=[]; post=f.api.post
             def late(path,**kwargs):
                 value=fetch(path,**kwargs)
                 if path.endswith('/actions/artifacts/'+str(artifact['id'])+'/zip'):
-                    f.clock[0]=f.credential['expires']+1
+                    f.clock[0]=expiry+1
                 return value
             def write(path,body): writes.append(path); return post(path,body)
             f.api.fetch,f.api.post=late,write
@@ -271,18 +220,51 @@ class TrialCase(unittest.TestCase):
             with self.assertRaisesRegex(Refusal,'expired'): f.finalize()
             self.assertEqual(writes,[])
             self.assertEqual(f.registry.binding(),pending)
-        self.exercise(continuation=check)
+        from test_authority_trial_launch import Launch
+        with patch.object(self,'prepared',lambda:Launch.prepared(self)):
+            self.exercise(continuation=check)
 
-    def test_consumed_case_delegation_retains_dispatch_sixty_second_margin(self):
-        def check(*args):
-            f=Fresh(self,args); f.prepare(); f.handoff(lifetime=50); f.published()
-            with patch.object(merge_transport,'isolated',side_effect=f.transport):
-                try: result=f.run('broker')
-                except Refusal: result=None
-            self.assertEqual(f.merges,[])
-            if result is not None: self.assertNotEqual(result['state'],'submitted')
-            self.assertIsNotNone(f.registry.binding()['fence']['pending'])
-        self.exercise(continuation=check)
-
+    def test_consumed_delegation_and_blocking_guard_bound_semantic_gate_window(self):
+        # Semantic validation of genuine first-case Hosted data cannot dispatch:
+        # _dispatch separately rejects this negative reservation before reads.
+        import merge_window
+        from test_authority_merge_window import gate
+        for fault in ('short-delegation','late-guard','broken-clock-control'):
+            def check(*args):
+                f=Fresh(self,args); f.prepare(name='direct-push')
+                f.handoff(lifetime=50 if fault=='short-delegation' else 500)
+                f.run('verify')
+                a=f.fresh[-1]; b=a.binding; p=b['deployment']['policy']; now=f.clock[0]
+                q=a.qualification(b); g=gate()
+                for key in ('operation_id','repository_id','target','configuration_revision','deployment_digest',
+                            'pr','head','base','merge','workflow_sha','run_id','attempt'):
+                    g[key]=b['fence']['pending'][key]
+                g.update(sequence=b['fence']['sequence'],authority_repository_id=p['authority_repository_id'],
+                    epoch=p['epoch'],check_name=p['check_name'],qualification_digest=q['qualification_digest'],
+                    tree=a.candidate['submitted']['tree'],issued=now,expires=now+120,
+                    readback_started=now,readback_completed=now)
+                g['valid_until']={key:now+150 for key in merge_window.EXPIRING}
+                g['valid_until']['deployment']=b['deployment']['expires']
+                g['valid_until']['qualification']=q['expires']
+                if fault=='short-delegation':
+                    self.assertEqual(q['expires'],f.credential['expires'])
+                    with self.assertRaisesRegex(Refusal,'dispatch safety window'):
+                        merge_window._validate(g,b,now,a,clock=lambda:f.clock[0])
+                else:
+                    self.assertIs(merge_window._validate(g,b,now,a,clock=lambda:f.clock[0]),g)
+                    guard=a.guard
+                    def late(*args,**kwargs):
+                        result=guard(*args,**kwargs); f.clock[0]+=31; return result
+                    with patch.object(a,'guard',late):
+                        if fault=='late-guard':
+                            with self.assertRaisesRegex(Refusal,'stale, future or too short'):
+                                merge_window._validate(g,b,now,a,clock=lambda:f.clock[0])
+                        else:
+                            # Deliberately omitting the dispatch clock reproduces
+                            # the stale sample; historical-only semantics pass.
+                            self.assertIs(merge_window._validate(g,b,now,a),g)
+                self.assertEqual(f.merges,[])
+                self.assertIsNotNone(f.registry.binding()['fence']['pending'])
+            with self.subTest(fault=fault): self.exercise(continuation=check)
 
 if __name__ == '__main__': unittest.main()

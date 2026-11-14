@@ -5,6 +5,7 @@ configuration session. Production Apps are neither reused nor extended. Public
 entry remains release-held, including before protected journal creation.
 """
 import copy
+import secrets
 from pathlib import Path
 
 import authority_release
@@ -68,7 +69,9 @@ class Provision:
         self.document = self.journal.read()
         require(self.document is not None, 'completed trial provisioning required')
         state = self.document['value']
-        object_fields(state, ('schema_version', 'kind', 'preview', 'approval', 'fixture', 'connected'), 'retained trial provisioning')
+        object_fields(state, ('schema_version', 'kind', 'preview', 'approval', 'fixture', 'connected', 'storage_version', 'storage_id'), 'retained trial provisioning')
+        from trial_storage import namespace
+        namespace(self)
         require(type(state['schema_version']) is int and state['schema_version'] == 1 and
                 state['kind'] == 'private-qualification-fixture' and state['approval'] == digest(state['preview']) and
                 isinstance(state['fixture'], dict) and isinstance(state['connected'], dict),
@@ -128,9 +131,12 @@ class Provision:
             self.preview = preview
             self._guard()
             self._save(dict(schema_version=1, kind='private-qualification-fixture', preview=preview,
+                            storage_version=2,storage_id=secrets.token_hex(16),
                             approval=approval, fixture=None, connected=None))
         state = copy.deepcopy(self.document['value'])
-        object_fields(state, ('schema_version', 'kind', 'preview', 'approval', 'fixture', 'connected'), 'retained trial provisioning')
+        object_fields(state, ('schema_version', 'kind', 'preview', 'approval', 'fixture', 'connected', 'storage_version', 'storage_id'), 'retained trial provisioning')
+        from trial_storage import namespace
+        namespace(self)
         require(type(state['schema_version']) is int and state['schema_version'] == 1 and
                 state['kind'] == 'private-qualification-fixture' and state['approval'] == digest(state['preview']),
                 'retained trial provisioning consent differs')

@@ -18,7 +18,11 @@ def historical(candidate):
     return candidate.get('transition', {}).get('intent', {}).get('phase') == 'prior'
 
 
-def ownership(c, candidate):
+def ownership(c, candidate, create=False):
+    from trial_mutation import selected
+    if selected(candidate):
+        from trial_mutation import ownership as mutation_ownership
+        return mutation_ownership(c,candidate)
     phase=candidate['transition']['intent']['phase']
     name = candidate['name']
     names=['trial-transition-'+name+('-fixture' if phase=='fixture' else '-prior')]
@@ -34,10 +38,15 @@ def ownership(c, candidate):
         previous=documents['trial-controller-'+name+'-prior']
         require(previous['value']['transition_ownership']==ownership(c,previous['value']['candidate']) and
                 prior_entry(c,name)==candidate['transition']['intent']['prior'], 'owned historical transition changed')
-    return documents
+    from trial_storage import ownership as snapshot_ownership
+    return snapshot_ownership(c,documents,create=create)
 
 
 def guard(admission):
+    from trial_mutation import selected
+    if selected(admission.candidate):
+        from trial_mutation import guard as mutation_guard
+        return mutation_guard(admission)
     original = admission.original if hasattr(admission, 'original') else admission.native.provision.session.registry
     links=getattr(admission,'_human_links',None)
     if links is not None:
@@ -95,11 +104,13 @@ def prior_acceptance(original, authority, record, entry, clock):
             evidence_job_id=proof['job_id'],evidence_digest=digest(proof['document']),task_digest=digest(task)))
 
 
-def _intent(record, worker, reservation, history, phase, tree, previous, prior, issued, controls_digest, acceptance):
-    return dict(kind='native-'+reservation['name']+'-transition', phase=phase, record_digest=digest(record),
+def _intent(record, worker, reservation, history, phase, tree, previous, prior, issued, controls_digest, acceptance,tree_authority=None):
+    result=dict(kind='native-'+reservation['name']+'-transition', phase=phase, record_digest=digest(record),
         worker=worker, reservation=reservation, history=history, tree=tree, previous=previous,
         prior=prior, acceptance=acceptance, issued=issued, controls_digest=controls_digest, expires=min(record['expires'], record['trial']['deployment']['expires'],
             record['origin']['binding']['fence']['pending']['execution_deadline']))
+    if tree_authority is not None: result['tree_authority']=copy.deepcopy(tree_authority)
+    return result
 
 
 def prior_entry(c, name='new-head'):
@@ -171,6 +182,14 @@ def prepare(preparer, completed, reservation, history, before, phase, source, pr
         probe._success(accepted['snapshot'],accepted['evidence'],accepted['coordinates'],accepted['deployment'])
     tree = (source.get(root + '/git/commits/' + record['pair']['fixture_revision'])['tree']['sha']
             if phase != 'current' else reservation['submitted']['tree'] if name=='new-head' else parent['tree'])
+    tree_authority=None
+    eligibility=c.store(c.root/'trial-eligibility').read()
+    if phase!='current' and 'eligibility' in reservation:
+        require(eligibility is not None and eligibility['value']['phase']=='complete' and
+                eligibility['value']['link']==reservation['eligibility'],'native eligibility remains unknown; no seed fallback')
+        from trial_eligibility import select
+        tree_authority=eligibility['value']['link']
+        tree=select(c.session.registry,record,worker,tree_authority,name,phase,c.clock,source,native.registry.api)
     journal = c.store(c.root / ('trial-transition-'+name+'-' + phase))
     document = journal.read()
     retained = copy.deepcopy(c.document)
@@ -181,9 +200,13 @@ def prepare(preparer, completed, reservation, history, before, phase, source, pr
     facts=observe(c.api,before['deployment'])
     context_candidate=dict(context=context) if context is not None else None
     require(facts['base']==current_base(c.session.registry,record,history,context_candidate), 'transition control base differs')
-    intent = _intent(record, worker, reservation, history, phase, tree, parent, prior, issued, digest(facts),accepted)
+    intent = _intent(record, worker, reservation, history, phase, tree, parent, prior, issued, digest(facts),accepted,tree_authority)
 
     def guard(force=False):
+        if tree_authority is not None:
+            require(c.store(c.root/'trial-eligibility').read()==eligibility,'owned native eligibility changed')
+            from trial_eligibility import select
+            require(select(c.session.registry,record,worker,tree_authority,name,phase,c.clock)==tree,'native eligible tree changed')
         require(positive(issued) and issued <= c.clock() < intent['expires'] and
                 c.store(c.root / 'trial-workflow').read() == completed['retained'] and c.document == retained and
                 c.store(c.root / 'trial').read() == retained and journal.read() == document,
@@ -227,9 +250,39 @@ def prepare(preparer, completed, reservation, history, before, phase, source, pr
     with _source_token('coding', preparer.coding, native.registry.api, before['deployment'], record['pair']['identities'],
                        before['configuration_revision'], c.clock, preparer.token_factory, guard) as scoped:
         authorize(); guard()
-        result = (parent if name!='new-head' and phase=='current' else
-                  submission._advance(_FencedSource(scoped, guard, authorize), before['deployment'], parent,
-                                      tree, digest(intent), issued, recover=recovering))
+        if name!='new-head' and phase=='current':
+            result = parent
+        else:
+            # Immutable-object reads have no effects. Pin the native ownership
+            # seals around every I/O, and retain the full remote guard at the
+            # batch boundaries and before/after every source mutation.
+            seals={'trial-workflow':completed['retained'],'trial':retained,
+                   'trial-candidates':inventory,'trial-eligibility':eligibility,
+                   'trial-controller-'+predecessor(name):previous}
+            if prior is not None:
+                key='trial-controller-'+name+'-prior'
+                sealed_prior=c.store(c.root/key).read()
+                seals[key]=sealed_prior
+                key='trial-case-publication-'+name+'-prior'
+                seals[key]=c.store(c.root/key).read()
+                seals.update(sealed_prior['value']['transition_ownership'])
+            def local():
+                require(c.document==retained and journal.read()==document and
+                        c.session.owner==record['origin']['owner'] and c.session.scope==record['origin']['scope'],
+                        'transition local ownership changed')
+                for key,value in seals.items():
+                    require(c.store(c.root/key).read()==value,'transition local journal changed')
+                require(positive(issued) and issued<=c.clock()<intent['expires'],'transition ownership changed or expired')
+            def source_guard(force=False):
+                if force: guard(force=True)
+                local()
+            guard()
+            local()
+            observed=submission._advance(_FencedSource(scoped,source_guard,authorize),before['deployment'],parent,
+                                         tree,digest(intent),issued,recover=recovering)
+            guard()
+            local()
+            result=observed
     guard()
     if document['value']['phase'] == 'complete':
         require(document['value']['result'] == result, 'completed transition result changed')
@@ -242,9 +295,17 @@ def prepare(preparer, completed, reservation, history, before, phase, source, pr
 
 
 def validate(candidate, record, worker, history, source, original, registry, clock):
+    return _validate(candidate,record,worker,history,source,original,registry,clock)
+
+
+def _validate(candidate, record, worker, history, source, original, registry, clock, retained_prior=False):
     """Fresh native/Hosted readers derive authority; caller bytes cannot choose it."""
+    from trial_mutation import selected
+    if selected(candidate):
+        from trial_mutation import validate as validate_negative
+        return validate_negative(candidate,record,worker,history,source,original,registry,clock)
     object_fields(candidate, ('name', 'submitted', 'controls_digest', 'transition')+
-                  (('context',) if 'context' in candidate else ()), 'transition candidate')
+                  (('context',) if 'context' in candidate else ())+ (('eligibility',) if 'eligibility' in candidate else ()), 'transition candidate')
     object_fields(candidate['transition'], ('intent',), 'transition provenance')
     i = candidate['transition']['intent']
     from registry import TRIAL
@@ -254,13 +315,17 @@ def validate(candidate, record, worker, history, source, original, registry, clo
         if 'context' in old: contexts.append(old)
     for bound in contexts:
         validate_context_source(original,record,bound,source)
-    object_fields(i, ('kind phase record_digest worker reservation history tree previous prior acceptance issued controls_digest expires').split(),
+    object_fields(i, ('kind phase record_digest worker reservation history tree previous prior acceptance issued controls_digest expires').split()+
+                  (['tree_authority'] if 'tree_authority' in i else []),
                   'source transition intent')
     from trial_controller import CASE_CHAIN
     name = candidate['name']
     require((name in STALE_CASES and i['phase'] in ('prior', 'current') or name in ('human-update','revoked-qualification','context-transition') and i['phase']=='fixture') and len(history) == CASE_CHAIN.index(name) and
             positive(i['issued']) and i['issued'] <= clock() < i['expires'], 'transition identity or deadline differs')
     reservation = i['reservation']
+    require(candidate.get('eligibility')==reservation.get('eligibility'),'strict transition lost original eligibility binding')
+    if i['phase']!='current' and 'eligibility' in reservation:
+        require(i.get('tree_authority')==reservation['eligibility'],'strict transition cannot fall back to the seed tree')
     require(reservation['name'] == name and reservation['controls_digest'] == candidate['controls_digest'] and
             reservation['submitted']['tree'] == worker['submitted']['tree'] and
             reservation['submitted']['export_digest'] == worker['submitted']['export_digest'],
@@ -268,6 +333,9 @@ def validate(candidate, record, worker, history, source, original, registry, clo
     root = '/repos/' + record['trial']['deployment']['policy']['repository']
     tree = (source.get(root + '/git/commits/' + record['pair']['fixture_revision'])['tree']['sha']
             if i['phase'] != 'current' else reservation['submitted']['tree'])
+    if 'tree_authority' in i:
+        from trial_eligibility import select
+        tree=select(original,record,worker,i['tree_authority'],name,i['phase'],clock,source,registry.api if registry is not None else None)
     parent = reservation['submitted']
     accepted=None
     if i['phase'] != 'current':
@@ -279,15 +347,21 @@ def validate(candidate, record, worker, history, source, original, registry, clo
                 prior['candidate']['transition']['intent']['reservation'] == reservation,
                 'current transition substituted historical reservation')
         parent = prior['candidate']['submitted']
+        if name=='new-head' and 'tree_authority' in prior['candidate']['transition']['intent']:
+            _validate(prior['candidate'],record,worker,history,source,original,registry,clock,retained_prior=True)
         if name!='new-head':
             tree = parent['tree']
             validate(prior['candidate'],record,worker,history,source,original,registry,clock)
         accepted=prior_acceptance(original,registry.api,record,i['prior'],clock)
     require(isinstance(i['controls_digest'],str) and len(i['controls_digest'])==64 and
-            digest(i) == digest(_intent(record, worker, reservation, history, i['phase'], tree, parent, i['prior'], i['issued'],i['controls_digest'],accepted)),
+            digest(i) == digest(_intent(record, worker, reservation, history, i['phase'], tree, parent, i['prior'], i['issued'],i['controls_digest'],accepted,i.get('tree_authority'))),
             'source transition substituted task, export or coordinates')
-    result = (parent if name!='new-head' and i['phase']=='current' else
-              submission._advance(source, record['trial']['deployment'], parent, tree, digest(i), i['issued'], recover=True))
+    if retained_prior:
+        require(name=='new-head' and historical(candidate),'only an authenticated nested prior may use immutable source readback')
+        result=submission._retained_advance(source,record['trial']['deployment'],parent,candidate['submitted'],tree,digest(i),i['issued'])
+    else:
+        result = (parent if name!='new-head' and i['phase']=='current' else
+                  submission._advance(source, record['trial']['deployment'], parent, tree, digest(i), i['issued'], recover=True))
     require(digest(result) == digest(candidate['submitted']), 'transition current submitted binding differs')
     return submission._read_tree(source, root, tree, lambda: require(clock() < i['expires'], 'transition expired'))
 
@@ -309,6 +383,16 @@ def current_deployment(original, record, history, candidate=None):
     from registry import TRIAL
     for entry in reversed(history):
         prior=original.blob(entry['revision'],TRIAL)[0]
+        if prior['candidate']['name']=='context-transition':
+            from registry import trial_reference
+            from trial_broker_context import RESULT
+            link=dict(kind=RESULT,revision=original.ref(trial_reference(dict(kind=RESULT,name='context-transition',
+                task_id=record['task_id'],execution=None))))
+            result=read_native(original,link,record)
+            intent=read_native(original,result['intent'],record)
+            require(intent['case_digest']==digest(prior) and result['intent_digest']==digest(intent),
+                    'current native context substituted its historical case')
+            return result['after']['deployment']
         if 'context' in prior['candidate']:
             return read_native(original,prior['candidate']['context'],record)['after']['deployment']
     return record['trial']['deployment']
@@ -322,6 +406,10 @@ def read_native(original, link, record):
     require(link['kind'] in ('native-trial-context-intent','native-trial-context-complete',
             'native-trial-human-intent','native-trial-human-result',
             'native-trial-revocation-intent','native-trial-revocation-result',
+            'native-trial-mutation-intent','native-trial-mutation-result',
+            'native-trial-positive-grant',
+            'native-trial-positive-job',
+            'native-trial-eligibility',
             'native-trial-broker-context-intent','native-trial-broker-context-result') and sha(link['revision']),
             'fixed native publication required')
     value = original.blob(link['revision'],TRIAL)[0]
@@ -342,9 +430,12 @@ def read_native(original, link, record):
 
 
 def context_link(c, name):
+    from trial_storage import install
+    install(c)
     document=c.store(c.root/('trial-context-'+name)).read()
     require(document is not None and document['value']['phase']=='complete' and document['value']['completion'] is not None,
             'completed owned native context required')
+    _context_completion(document['value'])
     return copy.deepcopy(document['value']['completion'])
 
 
@@ -447,6 +538,11 @@ def authenticate_context(original, registry, record, candidate, history, before,
 
 
 def context_guard(original, record, candidate):
+    i=candidate.get('transition',{}).get('intent',{})
+    if 'tree_authority' in i:
+        from trial_eligibility import select
+        require(select(original,record,i['worker'],i['tree_authority'],candidate['name'],i['phase'],lambda:i['issued'])==i['tree'],
+                'historical eligible tree authority changed')
     if 'context' not in candidate: return
     value=read_native(original,candidate['context'],record)
     read_native(original,value['intent'],record)
@@ -487,9 +583,13 @@ def cleanup_context(native, name, operator_api, admin_api, token_factory):
     from reconcile import canonical
     from trusted_ci_github import HostRefusal
     require(type(native) is Native and type(native.provision) is Provision and name in ('new-base','policy-transition'), 'actual native cleanup owner required')
-    c=native.provision; journal=c.store(c.root/('trial-context-'+name)); document=journal.read()
+    c=native.provision
+    from trial_storage import install
+    install(c)
+    journal=c.store(c.root/('trial-context-'+name)); document=journal.read()
     require(document is not None, 'retained context cleanup required')
     v=copy.deepcopy(document['value']); r=v['record']; p=v['before']['deployment']['policy']; root='/repos/'+p['repository']
+    if 'completion_pin' in v or v['phase']=='complete': _context_completion(v)
     require(native.registry.coordinates['repository']==r['pair']['authority_repository'] and
             native.registry.coordinates['repository_id']==r['pair']['authority_repository_id'] and
             native.registry.coordinates['registry_branch']=='agentic-registry','cleanup substituted disposable registry coordinates')
@@ -580,6 +680,7 @@ def configuration_preview(native, name, document):
     require(document is not None and c.store(c.root/('trial-context-'+name)).read()==document,
             'protected native transition approval changed')
     v = document['value']; r = v['record']; preview = v['preview']
+    if 'completion_pin' in v or v['phase']=='complete': _context_completion(v)
     require(native.registry.coordinates['repository']==r['pair']['authority_repository'] and
             native.registry.coordinates['repository_id']==r['pair']['authority_repository_id'] and
             native.registry.coordinates['registry_branch']=='agentic-registry','native context registry coordinates differ')
@@ -600,6 +701,24 @@ def configuration_preview(native, name, document):
             all(preview[k]==p[k] for k in ('repository','repository_id','target','authority_repository','authority_repository_id')),
             'native transition scope differs')
     return preview, native.registry.binding(check_software=False)
+
+
+def _context_completion(value,completed=None):
+    """Pin the canonical completion, without storing a second copy of its inputs."""
+    pin=value.get('completion_pin')
+    if pin is not None:
+        object_fields(pin,('completed','digest'),'native context completion pin')
+        completed=pin['completed']
+    require(positive(completed),'retained native context completion timestamp required')
+    result=dict(schema_version=1,kind='native-trial-context-complete',task_id=value['record']['task_id'],execution=None,
+        record_digest=digest(value['record']),name=value['name'],intent=value['intent'],before=value['before'],
+        after=value['steps'][-1]['after'],steps=copy.deepcopy(value['steps']),source=value['source'],
+        result=value['terminal']['result'],completed=completed)
+    if pin is None:
+        value['completion_pin']=dict(completed=completed,digest=digest(result))
+    else:
+        require(pin['digest']==digest(result),'retained native context completion inputs changed')
+    return result
 
 
 def move_context(controller, prompt, name, operator_api, admin_api, approve, token_factory):
@@ -624,6 +743,8 @@ def move_context(controller, prompt, name, operator_api, admin_api, approve, tok
     native = controller.candidates.native
     require(type(native) is NativeHandoff, 'actual native context owner required')
     c, reg = native.provision, native.registry
+    from trial_storage import install
+    install(c)
     journal = c.store(c.root/('trial-context-'+name)); document = journal.read()
     prior = prior_entry(c,name)
     terminal = c.store(c.root/('trial-controller-'+name+'-prior')).read()['value']
@@ -673,6 +794,7 @@ def move_context(controller, prompt, name, operator_api, admin_api, approve, tok
         v = copy.deepcopy(document['value'])
         require(v['record']==r and v['before']==before and v['history']==history and v['prior']==prior,
                 'resume only the exact retained native context')
+    if 'completion_pin' in v or v['phase']=='complete': _context_completion(v)
     preview = v['preview']; started = time.monotonic(); session = None
     public = dict(schema_version=1,kind='native-trial-context-intent',task_id=r['task_id'],execution=None,
                   record_digest=digest(r),name=name,preview=preview,before=before,prior=prior,history=history)
@@ -709,12 +831,10 @@ def move_context(controller, prompt, name, operator_api, admin_api, approve, tok
         reg.authenticate_setup_transition(old,documents,after)
         v['steps'].append(dict(before=old,documents=documents,after=after)); save()
     def finish():
-        if 'completion_preimage' not in v:
-            v['completion_preimage']=dict(schema_version=1,kind='native-trial-context-complete',task_id=r['task_id'],execution=None,
-                record_digest=digest(r),name=name,intent=v['intent'],before=before,after=v['steps'][-1]['after'],steps=copy.deepcopy(v['steps']),
-                source=v['source'],result=v['terminal']['result'],completed=c.clock())
+        if 'completion_pin' not in v:
+            _context_completion(v,c.clock())
             save()
-        complete=v['completion_preimage']
+        complete=_context_completion(v)
         if v['completion'] is None:
             from registry import trial_reference
             from trusted_ci_github import HostRefusal

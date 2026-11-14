@@ -4,6 +4,8 @@ import {join, resolve, dirname} from 'node:path';
 
 function documentMember(name) {
   if (typeof name !== 'string') return null;
+  if (/^trial-positive-broker-intent-[1-9][0-9]{0,19}-1$/.test(name)) return 'trial-positive-broker-intent.json';
+  if (/^trial-positive-recovery-intent-[a-f0-9]{32}-1$/.test(name)) return 'trial-positive-recovery-intent.json';
   if (/^agentic-merge-[a-f0-9]{32}-s[1-9][0-9]{0,19}-a[1-9][0-9]{0,19}-(gate|dispatch|outcome|control-ready|not-submitted|host-denied|trial-preloaded|trial-context-refusal)$/.test(name)) return 'receipt.json';
   const candidate = /^(evidence|controls|publication-controls|trial-broker-intent|trial-broker-denial|trial-publication-intent|trial-publication-denial|trial-publication-observation)-[1-9][0-9]{0,19}-[1-9][0-9]{0,19}$/.exec(name);
   const proof = /^(proof|final-proof)-(admin|reader|issuer|coding|merge)-[1-9][0-9]{0,19}$/.exec(name);

@@ -3,6 +3,7 @@ import backend_test_support
 import copy
 import hashlib
 import json
+from datetime import datetime,timezone
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -52,7 +53,7 @@ class Hosted(unittest.TestCase):
         api.fetch = read_transport
         def job(name, identity):
             value = dict(id=identity, run_id=100, head_sha=d['policy']['workflow_sha'], name=name,
-                         status='in_progress', conclusion=None, started_at='1970-01-01T00:16:43Z')
+                         status='in_progress', conclusion=None, started_at=datetime.fromtimestamp(clock[0],timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
             jobs.append(value)
             return value
         def upload(role, key, producer):
@@ -60,11 +61,11 @@ class Hosted(unittest.TestCase):
                 a = HistoricalAPI()
                 a.document = json.loads(raw)
                 a.raw = a.archive(role + '.json')
-                a.artifact.update(id=1000 + len(artifacts), name=name, created_at='1970-01-01T00:16:43Z')
+                a.artifact.update(id=1000 + len(artifacts), name=name, created_at=datetime.fromtimestamp(clock[0],timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
                 a.artifact['workflow_run'].update(id=100, repository_id=702, head_repository_id=702, head_sha=d['policy']['workflow_sha'])
                 a.artifact['digest'] = 'sha256:' + hashlib.sha256(a.raw).hexdigest()
                 artifacts.append((a.artifact, a.raw))
-                producer.update(status='completed', conclusion='success', completed_at='1970-01-01T00:16:44Z')
+                producer.update(status='completed', conclusion='success', completed_at=datetime.fromtimestamp(clock[0],timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'))
                 clock[0] = 1004
                 return a.artifact['id']
             return invoke
@@ -91,7 +92,7 @@ class Hosted(unittest.TestCase):
         for index, purpose in enumerate(app_proofs.PERMISSIONS):
             producer = job('proof (' + purpose + ')', 810 + index)
             root = OwnApp(d, identities, purpose)
-            value = app_proofs.prove(root, api, d, identities, purpose, reg.binding()['branch_head'], 1003, root.token_api)
+            value = app_proofs.prove(root, api, d, identities, purpose, reg.binding()['branch_head'], clock[0], root.token_api)
             artifact_id = upload('proof', purpose, producer)('proof-' + purpose + '-1', json.dumps(value).encode())
             proofs[purpose] = dict(run_id=100, attempt=1, job_id=producer['id'], artifact_id=artifact_id)
         parent = job('hosted qualification', 820)

@@ -11,8 +11,8 @@ from trusted_ci_policy import Refusal, digest
 class ContextContracts(unittest.TestCase):
     def test_original_fifteenth_reservation_follows_exact_fourteen_predecessors(self):
         import trial_controller
-        self.assertEqual(len(trial_controller.CASE_CHAIN), 15)
-        self.assertEqual(trial_controller.CASE_CHAIN[-2:], ('revoked-qualification', 'context-transition'))
+        self.assertEqual(len(trial_controller.CASE_CHAIN), 16)
+        self.assertEqual(trial_controller.CASE_CHAIN[13:], ('revoked-qualification', 'context-transition', 'positive'))
         self.assertEqual(trial_controller.predecessor('context-transition'), 'revoked-qualification')
 
     def test_transition_receipt_is_evidence_only_and_requires_actual_context(self):
@@ -196,7 +196,7 @@ class NativeBrokerContext(unittest.TestCase):
             import trial_broker_context as context
             from test_authority_trial_case import Fresh
             from trial_broker_case import _case_value
-            f=Fresh(self,args); f.prepare(); f.handoff(lifetime=151)
+            f=Fresh(self,args); f.prepare(name='direct-push'); f.handoff(lifetime=151)
             _,case=_case_value(f.admission)
             expiry=case['execution']['credential']['expires']
             self.assertLess(expiry,f.admission.value['certificate']['expires'])
@@ -267,7 +267,10 @@ class NativeBrokerContext(unittest.TestCase):
             self.assertEqual(trial_controller.Native(f.preparer).recover_terminal('prompt','context-transition')['binding'],after)
             self.assertEqual(f.merges,[])
             return source['base']
-        self.exercise(continuation=check,export_files=revocation_fixture.context_fixture.previous.spoof_fixture.forged_fixture.EXPORT)
+        from test_authority_trial_storage import bounded_native_writes
+        with bounded_native_writes(self) as sizes:
+            self.exercise(continuation=check,export_files=revocation_fixture.context_fixture.previous.spoof_fixture.forged_fixture.EXPORT)
+        self.assertTrue(any(name.endswith('trial-broker-context') for name in sizes))
 
 
 if __name__ == '__main__':

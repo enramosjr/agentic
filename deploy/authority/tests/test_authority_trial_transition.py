@@ -1,11 +1,47 @@
 """Exact local source-transition contracts; no live GitHub effects."""
 import backend_test_support
 import copy
+import json
 import unittest
 
 import submission
 from test_authority_submission import SubmissionHost, fixture
-from trusted_ci_policy import Refusal
+from trusted_ci_policy import Refusal,digest
+
+
+class CompletionPin(unittest.TestCase):
+    def state(self):
+        before=dict(binding='b'*12000); after=dict(binding='a'*12000)
+        return dict(name='new-base',record=dict(task_id='a'*32),before=before,
+            steps=[dict(before=before,documents={},after=after)],source=dict(base='b'*40),
+            intent=dict(kind='native-trial-context-intent',revision='c'*40),terminal=dict(result=dict(restored=True)),padding='p'*60000)
+
+    def test_exact_public_preimage_with_timestamp_pin_fits_without_duplicate(self):
+        import trial_transition
+        from authority_private import MAX_STATE
+        value=self.state()
+        original=dict(schema_version=1,kind='native-trial-context-complete',task_id=value['record']['task_id'],execution=None,
+            record_digest=digest(value['record']),name=value['name'],intent=value['intent'],before=value['before'],
+            after=value['steps'][-1]['after'],steps=copy.deepcopy(value['steps']),source=value['source'],
+            result=value['terminal']['result'],completed=1234)
+        self.assertGreater(len(json.dumps(dict(value,completion_preimage=original)).encode()),MAX_STATE)
+        complete=trial_transition._context_completion(value,1234)
+        self.assertEqual(json.dumps(complete,sort_keys=True),json.dumps(original,sort_keys=True))
+        self.assertEqual(trial_transition._context_completion(value,9999),original)
+        self.assertEqual(value['completion_pin'],dict(completed=1234,digest=digest(original)))
+        self.assertLess(len(json.dumps(dict(schema_version=1,generation=1,value=value)).encode()),MAX_STATE)
+
+    def test_every_reconstruction_refuses_changed_retained_inputs_or_pin(self):
+        import trial_transition
+        for field in ('before','steps','source','result','time','digest'):
+            value=self.state(); trial_transition._context_completion(value,1234)
+            if field=='before': value['before']=dict(changed=True)
+            if field=='steps': value['steps'][-1]['after']=dict(changed=True)
+            if field=='source': value['source']=dict(changed=True)
+            if field=='result': value['terminal']['result']=dict(changed=True)
+            if field=='time': value['completion_pin']['completed']+=1
+            if field=='digest': value['completion_pin']['digest']='0'*64
+            with self.subTest(field=field),self.assertRaises(Refusal): trial_transition._context_completion(value)
 
 
 class TransitionHost(SubmissionHost):
@@ -34,6 +70,48 @@ class TransitionHost(SubmissionHost):
 
 
 class Advance(unittest.TestCase):
+    def test_strict_same_tree_prior_is_immutable_after_current_head_advances(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import trial_transition
+        from trusted_ci_policy import digest
+        d,request,files=fixture(); host=TransitionHost()
+        reservation=submission._submit(host,d,request,files)
+        tree=reservation['tree']; link=dict(kind='native-trial-eligibility',revision='a'*40)
+        reserved=dict(name='new-head',submitted=reservation,controls_digest='b'*64,eligibility=link)
+        worker=dict(submitted=reservation)
+        record=dict(trial=dict(deployment=d),pair=dict(fixture_revision=request['base']),expires=2000,
+                    origin=dict(binding=dict(fence=dict(pending=dict(execution_deadline=1300)))))
+        history=[dict(revision=str(i),terminal={}) for i in range(9)]
+        prior_intent=trial_transition._intent(record,worker,reserved,history,'prior',tree,reservation,None,1001,'c'*64,None,link)
+        prior=submission._advance(host,d,reservation,tree,digest(prior_intent),1001)
+        prior_candidate=dict(reserved,submitted=prior,transition=dict(intent=prior_intent))
+        entry=dict(revision='d'*40,terminal={}); accepted={}
+        current_intent=trial_transition._intent(record,worker,reserved,history,'current',tree,prior,entry,1002,'e'*64,accepted)
+        current=submission._advance(host,d,prior,tree,digest(current_intent),1002)
+        candidate=dict(reserved,submitted=current,transition=dict(intent=current_intent))
+        old=dict(candidate=prior_candidate,history=history)
+        original=SimpleNamespace(blob=lambda *args:(dict(candidate={}),None))
+        registry=SimpleNamespace(api=None)
+        writes=copy.deepcopy(host.writes)
+        with patch.object(__import__('trial_case'),'read',return_value=(old,record)),\
+             patch.object(__import__('trial_eligibility'),'select',return_value=tree),\
+             patch.object(trial_transition,'prior_acceptance',return_value=accepted):
+            self.assertEqual(trial_transition.validate(candidate,record,worker,history,host,original,registry,lambda:1003),files)
+            self.assertNotEqual(prior['head'],current['head'])
+            metadata=host.commits[prior['head']]
+            for field,value in (('message','foreign intent'),('parents',[dict(sha=request['base'])]),
+                                ('author',dict(name='foreign')),('tree',dict(sha='f'*40))):
+                saved=copy.deepcopy(metadata[field]); metadata[field]=value
+                with self.subTest(field=field),self.assertRaises(Refusal):
+                    trial_transition.validate(candidate,record,worker,history,host,original,registry,lambda:1003)
+                metadata[field]=saved
+            host.refs[current['branch']]=prior['head']
+            next(pr for pr in host.prs if pr['number']==current['pr'])['head']['sha']=prior['head']
+            with self.assertRaises(Refusal):
+                trial_transition.validate(candidate,record,worker,history,host,original,registry,lambda:1003)
+        self.assertEqual(host.writes,writes,'retained authentication must never mutate source')
+
     def test_finite_context_and_human_references_never_alias_cases_or_origin(self):
         from registry import trial_reference
         refs = set()

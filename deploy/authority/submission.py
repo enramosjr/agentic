@@ -254,13 +254,40 @@ def _submit(api, d, request, files):
         'run_id': request['run_id'], 'attempt': request['attempt'], 'admission_established': False}
 
 
-def _advance(api, d, previous, tree, intent_digest, issued, recover=False):
-    """Finite native transition only; caller owns protected intent and deadlines.
+def _transition_identity(d, intent_digest, issued):
+    require(isinstance(intent_digest,str) and re.fullmatch('[0-9a-f]{64}',intent_digest) and positive(issued),
+            'exact source transition identity required')
+    date=datetime.fromtimestamp(issued,timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    slug,bot=d['resources']['coding_slug'],d['resources']['coding_bot_id']
+    return ('AGENTIC source transition '+intent_digest,
+            dict(name=slug+'[bot]',email=bot+'+'+slug+'[bot]@users.noreply.github.com',date=date))
 
-    Unlike task submission this appends an existing, authenticated tree to an
-    existing reserved PR. updateRefs compares the exact old OID atomically. A
-    caller recovering an uncertain effect is strictly read-only.
-    """
+
+def _transition_commit(api, d, previous, tree, intent_digest, issued, head):
+    """Authenticate an exact immutable commit; this says nothing about live refs."""
+    message,author=_transition_identity(d,intent_digest,issued)
+    require(sha(head) and sha(tree) and sha(previous['head']), 'exact transition commit coordinates required')
+    commit=api.get('/repos/'+d['policy']['repository']+'/git/commits/'+head)
+    require(commit.get('sha')==head and commit.get('message')==message and commit['tree']['sha']==tree and
+            [v['sha'] for v in commit['parents']]==[previous['head']] and commit.get('author')==author==commit.get('committer'),
+            'transition commit differs')
+
+
+def _retained_advance(api, d, previous, submitted, tree, intent_digest, issued):
+    """Evidence-only fixed-head reconstruction, never live PR/ref authorization."""
+    require(all(positive(previous[k]) for k in ('pr','bot_id','app_id','run_id','attempt')) and
+            previous['app_id']==d['apps']['coding'] and previous['bot_id']==int(d['resources']['coding_bot_id']),
+            'retained transition coding identity differs')
+    require(submitted['tree']==tree,'retained transition selected a different tree')
+    _transition_commit(api,d,previous,tree,intent_digest,issued,submitted['head'])
+    manifest=export_manifest(_read_tree(api,'/repos/'+d['policy']['repository'],tree,lambda:None))
+    expected=dict(previous,head=submitted['head'],tree=tree,export_digest=digest(manifest))
+    require(expected==submitted,'retained transition submission differs')
+    return expected
+
+
+def _advance_head(api, d, previous, tree, intent_digest, issued, *, recover):
+    """Authenticate the exact head metadata or perform its conditional advance."""
     require(sha(tree) and isinstance(intent_digest, str) and
             re.fullmatch('[0-9a-f]{64}', intent_digest) and positive(issued) and
             type(recover) is bool, 'exact source transition intent required')
@@ -279,15 +306,9 @@ def _advance(api, d, previous, tree, intent_digest, issued, recover=False):
     # API users carry additional fields; authenticate identity rather than shape.
     require(pr['user']['id'] == previous['bot_id'] == int(d['resources']['coding_bot_id']) and
             pr['user'].get('type') == 'Bot', 'transition coding identity differs')
-    message = 'AGENTIC source transition ' + intent_digest
-    date = datetime.fromtimestamp(issued, timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
-    slug, bot = d['resources']['coding_slug'], d['resources']['coding_bot_id']
-    author = dict(name=slug+'[bot]', email=bot+'+'+slug+'[bot]@users.noreply.github.com', date=date)
+    message, author = _transition_identity(d,intent_digest,issued)
     def inspect(head):
-        commit = api.get(root + '/git/commits/' + head)
-        require(sha(head) and commit.get('sha') == head and commit.get('message') == message and
-                commit['tree']['sha'] == tree and [v['sha'] for v in commit['parents']] == [previous['head']] and
-                commit.get('author') == author == commit.get('committer'), 'transition commit differs')
+        _transition_commit(api,d,previous,tree,intent_digest,issued,head)
     head = existing_ref(api, root, previous['branch'])
     require(head == pr['head']['sha'], 'transition branch and PR differ')
     if recover:
@@ -305,10 +326,26 @@ def _advance(api, d, previous, tree, intent_digest, issued, recover=False):
                 value.get('data', {}).get('updateRefs', {}).get('clientMutationId') == intent_digest,
                 'conditional source update refused or unknown; never replay')
     inspect(head)
-    manifest = export_manifest(_read_tree(api, root, tree, lambda: None))
+    return head, root
+
+
+def _advance_ref(api, root, previous, head):
+    """Fresh PR/ref readback after the caller's tree authentication."""
     pr = api.get(root + '/pulls/' + str(previous['pr']))
     require(pr['head']['sha'] == existing_ref(api, root, previous['branch']) == head,
             'transition head moved during readback')
+
+
+def _advance(api, d, previous, tree, intent_digest, issued, recover=False):
+    """Finite native transition only; caller owns protected intent and deadlines.
+
+    Unlike task submission this appends an existing, authenticated tree to an
+    existing reserved PR. updateRefs compares the exact old OID atomically. A
+    caller recovering an uncertain effect is strictly read-only.
+    """
+    head, root = _advance_head(api,d,previous,tree,intent_digest,issued,recover=recover)
+    manifest = export_manifest(_read_tree(api, root, tree, lambda: None))
+    _advance_ref(api,root,previous,head)
     return dict(previous, head=head, tree=tree, export_digest=digest(manifest))
 
 

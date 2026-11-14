@@ -71,6 +71,31 @@ class ActionsReceipts:
         return current
 
     @classmethod
+    def _historical_positive(cls, api, binding, job_id, clock, documents, qualification):
+        """Evidence-only exact CLOSED positive archives; no live admission rights."""
+        require(set(documents) in ({'dispatch'},{'dispatch','outcome'}), 'exact positive dispatch history required')
+        dispatch=documents['dispatch']
+        object_fields(dispatch,('schema_version','kind','gate_digest','operation_id','sequence','gate'),'historical dispatch')
+        require(dispatch['schema_version']==2 and dispatch['kind']=='dispatch' and
+                dispatch['gate_digest']==digest(dispatch['gate']), 'historical dispatch digest differs')
+        merge_window._validate_binding(dispatch['gate'],binding,dispatch['gate']['readback_completed'],qualification)
+        op=binding['fence']['pending']
+        require(dispatch['operation_id']==op['operation_id'] and dispatch['sequence']==binding['fence']['sequence'],
+                'historical dispatch operation differs')
+        if 'outcome' in documents:
+            outcome=documents['outcome']
+            object_fields(outcome,('schema_version','kind','gate_digest','operation_id','sequence','state','response_digest'),'historical outcome')
+            require(outcome['schema_version']==2 and outcome['kind']=='outcome' and outcome['state'] in ('submitted','unknown') and
+                    outcome['gate_digest']==dispatch['gate_digest'] and outcome['operation_id']==op['operation_id'] and
+                    outcome['sequence']==binding['fence']['sequence'] and
+                    (fingerprint(outcome['response_digest']) or outcome['state']=='unknown' and outcome['response_digest'] is None),
+                    'historical outcome differs')
+        result=cls(api,lambda:copy.deepcopy(binding),job_id,clock,recovery=True)
+        result._context_history=copy.deepcopy(documents)
+        result.terminal_job()
+        return result
+
+    @classmethod
     def _historical_context(cls, api, binding, job_id, clock, documents):
         """Read-only archive authentication after immutable history validation."""
         require(set(documents)=={'trial-preloaded','trial-context-refusal'} and positive(job_id),

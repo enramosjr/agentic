@@ -773,16 +773,17 @@ def _upload_document(uploader, name, document):
 
 
 def _verify_actions(source, d, snapshot, job_id, guard, clock, disk_factory=None, box_factory=None,
-                    controller=None, image_loader=None):
+                    controller=None, image_loader=None, runtime='docker'):
     from cloud_worker import unpack
     from disk import WorkDisk
     from trusted_ci_sandbox import Sandbox
     from trusted_ci_controller import verify
     from coding_transport import ENGINE_ENVIRONMENT
     require(d['adapter'] == 'github-actions', 'cloud producer promotion remains held')
+    require(runtime in ('docker', 'podman'), 'supported existing verification runtime required')
     guard()
     if image_loader is None:
-        result = subprocess.run(['docker','pull','--',d['policy']['image']], env=ENGINE_ENVIRONMENT,
+        result = subprocess.run([runtime,'pull','--',d['policy']['image']], env=ENGINE_ENVIRONMENT,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120, check=False)
         require(result.returncode == 0, 'approved verification image unavailable')
     else: image_loader(d, guard)
@@ -794,8 +795,9 @@ def _verify_actions(source, d, snapshot, job_id, guard, clock, disk_factory=None
         for path in candidate.rglob('*'):
             if path.is_dir(): path.chmod(0o755)
         guard()
-        with (disk_factory or WorkDisk)('agentic-'+secrets.token_hex(12), d['policy']['limits']['disk_mb'], formatter_image=d['policy']['image']) as disk:
-            with (box_factory or Sandbox)(candidate, d['policy'], runtime='docker', work_volume=disk.name) as box:
+        with (disk_factory or WorkDisk)('agentic-'+secrets.token_hex(12), d['policy']['limits']['disk_mb'],
+                                       formatter_image=d['policy']['image'], **({'runtime':runtime} if runtime!='docker' else {})) as disk:
+            with (box_factory or Sandbox)(candidate, d['policy'], runtime=runtime, work_volume=disk.name) as box:
                 report = (controller or verify)(box, d['policy'], snapshot, capture_failure=True)
     guard()
     return dict(schema_version=2, report=dict(schema_version=2, deployment_digest=digest(d), generation=d['generation'],
@@ -815,6 +817,9 @@ def _trial_producer(admission, environment, request, node, role, clock=None, api
     authenticated(admission)
     admission.guard()
     require(role in ('verify','proof','publication-controls','publish','broker','controls','final-proof'), 'fixed trial controller role required')
+    if role=='broker' and admission.candidate['name']=='positive':
+        from trial_broker_positive import require_broker
+        require_broker(admission)
     return _produce(environment,request,node,role,admission.clock,api_factory,app_factory,token_factory,uploader_factory,verifier,sleeper,admission)
 
 
@@ -933,6 +938,9 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
     # Authenticate scope, CLOSED consumption, exact pending fence and pinned job
     # before constructing a role root or minting its source credentials.
     admitted = trial_case.Hosted(registry,origin_reader,None,environment,hint,role,clock)
+    if admitted.candidate['name']=='positive' and role in ('broker','finalize'):
+        from trial_broker_positive import begin
+        begin(admitted,api,environment,role,uploader_factory(node,environment))
     if role=='finalize' and admitted.candidate['name']=='context-transition':
         from trial_broker_context import begin_recovery
         begin_recovery(admitted,api,environment,uploader_factory(node,environment))
@@ -966,14 +974,14 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
             # Administrative write authority is borrowed only by this separately
             # pinned terminal role, using the existing finalizer and fence engine.
             with _admin_authority(root,api,registry,before,identities,token_factory,
-                                  before_effect=admitted.guard if admitted.candidate['name']=='context-transition' else None) as writer:
+                                  before_effect=admitted.guard if admitted.candidate['name'] in ('context-transition','positive') else None) as writer:
                 admitted.guard()
                 result=Finalizer(writer,api,source,pin,environment,clock)._finalize(
                     admitted.request['operation_id'],admitted.request['sequence'],
                     _case_broker_job(api,admitted),_admission=admitted)
             from trial_host_case import selected
             from trial_transition import historical
-            if selected(admitted) or trial_broker_case.selected(admitted) or historical(admitted.candidate):
+            if selected(admitted) or trial_broker_case.selected(admitted) or historical(admitted.candidate) or admitted.candidate['name']=='positive':
                 document=dict(schema_version=1,kind='trial-case-terminal',request_digest=digest(admitted.request),
                     certificate_digest=digest(admitted.value['certificate']),before=before,after=result,completed=clock())
                 if admitted.candidate['name']=='revoked-qualification':
@@ -982,6 +990,10 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
                     from trial_broker_context import terminal_context
                     document['before']=copy.deepcopy(admitted.binding)
                     document['context']=terminal_context(admitted,api,_case_broker_job(api,admitted),before)
+                if admitted.candidate['name']=='positive':
+                    from trial_broker_positive import terminal_document,guard
+                    document=terminal_document(admitted)
+                    guard(admitted)
                 _upload_document(uploader_factory(node,environment),'trial-case-terminal-'+admitted.record['task_id']+'-1',document)
             return result
         return _trial_producer(admitted,environment,admitted.request,node,role,clock,api_factory,app_factory,

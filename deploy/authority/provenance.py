@@ -137,19 +137,25 @@ def live_context_recovery(api, d, locator, key, now):
     return _authenticated_document(api,d,locator,'trial-context-recovery-intent',key,now,live=True)
 
 
+def live_positive_issuance(api,d,locator,role,key,now):
+    require(role in ('trial-positive-broker-intent','trial-positive-recovery-intent'),'fixed positive issuance role required')
+    return _authenticated_document(api,d,locator,role,key,now,live=True)
+
+
 def _authenticated_document(api, d, locator, role, key, now, live=False):
     validate_deployment(d)
     object_fields(locator, ('run_id', 'attempt', 'job_id', 'artifact_id'), 'authority artifact locator')
     require(all(positive(v) for v in locator.values()) and type(now) is int and 0 < now < d['expires'],
             'current authority artifact coordinates required')
-    require(role in ('evidence', 'controls', 'publication-controls', 'proof', 'final-proof', 'task', 'task-ready', 'task-controls',
+    positive_issuance=role in ('trial-positive-broker-intent','trial-positive-recovery-intent')
+    require((positive_issuance or role in ('evidence', 'controls', 'publication-controls', 'proof', 'final-proof', 'task', 'task-ready', 'task-controls',
                     'model-lease', 'qualification', 'credential-proof', 'trial-task', 'trial-task-ready',
-            'trial-task-controls', 'trial-handoff', 'trial-case-handoff', 'trial-case-certificate', 'trial-case-ready', 'trial-host-intent', 'trial-host-denial', 'trial-case-terminal', 'trial-context-recovery-intent', 'trial-broker-intent', 'trial-broker-denial', 'trial-publication-intent', 'trial-publication-denial', 'trial-publication-observation') and
-            (role=='trial-context-recovery-intent' or live == (role in ('task-ready', 'trial-task-ready'))),
+            'trial-task-controls', 'trial-handoff', 'trial-case-handoff', 'trial-case-certificate', 'trial-case-ready', 'trial-host-intent', 'trial-host-denial', 'trial-case-terminal', 'trial-context-recovery-intent', 'trial-broker-intent', 'trial-broker-denial', 'trial-publication-intent', 'trial-publication-denial', 'trial-publication-observation')) and
+            (positive_issuance or role=='trial-context-recovery-intent' or live == (role in ('task-ready', 'trial-task-ready'))),
             'unknown authority producer role')
     if role.startswith('trial-'):
         require(d['state'] == 'qualification' and d['qualification'] is None and
-                (positive(key) if role in ('trial-broker-intent','trial-broker-denial','trial-publication-intent','trial-publication-denial','trial-publication-observation') else
+                (positive(key) if role in ('trial-positive-broker-intent','trial-broker-intent','trial-broker-denial','trial-publication-intent','trial-publication-denial','trial-publication-observation') else
                  isinstance(key, str) and re.fullmatch('[0-9a-f]{32}', key)), 'unqualified trial producer required')
     if role in ('evidence', 'controls', 'publication-controls'):
         require(positive(key), 'numeric candidate producer required')
@@ -175,11 +181,11 @@ def _authenticated_document(api, d, locator, role, key, now, live=False):
         job_name, prefix = 'trial case ready', 'trial-case-ready-' + key
     elif role in ('trial-host-intent','trial-host-denial'):
         job_name, prefix = 'trial host denial', role + '-' + key
-    elif role in ('trial-broker-intent','trial-broker-denial'):
+    elif role in ('trial-positive-broker-intent','trial-broker-intent','trial-broker-denial'):
         job_name, prefix = 'broker (' + str(key) + ')', role + '-' + str(key)
     elif role in ('trial-publication-intent','trial-publication-denial','trial-publication-observation'):
         job_name, prefix = 'publish (' + str(key) + ')', role + '-' + str(key)
-    elif role in ('trial-case-terminal','trial-context-recovery-intent'):
+    elif role in ('trial-positive-recovery-intent','trial-case-terminal','trial-context-recovery-intent'):
         job_name, prefix = 'finalize', role + '-' + key
     elif role == 'credential-proof':
         require(key in ('admin', 'reader', 'issuer', 'coding', 'merge', 'model_vault', 'model_delivery'),
@@ -209,7 +215,8 @@ def _authenticated_document(api, d, locator, role, key, now, live=False):
     job = jobs[0]
     require(job['id'] == locator['job_id'] and job['run_id'] == run_id and job['head_sha'] == p['workflow_sha'] and
             ((job['status'] == 'in_progress' and job['conclusion'] is None) if live else
-             (job['status'] == 'completed' and job['conclusion'] == 'success')), 'producer job state differs')
+             (job['status'] == 'completed' and (job['conclusion'] == 'success' or
+              role=='trial-positive-broker-intent' and isinstance(job['conclusion'],str) and bool(job['conclusion'])))), 'producer job state differs')
     started = timestamp(job['started_at'])
     completed = datetime.fromtimestamp(now, timezone.utc) if live else timestamp(job['completed_at'])
     require(0 < int(started.timestamp()) <= int(completed.timestamp()) <= now,

@@ -245,6 +245,18 @@ class NativeContext(unittest.TestCase):
         self.exercise(continuation=check,export_files=previous.spoof_fixture.forged_fixture.EXPORT)
 
     def test_policy_transition_uses_actual_owned_configuration_engine(self):
+        import json
+        from authority_private import MAX_STATE
+        from test_authority_trial_setup import Journal
+        write=Journal.write; measured={}
+        def bounded(journal,expected,state):
+            name=getattr(getattr(journal,'root',None),'name',None)
+            envelope=dict(schema_version=1,generation=1 if expected is None else expected['generation']+1,value=state)
+            size=len((json.dumps(envelope,sort_keys=True,allow_nan=False)+'\n').encode())
+            self.assertLessEqual(size,MAX_STATE,str(name)+' complete protected envelope exceeds limit')
+            if name in ('trial-context-new-base','trial-context-policy-transition'):
+                measured[name]=max(measured.get(name,0),size)
+            return write(journal,expected,state)
         def check(*args):
             import trial_transition
             f=Context(self,args); f.through_tenth(); f.advance_case('new-base',123,125)
@@ -258,7 +270,9 @@ class NativeContext(unittest.TestCase):
             self.assertEqual(len(f.admission.value['history']),11)
             self.assertIsNone(f.d['qualification'])
             return f.source.refs['main']
-        self.exercise(continuation=check,export_files=previous.spoof_fixture.forged_fixture.EXPORT)
+        with patch.object(Journal,'write',bounded):
+            self.exercise(continuation=check,export_files=previous.spoof_fixture.forged_fixture.EXPORT)
+        self.assertEqual(set(measured),{'trial-context-new-base','trial-context-policy-transition'})
 
     def test_three_native_context_cases_finish_with_separate_human_transport(self):
         def check(*args):

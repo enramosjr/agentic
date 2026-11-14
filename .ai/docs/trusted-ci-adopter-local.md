@@ -904,10 +904,53 @@ permitted. Missing terminal publication or an unresolved expired handover cannot
 be inferred complete from artifact absence or a settled pointer; the original
 native trial remains held without fabricated history or replay.
 
-Positive terminal history remains unimplemented. This fifteen-case progression
-does not complete the original broker suffix, full current-policy coordination,
-qualification or hosted acceptance. An ACTIVE qualification receipt cannot
-substitute for those remaining designs.
+The original fifteen-case trial remains held. A separate strict source-local
+implementation adds the sixteenth positive reservation and terminal history;
+its [required runtime lane](trusted-ci.md#hosted-qualification-and-read-only-inspection)
+must pass both ordinary and lost-merge-acknowledgement trials before local
+acceptance can be claimed. It requires the entire authenticated original history,
+an unchanged eligible worker export, current controls and independent exact-head
+review, native grants and one-shot original broker/finalizer job bindings. Its
+ordinary v2 terminal receipt binds the full canonical recovery envelope and actual
+merge parents, tree and target readback. This source-local implementation does
+not complete full current-policy hosted coordination, qualification or hosted
+acceptance. An ACTIVE qualification receipt cannot substitute for those remaining
+designs or for strict native history.
+Fresh private trials bind a version-2 storage identity at creation. Controller
+predecessors and historical controller ownership use generation-1 protected
+archives with same-trial references, rather than recursively embedded controller
+snapshots. Each authorization traversal freshly compares archives with their live
+source journals and retains the existing remote authority checks. Archive creation
+is create-only: an existing orphan cannot acknowledge a failed exchange. Public
+case values, digest preimages and recovery envelopes retain their existing format.
+Four immediate controller fields (candidate, certificate, transition ownership
+and terminal) use individually protected components. Unchanged components reuse
+only references from the expected physical controller root; new components must
+be acknowledged before its CAS. Controller ACKs and predecessor archives bind the
+complete physical root. The private publication journal reuses those same
+candidate/certificate references while reconstructing the complete public Case.
+Reads recheck both the live controller and publication root after resolving fields.
+Native base/policy context completion retains a timestamp and digest pin instead
+of a duplicate completion document. Publication and recovery reconstruct the full
+original preimage from retained inputs and refuse a changed digest.
+Completed new-base and policy contexts use generation-1 archives of their full
+physical roots for private ownership. Resolution freshly compares the archive and
+live root; these context references cannot appear in controller predecessor chains.
+Selected broker-context, controller-component and original-job stores retain plain
+records when they fit the unchanged 128 KiB physical limit. Larger values use one
+purpose/root/generation-bound lossless wire record, with a 16 MiB decoded limit;
+malformed streams and incompressible overflow refuse. Public serializers and
+semantic references are unchanged. This encoding adds no storage chunks or
+authority cache and preserves the underlying protected Store's physical CAS.
+Active controller continuation also requires the current process's exact retained
+write acknowledgement. A process restart leaves active trials held and requires a
+fresh trial, including when the old process successfully acknowledged READY.
+Authenticated terminal inspection and existing recovery remain available without
+new source effects; readable state alone cannot acknowledge an uncertain write.
+The 128 KiB protected-record limit is unchanged. This storage work remains
+provisional until root-write uncertainty, all required writer phases, public-byte
+compatibility and strict timing have passed their acceptance checks; a short
+modeled prefix or synthetic chain is insufficient to claim completion.
 The launcher passes only the fresh read capability and each role's existing
 purpose credentials; READY/preparation/consumer jobs receive no App root or model
 key. The terminal job can close a failed broker's genuine no-dispatch receipt or
@@ -919,13 +962,20 @@ It does not require a live case admission, mint, restage or dispatch. The
 source/local fixtures model queued jobs and CLOSED artifact
 transport. They do not establish separate hosted processes or credential isolation,
 and no real workflow is dispatched by this build.
-Local fixture execution drives authenticated job/closed-artifact readers,
-actual App proofs, verifier cleanup, effective controls and the actual merge
-request encoder, with GitHub/OCI/kernel/model boundaries modeled. It establishes
-neither hosted execution/isolation nor qualification. The bounded controller
-does not prepare the case-specific mutations or coordinate all sixteen probes.
-Full-inventory workflow coordination, case-specific mutations and ordering,
-qualification receipt production and final hosted qualification remain unfinished.
+Legacy local fixtures drive authenticated job/closed-artifact readers, App
+proofs, verifier cleanup, effective controls and the actual merge request encoder,
+with GitHub/OCI/kernel/model boundaries modeled. The separate strict lane uses
+actual Linux critical execution through the unchanged controller, WorkDisk and
+Sandbox; its GitHub, Actions, protected-host, native transport and coding-model
+boundaries remain modeled. Native eligibility authenticates the original CLOSED
+worker and runs the critical checks before reservations; its finite grant permits
+only the six named historical/fixture tree choices. Exact approved negative
+mutations preserve their original reservations and use conditional source updates.
+The strict lane coordinates all sixteen source-local cases with original finite
+deadlines, without renewing live or retained authority. Neither lane establishes
+hosted execution/isolation or qualification. Full-inventory hosted workflow
+coordination, qualification receipt production and final hosted qualification
+remain unfinished.
 Trial and original deployments
 stay unqualified; `qualification_record` remains a strict reader. No complete
 original requirement, trusted release, activation or enforcement is claimed.

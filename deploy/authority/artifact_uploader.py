@@ -17,6 +17,8 @@ from trusted_ci_policy import Refusal, loads, object_fields, positive, require
 def document_member(name):
     """Closed producer names map to fixed members, never caller-selected paths."""
     if not isinstance(name, str): return None
+    if re.fullmatch(r'trial-positive-broker-intent-[1-9][0-9]{0,19}-1',name): return 'trial-positive-broker-intent.json'
+    if re.fullmatch(r'trial-positive-recovery-intent-[a-f0-9]{32}-1',name): return 'trial-positive-recovery-intent.json'
     if re.fullmatch(r'agentic-merge-[a-f0-9]{32}-s[1-9][0-9]{0,19}-a[1-9][0-9]{0,19}-(gate|dispatch|outcome|control-ready|not-submitted|host-denied|trial-preloaded|trial-context-refusal)', name):
         return 'receipt.json'
     candidate = re.fullmatch(r'(evidence|controls|publication-controls|trial-broker-intent|trial-broker-denial|trial-publication-intent|trial-publication-denial|trial-publication-observation)-[1-9][0-9]{0,19}-[1-9][0-9]{0,19}', name)

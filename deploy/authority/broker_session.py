@@ -96,7 +96,7 @@ class Session:
             gate = self._collect(op)
             if _admission is not None:
                 import trial_broker_case
-                require(not trial_broker_case.selected(_admission), 'native broker negative reached successful authorization')
+                require(_admission.candidate['name']=='positive', 'native negative reached successful authorization')
         except Exception:
             if _admission is not None and _admission.candidate['name']=='context-transition':
                 # Its retained operation has evidence-only rights. The native

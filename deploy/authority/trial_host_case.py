@@ -66,8 +66,15 @@ def _case(admission, authority):
         failed_evidence(admission,proof['document'],proof['job_id'])
         baseline=submission._read_tree(admission.source,'/repos/'+d['policy']['repository'],
             admission.source.get('/repos/'+d['policy']['repository']+'/git/commits/'+s['base'])['tree']['sha'],admission.guard)
+        files=admission.worker['files']
+        from trial_mutation import selected as mutated
+        if mutated(admission.candidate):
+            from trial_transition import validate
+            original=admission.original if hasattr(admission,'original') else admission.native.provision.session.registry
+            files=validate(admission.candidate,admission.record,admission.value['worker'],admission.value['history'],
+                           admission.source,original,admission.registry,admission.clock)
         mutations=[dict(path=path,sha256=hashlib.sha256(item['content']).hexdigest())
-                   for path,item in sorted(admission.worker['files'].items())
+                   for path,item in sorted(files.items())
                    if path not in baseline or item['content']!=baseline[path]['content']]
         require(mutations,'actual exported mutation required for bad acceptance')
     return dict(name=admission.candidate['name'],snapshot=s,evidence=location,coordinates=coordinates,
@@ -89,6 +96,13 @@ def _request(d, s, name):
                     method='PUT',data=dict(sha=s['head'],merge_method='merge'))
     return dict(path='/repos/'+d['policy']['repository']+'/git/refs/heads/'+quote(d['policy']['target'],safe=''),
                 method='PATCH',data=dict(sha=s['merge'],force=False))
+
+
+def _acceptance_identity(acceptance):
+    value=copy.deepcopy(acceptance)
+    # A freshly validated read time changes even when the check identity does not.
+    value['check'].pop('observed')
+    return value
 
 
 def _publication_inputs(admission, authority):
@@ -115,7 +129,11 @@ def _publication_inputs(admission, authority):
     inputs=dict(proofs=locators['proofs'],proofs_digest=proofs['proofs_digest'],
         controls=location,controls_digest=digest(controls['document']),task_digest=case['coordinates']['task_digest'])
     if spoof:
-        inputs['source']=observation
+        inputs['source']=copy.deepcopy(observation)
+        if admission.candidate['name'] in STALE:
+            # Every call still validates against its actual current clock. This
+            # derived read sample is not part of the immutable check identity.
+            inputs['source']['prior']=_acceptance_identity(inputs['source']['prior'])
     else:
         inputs.update(evidence=case['evidence'],evidence_digest=case['coordinates']['evidence_digest'])
     return inputs
@@ -440,7 +458,8 @@ def read(admission, authority, locator=None):
     elif spoof:
         require(all(digest(observation[k])==digest(current[k]) for k in ('checks','rules','reviews')) and
                 digest(observation['publication'])==digest(read_publication(admission,authority)), 'host spoof observation differs')
-        if stale: require(digest(observation['prior'])==digest(current['prior']), 'historical acceptance differs')
+        if stale: require(digest(_acceptance_identity(observation['prior']))==digest(_acceptance_identity(current['prior'])),
+                          'historical acceptance differs')
     else:
         acceptance = observation['acceptance']
         require(acceptance['proof']==current['acceptance']['proof'] and acceptance['coordinates']==current['acceptance']['coordinates'] and

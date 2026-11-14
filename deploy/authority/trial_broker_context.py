@@ -356,7 +356,8 @@ def begin_recovery(a, api, environment, uploader):
     require(temporary.is_absolute() and temporary.is_dir(), 'trusted persistent original-job RUNNER_TEMP required')
     root=temporary/('agentic-context-recovery-'+digest(dict(repository=a.binding['deployment']['policy']['authority_repository_id'],
         operation=a.request['operation_id'],sequence=a.request['sequence'],recovery=recovery,nonce=grant['nonce'])))
-    store=Store(root)
+    from trial_wire import WireJournal
+    store=WireJournal(Store(root),'original-context-recovery',root)
     require(store.read() is None, 'native context recovery already attempted; never remint or replay')
     name='trial-context-recovery-intent-'+a.record['task_id']+'-1'
     artifacts=api.pages('/repos/'+a.binding['deployment']['policy']['authority_repository']+'/actions/runs/'+str(s['run_id'])+'/artifacts','artifacts')
@@ -750,6 +751,8 @@ def observe_native(controller, prompt, locator, source=None, recovering=False):
     import provenance
     require(type(controller) is Native, 'actual native observation owner required')
     native=controller.candidates.native; c=native.provision
+    from trial_storage import install
+    install(c)
     journal=c.store(c.root/'trial-controller-context-transition'); retained=journal.read()
     require(retained is not None and retained['value']['phase']==('terminal' if recovering else 'bound') and retained['value']['prompt_digest']==digest(prompt),
             'exact native context terminal observation required')
@@ -781,7 +784,8 @@ def observe_native(controller, prompt, locator, source=None, recovering=False):
         require(value['terminal']==result and journal.read()==retained, 'native context retained terminal changed')
     else:
         value.update(phase='terminal',terminal=result)
-        journal.write(retained,value)
+        from trial_storage import write_controller
+        write_controller(c,'trial-controller-context-transition',journal,retained,value)
     return copy.deepcopy(result)
 
 

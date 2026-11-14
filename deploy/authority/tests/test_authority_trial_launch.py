@@ -8,7 +8,6 @@ import trial_launch
 import trial_case
 import trial_controller
 import service
-import merge_transport
 import app_proofs
 from test_authority_app_proofs import AppAPI
 from test_authority_broker_evidence import stamp
@@ -113,50 +112,40 @@ class Launch(unittest.TestCase):
     exercise=case_fixture.TrialCase.exercise
     prepare=case_fixture.TrialCase.prepare
 
-    def test_ready_dispatch_reaches_shared_merge_and_terminal(self):
+    def test_ready_dispatch_binds_one_closed_handoff(self):
         def check(*args):
-            f=Launched(self,args); f.ready()
+            f=Launched(self,args); f.ready(name='direct-push')
             with self.assertRaisesRegex(Refusal,'pending'): f.coordinate()
             request=f.close_handoff()
             self.assertEqual(request['snapshot']['run_id'],101)
             self.assertEqual(len(f.dispatched),1)
             self.assertEqual(f.dispatched[0]['inputs']['mode'],'case')
-            f.published()
-            with patch.object(merge_transport,'isolated',side_effect=f.transport): result=f.run('broker')
-            self.assertEqual(result['state'],'submitted')
-            terminal=f.finalize()
-            self.assertIsNone(terminal['fence']['pending'])
-            self.assertEqual(terminal['fence']['completed'][-1]['kind'],'merged')
-            self.assertEqual(len(f.merges),1)
+            self.assertEqual(f.admission.value['phase'],'bound')
+            self.assertEqual(f.merges,[])
             f.launch.staging.revoke()
             self.assertIn(f.case_token,f.revoked)
-            return f.source.refs['main']
         self.exercise(continuation=check)
 
-    def test_unknown_dispatch_recovers_once_and_withdrawn_review_closes_denial(self):
+    def test_unknown_dispatch_recovers_one_closed_handoff_without_redispatch(self):
         def check(*args):
-            f=Launched(self,args); f.ready(lost=True)
+            f=Launched(self,args); f.ready(lost=True,name='direct-push')
             with self.assertRaises(OSError): f.coordinate()
             # A new native coordinator reuses retained intent, not an old token
             # handshake or a second workflow POST.
             f.launch=trial_launch.Native(f.admission,f.launch.reader,f.origin_factory)
             with self.assertRaisesRegex(Refusal,'pending'): f.coordinate()
-            f.close_handoff(); f.published(); f.reviews=[]
-            with patch.object(merge_transport,'isolated',side_effect=AssertionError('denial dispatched')),self.assertRaisesRegex(Refusal,'independent approval'):
-                f.run('broker')
-            next(j for j in f.remote.jobs if j['name'].startswith('broker ('))['conclusion']='failure'
-            terminal=f.finalize()
-            self.assertEqual(terminal['fence']['completed'][-1]['kind'],'not-submitted')
-            self.assertIsNone(terminal['fence']['pending'])
+            f.close_handoff()
+            self.assertEqual(f.admission.value['phase'],'bound')
             self.assertEqual(len(f.dispatched),1)
             self.assertEqual(f.merges,[])
-            with self.assertRaises(Refusal): f.coordinate()
+            f.coordinate()
+            self.assertEqual(len(f.dispatched),1)
         self.exercise(continuation=check)
 
     def test_missing_or_substituted_ready_proof_never_fences_or_redispatches(self):
         for fault in ('missing','token','expired'):
             def check(*args):
-                f=Launched(self,args); f.ready(absent=fault=='missing')
+                f=Launched(self,args); f.ready(absent=fault=='missing',name='direct-push')
                 if fault=='missing':
                     with self.assertRaisesRegex(Refusal,'pending'): f.coordinate()
                 else:
@@ -187,7 +176,7 @@ class Launch(unittest.TestCase):
     def test_unknown_ready_publication_recovers_only_exact_committed_ref(self):
         for committed in (False,True):
             def check(*args):
-                f=Launched(self,args); f.ready()
+                f=Launched(self,args); f.ready(name='direct-push')
                 send=f.origin.api.post; writes=[]
                 def post(path,body):
                     if path.endswith('/git/refs') and body['ref'].endswith('-case-ready'):
@@ -207,7 +196,7 @@ class Launch(unittest.TestCase):
     def test_delegation_expiring_during_fence_readback_refuses_git_effects(self):
         for broken in (True,False):
             def check(*args):
-                f=Launched(self,args); f.ready(lost=True)
+                f=Launched(self,args); f.ready(lost=True,name='direct-push')
                 with self.assertRaises(OSError): f.coordinate()
                 get,post=f.api.get,f.api.post
                 writes=[]; moved=[]
@@ -236,7 +225,7 @@ class Launch(unittest.TestCase):
     def test_late_expiry_refuses_pending_publication_and_execution_binding_writes(self):
         for phase in ('publication-started','bind-started'):
             def check(*args):
-                f=Launched(self,args); f.ready()
+                f=Launched(self,args); f.ready(name='direct-push')
                 if phase=='bind-started':
                     with self.assertRaisesRegex(Refusal,'pending'): f.coordinate()
                     # Stop the second coordination call after the CLOSED
@@ -266,7 +255,7 @@ class Launch(unittest.TestCase):
 
     def test_retained_cleanup_after_expiry_needs_no_live_admission_or_coordinator(self):
         def check(*args):
-            f=Launched(self,args); f.ready(lost=True)
+            f=Launched(self,args); f.ready(lost=True,name='direct-push')
             with self.assertRaises(OSError): f.coordinate()
             c=f.native.provision
             f.clock[0]+=501

@@ -42,15 +42,28 @@ class Prepare:
         d, p = binding['deployment'], binding['deployment']['policy']
         require(d['adapter'] == 'github-actions' and d['state'] == 'qualification' and d['qualification'] is None,
                 'unqualified disposable Actions trial required')
+        from trial_specimen import strict
+        eligibility=None
+        if strict(files):
+            eligibility_document=c.store(c.root/'trial-eligibility').read()
+            require(eligibility_document is not None and eligibility_document['value']['phase']=='complete','strict worker eligibility required before any reservation')
+            eligibility=eligibility_document['value']['link']
+            from trial_eligibility import authenticate
+            authenticate(c.session.registry,r,worker,eligibility,c.clock,source,n.registry.api)
         intent = dict(kind='native-trial-candidates', revision=completed['retained']['value']['revision_bound'],
             record_digest=digest(r), worker=worker, artifact_digest=proof['artifact_digest'],
             export_digest=digest(submission.export_manifest(files)), cases=list(CASES))
+        if eligibility is not None: intent['eligibility']=eligibility
         journal = c.store(c.root / 'trial-candidates')
         document = journal.read()
         session, original, trial = c.session, c.session.registry, n.registry
         provisioned = copy.deepcopy(c.document)
 
         def live(force=False):
+            if eligibility is not None:
+                require(c.store(c.root/'trial-eligibility').read()==eligibility_document,'owned strict worker eligibility changed')
+                from trial_eligibility import authenticate
+                authenticate(original,r,worker,eligibility,c.clock)
             require(r['created'] <= c.clock() < min(r['expires'], d['expires'], origin['fence']['pending']['execution_deadline']),
                     'native case preparation expired')
             require(journal.read() == document and c.store(c.root / 'trial-workflow').read() == completed['retained'],
@@ -133,7 +146,9 @@ class Prepare:
                 prior = [worker['submitted'], *[v['submitted'] for v in state['candidates']]]
                 require(all(submitted['pr'] != v['pr'] and submitted['head'] != v['head'] for v in prior) and
                         submitted['tree'] == worker['submitted']['tree'], 'distinct exact trial candidate required')
-                state['candidates'].append(dict(name=CASES[index], submitted=submitted, controls_digest=digest(facts)))
+                candidate=dict(name=CASES[index], submitted=submitted, controls_digest=digest(facts))
+                if eligibility is not None: candidate['eligibility']=eligibility
+                state['candidates'].append(candidate)
                 state['pending'] = None
                 document = journal.write(document, state)
             live(True)
