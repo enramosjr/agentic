@@ -1021,7 +1021,32 @@ unknown write acknowledgment cannot authorize progression. Exact third-case clea
 test collects the first case, observes and revokes the second, produces and
 observes the third without token minting, revokes its exact capability, and selects
 the fourth `expired-proof` reservation. It does not execute that fourth case as
-part of this evidence slice. Full hosted coordination, qualification receipt
+part of that third-case evidence slice.
+The fourth `expired-proof` case now has its own strict v2 terminal carrying the
+acknowledged recovery envelope and authenticated Session `not-submitted` receipt.
+It is a broker prerequisite refusal, not a host denial: its evidence means
+`request_sent=False` and precisely `proof_expired`. The read-only bridge
+reauthenticates the original successful CLOSED broker intent/outcome, all five
+initially valid own-App proofs, publication observation, exact expired-proof
+observation, receipt and finalizer archives. The recovery envelope must match the
+completed fence digest, with no gate, readiness, dispatch, outcome or host-denial
+conflict. Native observation validates the original worker export, current
+acceptance, required checks, independent approval and unchanged snapshot without
+minting coding or merge credentials. Active broker execution and finalization
+retain their existing admission and controls checks.
+Historical consumption checks the same immutable evidence at the original event
+times. Purpose-proof expiry and publication freshness do not become current
+authority: existing record, certificate and deployment expiry gates still apply.
+Fourth-case v1 terminals are refused by observation and historical consumption;
+there is no migration or adoption. A lost finalizer acknowledgment cannot export
+or publish terminal evidence, and an uncertain native root write cannot authorize
+reobservation or fifth-case selection. Exact cleanup remains a separate
+`trial_launch.revoke(..., name='expired-proof')` call and remains available after
+expiry. The connected source-local fixture collects the first case, observes and
+cleans up the second and third, executes the fourth real Session/finalizer path,
+observes it without minting credentials, explicitly revokes its capability, then
+selects the fifth `authority-outage` reservation without executing it.
+Full hosted coordination, qualification receipt
 production and process/credential isolation remain unfinished. ACK-loss fixtures
 do not establish native-owner reconstruction. Modeled transport and denial do not prove
 hosted execution, process or credential isolation, or qualification. All live,

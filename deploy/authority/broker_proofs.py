@@ -21,11 +21,18 @@ def _operation(binding, snapshot, admission=None):
     if admission is not None:
         from trial_controller import authenticated
         authenticated(admission, binding)
+    require(admission is not None or binding['deployment']['state'] == 'active',
+            'current pending broker configuration required')
+    return _bound_operation(binding, snapshot)
+
+
+def _bound_operation(binding, snapshot):
+    """Structural binding only; callers retain their own authorization gates."""
     d = validate_deployment(binding['deployment'])
     s = validate_snapshot(snapshot, d['policy'])
     fence = validate_fence(binding['fence'])
     op = fence['pending']
-    require((admission is not None or d['state'] == 'active') and op is not None and op['kind'] == 'merge' and
+    require(op is not None and op['kind'] == 'merge' and
             binding['configuration_revision'] == op['configuration_revision'] and
             binding['deployment_digest'] == op['deployment_digest'] == digest(d),
             'current pending broker configuration required')
@@ -37,9 +44,15 @@ def _operation(binding, snapshot, admission=None):
 
 
 def _read(authority, binding, identities, snapshot, locators, now, request=None, admission=None):
+    _operation(binding, snapshot, admission)
+    return _read_bound(authority, binding, identities, snapshot, locators, now, request)
+
+
+def _read_bound(authority, binding, identities, snapshot, locators, now, request=None):
+    """Shared document semantics; this function grants no admission or dispatch."""
     d = binding['deployment']
     app_proofs.identity_record(d, identities)
-    op = _operation(binding, snapshot, admission)
+    op = _bound_operation(binding, snapshot)
     object_fields(locators, ('admin', 'reader', 'issuer', 'coding', 'merge'), 'broker purpose locators')
     documents, provenance, valid_until = {}, {}, {}
     for purpose in ('admin', 'reader', 'issuer', 'coding', 'merge'):
@@ -83,6 +96,28 @@ def _read(authority, binding, identities, snapshot, locators, now, request=None,
         valid_until[purpose] = value['expires']
     return {'documents': documents, 'provenance': provenance, 'valid_until': valid_until,
             'proofs_digest': digest({'documents': documents, 'provenance': provenance})}
+
+
+def _expired_history(authority, binding, record, retained, locators, issued, observed):
+    """Reconstruct one expired-proof observation; never active authorization."""
+    request, certificate = retained['request'], retained['certificate']
+    require(retained['candidate']['name']=='expired-proof' and binding['deployment']['state']=='qualification' and
+            binding['deployment']['qualification'] is None and certificate['record_digest']==digest(record) and
+            certificate['candidate']==retained['candidate'] and certificate['worker']==retained['worker'] and
+            certificate['operation']==binding['fence']['pending'] and certificate['sequence']==binding['fence']['sequence'] and
+            certificate['configuration_revision']==binding['configuration_revision'] and
+            certificate['deployment_digest']==binding['deployment_digest'] and
+            request['qualification']==dict(kind='native-trial-certificate',digest=digest(certificate)),
+            'exact expired-proof historical binding required')
+    require(positive(issued) and positive(observed) and certificate['issued']<=issued<observed<certificate['expires'],
+            'expired-proof historical event interval differs')
+    original=_read_bound(authority,binding,record['pair']['identities'],request['snapshot'],locators,issued)
+    try:
+        _read_bound(authority,binding,record['pair']['identities'],request['snapshot'],locators,observed)
+    except BrokerRefusal as error:
+        require(error.code=='proof_expired','wrong historical proof refusal')
+        return original,dict(code=error.code,observation=error.observation)
+    require(False,'historical proof was not expired')
 
 
 def read(authority, binding, identities, snapshot, locators, now):

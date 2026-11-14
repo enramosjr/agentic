@@ -633,8 +633,15 @@ def _publication_observation(binding, snapshot, started, completed, facts):
 
 def _bound_publication_observation(binding, snapshot, started, completed, facts, admission=None):
     import broker_proofs
+    broker_proofs._operation(binding, snapshot, admission)
+    return _publication_document(binding, snapshot, started, completed, facts)
+
+
+def _publication_document(binding, snapshot, started, completed, facts):
+    """Publication semantics only; active callers authenticate before entry."""
+    import broker_proofs
     import control_rendezvous
-    op = broker_proofs._operation(binding, snapshot, admission)
+    op = broker_proofs._bound_operation(binding, snapshot)
     control_rendezvous.validate_facts(facts, binding)
     require(positive(started) and positive(completed) and op['created'] <= started <= completed <= started + 30,
             'fresh publication observation required')
@@ -649,9 +656,15 @@ def _validate_publication_observation(value, binding, snapshot, proof, now):
 
 
 def _bound_validate_publication_observation(value, binding, snapshot, proof, now, admission=None):
+    import broker_proofs
+    broker_proofs._operation(binding, snapshot, admission)
+    return _publication_result(value, binding, snapshot, proof, now)
+
+
+def _publication_result(value, binding, snapshot, proof, now):
     object_fields(value, ('schema_version kind operation_id sequence configuration_revision deployment_digest snapshot '
                           'readback_started readback_completed result').split(), 'closed publication observation')
-    expected = _bound_publication_observation(binding, snapshot, value['readback_started'], value['readback_completed'], value['result'], admission)
+    expected = _publication_document(binding, snapshot, value['readback_started'], value['readback_completed'], value['result'])
     require(value == expected and type(value['schema_version']) is int and type(value['sequence']) is int and
             proof['role'] == 'publication-controls' and proof['key'] == snapshot['pr'] and
             proof['run_id'] == snapshot['run_id'] and proof['attempt'] == snapshot['run_attempt'] and
@@ -987,6 +1000,9 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
                     certificate_digest=digest(admitted.value['certificate']),before=before,after=result,completed=clock())
                 if admitted.candidate['name'] in ('direct-push','coding-update','missing-approval'):
                     document.update(schema_version=2,**finalizer._direct_evidence(
+                        admitted.request['operation_id'],admitted.request['sequence'],result))
+                if admitted.candidate['name']=='expired-proof':
+                    document.update(schema_version=2,**finalizer._expired_evidence(
                         admitted.request['operation_id'],admitted.request['sequence'],result))
                 if admitted.candidate['name']=='revoked-qualification':
                     document['revocation']=copy.deepcopy(admitted._revocation_links)

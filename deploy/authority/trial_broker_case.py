@@ -165,6 +165,7 @@ def run(a, authority, session, uploader, sleeper):
     location=receipts.find_for_recovery('not-submitted')
     require(location is not None and all(receipts.find_for_recovery(k) is None for k in ('gate','dispatch','outcome','host-denied')),
             'genuine no-dispatch Session evidence required')
+    require(not expiry or not receipts._matches('control-ready'),'expired-proof refusal must precede readiness')
     terminal=receipts.authenticate(location)
     document=dict(identity,job_id=job,intent=intent,refusal=refusal,receipt=location,receipt_digest=digest(terminal),completed=a.clock())
     if not expiry:
@@ -214,11 +215,150 @@ def read(a, authority, job_id):
     require(receipts.find_for_recovery('not-submitted')==value['receipt'] and
             all(receipts.find_for_recovery(k) is None for k in ('gate','dispatch','outcome','host-denied')),
             'broker outcome has no exact no-dispatch receipt')
+    require(not expiry or not receipts._matches('control-ready'),'expired-proof refusal must precede readiness')
     receipt=receipts.authenticate(value['receipt'])
     require(digest(receipt)==value['receipt_digest'] and observed<=receipt['issued']<=value['completed'],
             'broker receipt differs or predates refusal')
     _prerequisites(a,authority)
     return copy.deepcopy(value)
+
+
+def _expired_current(binding, record, retained, authority, source, now):
+    """Current prerequisites without creating an Admission or source credential."""
+    import service
+    from authority_github import Readers,current_snapshot
+    from qualification_cases import HostCases
+    from trusted_ci_github import independent_approval
+    from broker_evidence import _additional_checks
+    d=binding['deployment']; s=retained['request']['snapshot']; readers=Readers(source,authority,d)
+    require(current_snapshot(readers,d,s['pr'],s['run_id'],s['run_attempt'])==s,'expired-proof candidate changed')
+    location=service._locator(authority,d,s['run_id'],s['run_attempt'],'evidence',s['pr'])
+    proof=provenance.authenticated_document(authority,d,location,'evidence',s['pr'],now)
+    task=dict(kind='native-trial-case-task',submitted=retained['candidate']['submitted'],worker=retained['worker'],
+              certificate_digest=digest(retained['certificate']))
+    coordinates=dict(configuration_revision=binding['configuration_revision'],operation=binding['fence']['pending'],
+        sequence=binding['fence']['sequence'],issuer_installation_id=record['pair']['identities']['apps']['issuer']['installation_id'],
+        evidence_job_id=proof['job_id'],evidence_digest=digest(proof['document']),task_digest=digest(task))
+    probe=HostCases(None,source,authority,record['pair']['identities'],None,None,None,lambda:now)
+    probe._success(s,location,coordinates,d)
+    pr=source.get('/repos/'+d['policy']['repository']+'/pulls/'+str(s['pr']))
+    require(pr.get('mergeable') is True,'unresolved expired-proof candidate')
+    independent_approval(source,d['policy'],pr,human=True)
+    from urllib.parse import quote
+    rules=source.pages('/repos/'+d['policy']['repository']+'/rules/branches/'+quote(d['policy']['target'],safe=''))
+    required=[v for rule in rules if rule['type']=='required_status_checks' for v in rule['parameters']['required_status_checks']]
+    require(any(v['context']==d['policy']['check_name'] and v.get('integration_id')==d['policy']['app_id'] for v in required),
+            'expired-proof current issuer obligation missing')
+    _additional_checks(source,d,s,required)
+    require(current_snapshot(readers,d,s['pr'],s['run_id'],s['run_attempt'])==s,'expired-proof candidate changed during readback')
+
+
+def expired_terminal(authority, record, retained, terminal, proof, now, source=None):
+    """Exact fourth CLOSED broker refusal. Evidence-only; no active Admission."""
+    from merge_receipts import not_submitted
+    from service import _locator,_publication_result
+    from trial_host_case import _ClosedDirectAPI
+    from trusted_ci_deployment import timestamp
+    from trial_case import _closed,consumption
+    from trial_launch import consumption as ready_consumption
+    from authority_protocol import fingerprint
+    object_fields(terminal,('schema_version kind request_digest certificate_digest before after completed recovery broker_receipt').split(),
+                  'expired-proof v2 terminal')
+    require(type(terminal['schema_version']) is int and terminal['schema_version']==2 and
+            retained['candidate']['name']=='expired-proof' and terminal['kind']=='trial-case-terminal' and
+            terminal['request_digest']==digest(retained['request']) and terminal['certificate_digest']==digest(retained['certificate']),
+            'exact expired-proof v2 evidence required; legacy terminals remain held')
+    authority=_ClosedDirectAPI(authority)
+    b=terminal['before']; d=b['deployment']; request=retained['request']; s=request['snapshot']; op=b['fence']['pending']
+    require(b['fence']==retained['pending'] and op==retained['certificate']['operation'] and
+            s['run_attempt']==op['attempt']==1 and type(now) is int and
+            now<min(record['expires'],retained['certificate']['expires'],d['expires']) and
+            positive(terminal['completed']) and proof['job_started']<=terminal['completed']<=proof['artifact_created']<=proof['job_completed']<=now,
+            'expired-proof terminal binding or interval differs')
+    # Reauthenticate the original CLOSED READY and case-consumption preimages.
+    # These finite capabilities constrain original events, not today's history read.
+    execution,launch=retained['execution'],retained['launch']
+    require(execution is not None and launch is not None,'expired-proof consumed launch required')
+    object_fields(execution,('publication_revision credential handshake').split(),'expired-proof consumed execution')
+    object_fields(launch,('revision credential handshake').split(),'expired-proof consumed launch')
+    ready={k:retained[k] for k in ('schema_version','task_id','origin_revision','prompt','candidate','worker','history')}
+    ready.update(kind='trial-case-ready',execution=None)
+    for link,role,initial,revision in (
+            (launch,'trial-case-ready',ready,launch['revision']),
+            (execution,'trial-case-handoff',dict(retained,execution=None),execution['publication_revision'])):
+        credential=link['credential']; locator=link['handshake']
+        object_fields(credential,('revision repository_id permissions token_digest expires').split(),'expired-proof retained credential')
+        require(credential['revision']==launch['revision'] and positive(credential['repository_id']) and
+                credential['repository_id']==launch['credential']['repository_id'] and
+                credential['permissions']==dict(contents='read') and fingerprint(credential['token_digest']) and
+                credential['token_digest']==launch['credential']['token_digest'] and positive(credential['expires']) and
+                credential['expires']<=retained['certificate']['expires'] and
+                locator['run_id']==s['run_id'] and locator['attempt']==1,
+                'expired-proof retained capability scope or interval differs')
+        consumed=provenance.authenticated_document(authority,d,locator,role,record['task_id'],now)
+        expected=(ready_consumption if role=='trial-case-ready' else consumption)(initial,revision,credential,locator)
+        _closed(consumed,expected,record['created'],credential['expires'])
+        require(proof['job_completed']<credential['expires'],'expired-proof original producer outlived capability')
+    envelope=terminal['recovery']; receipt=terminal['broker_receipt']
+    object_fields(envelope,('schema_version kind operation_digest configuration_revision deployment_digest producer recovery artifacts facts').split(),
+                  'expired-proof recovery envelope')
+    require(type(envelope['schema_version']) is int and envelope['schema_version']==2 and envelope['kind']=='broker-terminal-recovery' and
+            envelope['operation_digest']==digest(op) and envelope['configuration_revision']==b['configuration_revision'] and
+            envelope['deployment_digest']==b['deployment_digest'] and envelope['facts'] is None and
+            terminal['after']['fence']['completed'][-1]['receipt_digest']==digest(envelope),
+            'expired-proof recovery digest differs')
+    require(envelope['recovery']==dict(run_id=proof['run_id'],attempt=proof['attempt'],job_id=proof['job_id'],workflow_sha=d['policy']['workflow_sha']) and
+            proof['run_id']==op['run_id'] and proof['attempt']==1,'expired-proof recovery producer differs')
+    producer=envelope['producer']; object_fields(producer,('id run_id head_sha conclusion completed_at').split(),'expired-proof CLOSED broker')
+    require(positive(producer['id']) and producer['conclusion']=='success','successful CLOSED expired-proof broker required')
+    reader=ActionsReceipts(authority,lambda:copy.deepcopy(b),producer['id'],lambda:now,recovery=True)
+    job=reader.terminal_job(); closed=int(timestamp(job['completed_at']).timestamp())
+    require(producer=={k:job[k] for k in producer} and closed<=proof['job_started'],'expired-proof broker/finalizer interval differs')
+    artifacts=envelope['artifacts']; object_fields(artifacts,('not-submitted dispatch outcome host-denied').split(),'expired-proof recovery artifacts')
+    require(artifacts['not-submitted'] is not None and all(artifacts[k] is None for k in ('dispatch','outcome','host-denied')) and
+            all(not reader._matches(k) for k in ('gate','dispatch','outcome','host-denied','control-ready')),
+            'expired-proof has conflicting dispatch evidence')
+    require(reader.find_for_recovery('not-submitted')==artifacts['not-submitted'] and
+            reader.authenticate(artifacts['not-submitted'])==receipt and
+            digest(receipt)==digest(not_submitted(b,producer['id'],receipt.get('issued'))),
+            'expired-proof Session receipt differs')
+    matches=reader._matches('not-submitted')
+    require(len(matches)==1 and matches[0]['id']==artifacts['not-submitted']['artifact_id'] and
+            matches[0]['digest']==artifacts['not-submitted']['archive_digest'],'expired-proof receipt archive changed')
+    receipt_created=int(timestamp(matches[0]['created_at']).timestamp())
+    identity=dict(schema_version=1,kind='trial-broker-denial',case='expired-proof',
+                  request_digest=digest(request),certificate_digest=digest(retained['certificate']))
+    def load(role):
+        location=_locator(authority,d,s['run_id'],1,role,s['pr'])
+        return provenance.authenticated_document(authority,d,location,role,s['pr'],now)
+    denial=load('trial-broker-denial'); value=denial['document']; saved=load('trial-broker-intent'); intent=value['intent']
+    object_fields(value,(*identity,'job_id','intent','refusal','receipt','receipt_digest','completed'),'expired-proof broker outcome')
+    object_fields(intent,(*identity,'job_id','issued','proofs','proofs_digest','publication_digest'),'expired-proof broker intent')
+    require(type(value['schema_version']) is int and type(intent['schema_version']) is int and
+            all(value[k]==v for k,v in identity.items()) and
+            all(intent[k]==v for k,v in dict(identity,kind='trial-broker-intent').items()) and
+            positive(value['job_id']) and positive(intent['job_id']) and
+            value['job_id']==intent['job_id']==denial['job_id']==saved['job_id']==producer['id'] and saved['document']==intent and
+            value['receipt']==artifacts['not-submitted'] and value['receipt_digest']==digest(receipt),
+            'expired-proof intent, outcome or receipt identity differs')
+    refusal=value['refusal']; object_fields(refusal,('code','observation'),'expired-proof refusal')
+    object_fields(refusal['observation'],('purpose artifact_id proof_digest provenance expires observed').split(),'expired-proof observation')
+    observed=refusal['observation']['observed']
+    require(positive(intent['issued']) and positive(observed) and positive(value['completed']) and
+            denial['job_started']<=intent['issued']<=saved['artifact_created']<=observed<=receipt['issued']<=receipt_created<=value['completed']<=
+            denial['artifact_created']<=closed and saved['job_started']==denial['job_started'] and
+            saved['job_completed']==denial['job_completed']==closed and
+            value['completed']<min(record['expires'],retained['certificate']['expires'],op['execution_deadline'],d['expires']),
+            'expired-proof original event interval differs')
+    original,expected=broker_proofs._expired_history(authority,b,record,retained,intent['proofs'],intent['issued'],observed)
+    require(original['proofs_digest']==intent['proofs_digest'] and digest(expected)==digest(refusal),
+            'exact historical proof_expired refusal differs')
+    publication=load('publication-controls')
+    facts=_publication_result(publication['document'],b,s,publication,intent['issued'])
+    require(digest(publication)==intent['publication_digest'] and facts['controls_digest']==retained['certificate']['controls_digest'],
+            'expired-proof original publication differs')
+    if source is not None: _expired_current(b,record,retained,authority,source,now)
+    return dict(request_sent=False,broker_refusal='proof_expired',document=copy.deepcopy(value))
 
 
 def certificate_document(initial, consumption):

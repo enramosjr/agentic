@@ -53,6 +53,21 @@ def fixture():
 
 
 class BrokerProofContracts(unittest.TestCase):
+    def test_structural_history_helpers_do_not_authorize_ordinary_trial_reads(self):
+        api, apis, b, identities, s, locators = fixture()
+        b['deployment'].update(state='qualification', qualification=None)
+        from trusted_ci_policy import digest
+        b['deployment_digest']=digest(b['deployment'])
+        b['fence']['pending']['deployment_digest']=b['deployment_digest']
+        for read in (broker_proofs.current_operation,
+                     lambda binding,snapshot:broker_proofs.read(api,binding,identities,snapshot,locators,1100)):
+            with self.assertRaises(Refusal): read(b,s)
+        with self.assertRaises(Refusal):
+            broker_proofs._read(api,b,identities,s,locators,1100,admission=object())
+        import service
+        with self.assertRaises(Refusal): service._bound_publication_observation(b,s,1000,1001,{})
+        with self.assertRaises(Refusal): service._bound_validate_publication_observation({},b,s,{},1100)
+
     def test_all_five_domains_are_authenticated_for_the_current_operation(self):
         api, apis, b, identities, s, locators = fixture()
         result = broker_proofs.read(api, b, identities, s, locators, 1100)

@@ -46,7 +46,7 @@ def _predecessor(original,registry,record,history,index,before,clock):
     location=entry['terminal']; s=prior['request']['snapshot']
     require(location['run_id']==s['run_id'] and location['attempt']==s['run_attempt'], 'prior terminal run differs')
     authority=registry.api
-    if prior['candidate']['name'] in ('direct-push','coding-update','missing-approval'):
+    if prior['candidate']['name'] in ('direct-push','coding-update','missing-approval','expired-proof'):
         from trial_host_case import _ClosedDirectAPI
         authority=_ClosedDirectAPI(authority)
     proof=provenance.authenticated_document(authority,before['deployment'],location,
@@ -60,11 +60,12 @@ def _predecessor(original,registry,record,history,index,before,clock):
         return reconstruct(original,registry,record,prior,value,before,clock,proof)
     revocation=['revocation'] if prior['candidate']['name']=='revoked-qualification' else []
     direct=['recovery','host_receipt'] if prior['candidate']['name'] in ('direct-push','coding-update','missing-approval') else []
-    object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split()+revocation+direct,'prior closed terminal')
+    expired=['recovery','broker_receipt'] if prior['candidate']['name']=='expired-proof' else []
+    object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split()+revocation+direct+expired,'prior closed terminal')
     if revocation:
         from trial_broker_case import history_revocation
         history_revocation(original,record,prior,value['revocation'])
-    require(type(value['schema_version']) is int and value['schema_version']==(2 if direct else 1) and value['kind']=='trial-case-terminal' and
+    require(type(value['schema_version']) is int and value['schema_version']==(2 if direct or expired else 1) and value['kind']=='trial-case-terminal' and
             value['request_digest']==digest(prior['request']) and value['certificate_digest']==digest(prior['certificate']) and
             type(value['completed']) is int and proof['job_started']<=value['completed']<=proof['artifact_created']<=proof['job_completed'],
             'prior terminal substituted case or interval')
@@ -72,6 +73,9 @@ def _predecessor(original,registry,record,history,index,before,clock):
     if direct:
         from trial_host_case import direct_terminal
         direct_terminal(registry.api,record,prior,value,proof,clock())
+    if expired:
+        from trial_broker_case import expired_terminal
+        expired_terminal(registry.api,record,prior,value,proof,clock())
     from operation_fence import terminal
     receipt=terminal(value['after']['fence']['completed'][-1])
     require(receipt['kind']=='not-submitted' and receipt['operation_id']==prior['request']['operation_id'] and
