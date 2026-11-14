@@ -25,7 +25,7 @@ class Finalizer:
     def _direct_evidence(self, operation_id, sequence, result):
         retained = self._direct_terminal
         require(retained is not None and retained[:3] == (operation_id, sequence, result),
-                'exact acknowledged coding-actor denial finalization required')
+                'exact acknowledged host-denial finalization required')
         return copy.deepcopy(retained[3])
 
     def finalize(self, operation_id, sequence, broker_job_id):
@@ -149,7 +149,7 @@ class Finalizer:
                             require(current_snapshot(Readers(_admission.source,self.authority,d),d,s['pr'],s['run_id'],s['run_attempt'])==s,
                                     'historical source moved before terminal effect')
             result = self.registry.finalize_operation(before['branch_head'], terminal, before_effect=guard)
-            if _admission.candidate['name'] in ('direct-push','coding-update'):
+            if _admission.candidate['name'] in ('direct-push','coding-update','missing-approval'):
                 self._direct_terminal = (operation_id, sequence, copy.deepcopy(result),
                                          copy.deepcopy(dict(recovery=envelope,host_receipt=no_dispatch)))
             return result

@@ -985,7 +985,7 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
             if selected(admitted) or trial_broker_case.selected(admitted) or historical(admitted.candidate) or admitted.candidate['name']=='positive':
                 document=dict(schema_version=1,kind='trial-case-terminal',request_digest=digest(admitted.request),
                     certificate_digest=digest(admitted.value['certificate']),before=before,after=result,completed=clock())
-                if admitted.candidate['name'] in ('direct-push','coding-update'):
+                if admitted.candidate['name'] in ('direct-push','coding-update','missing-approval'):
                     document.update(schema_version=2,**finalizer._direct_evidence(
                         admitted.request['operation_id'],admitted.request['sequence'],result))
                 if admitted.candidate['name']=='revoked-qualification':

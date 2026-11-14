@@ -161,11 +161,11 @@ class Native:
         completed=native._worker_completion(admission.record,prompt,admission.source)
         require(completed['result']==admission.value['worker'], 'retained CLOSED worker changed')
         admission.worker=completed
-        if name in ('direct-push','coding-update'):
+        if name in ('direct-push','coding-update','missing-approval'):
             admission._direct_terminal_candidate()
         else:
             admission._candidate(self.candidates)
-        if name in ('direct-push','coding-update'):
+        if name in ('direct-push','coding-update','missing-approval'):
             from trial_host_case import direct_terminal
             direct_terminal(admission.registry.api,admission.record,admission.value,
                             admission.terminal_proof['document'],dict(admission.terminal_proof['producer']),
@@ -203,6 +203,10 @@ class Native:
                 require(previous is not None and previous['value']['phase']=='terminal' and
                         previous['value']['name']==prior_name and previous['value']['prompt_digest']==digest(prompt) and
                         'locator' in previous['value']['terminal'], 'owned independently observed first terminal required')
+                if prior_name=='missing-approval':
+                    # Historical proof cannot adopt an uncertain native observation.
+                    prior_key=case_journal('trial-controller',dict(name=prior_name))
+                    acknowledged(c,prior_key,c.store(c.root/prior_key),previous)
                 prior=previous['value']
                 publication=c.store(c.root/case_journal('trial-case-publication',dict(name=prior_name))).read()
                 require(publication is not None and publication['value']['phase']=='bound' and
@@ -327,14 +331,14 @@ class Admission:
             require(terminal_locator['run_id']==s['run_id'] and terminal_locator['attempt']==s['run_attempt'],
                     'terminal producer belongs to another case run')
             authority=self.registry.api
-            if self.candidate['name'] in ('direct-push','coding-update'):
+            if self.candidate['name'] in ('direct-push','coding-update','missing-approval'):
                 from trial_host_case import _ClosedDirectAPI
                 authority=_ClosedDirectAPI(authority)
             proof=authenticated_document(authority,self.binding['deployment'],terminal_locator,
                                          'trial-case-terminal',self.record['task_id'],self.clock())
             value=proof['document']
             revocation=['revocation'] if self.candidate['name']=='revoked-qualification' else []
-            direct=['recovery','host_receipt'] if self.candidate['name'] in ('direct-push','coding-update') else []
+            direct=['recovery','host_receipt'] if self.candidate['name'] in ('direct-push','coding-update','missing-approval') else []
             object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split()+revocation+direct,'closed case terminal')
             if revocation:
                 from trial_broker_case import history_revocation
@@ -517,8 +521,8 @@ class Admission:
         """Read-only counterpart to submission readback; no coding token mint."""
         from datetime import datetime, timezone
         import submission
-        require(self._terminal_read_only and self.candidate['name'] in ('direct-push','coding-update'),
-                'coding-actor denial terminal inspection only')
+        require(self._terminal_read_only and self.candidate['name'] in ('direct-push','coding-update','missing-approval'),
+                'accepted host denial terminal inspection only')
         candidates=self.value['candidates']['value']
         require(candidates['pending'] is None and len(candidates['candidates'])==len(candidates['requests']) and
                 self.candidate in candidates['candidates'],'complete unchanged candidate preparation required')

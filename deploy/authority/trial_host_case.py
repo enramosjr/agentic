@@ -123,6 +123,11 @@ class _ClosedDirectAPI:
 
 def _direct_identity(binding, request, certificate, name='direct-push'):
     require(name in ('direct-push','coding-update'),'exact coding-actor denial case required')
+    return _accepted_identity(binding,request,certificate,name)
+
+
+def _accepted_identity(binding, request, certificate, name):
+    require(name in ('direct-push','coding-update','missing-approval'),'exact accepted host denial case required')
     return dict(schema_version=1,kind='trial-host-denial',case=name,
         operation_id=request['operation_id'],sequence=binding['fence']['sequence'],
         operation_digest=digest(binding['fence']['pending']),configuration_revision=binding['configuration_revision'],
@@ -144,11 +149,19 @@ def _direct_receipt(value, binding, job_id, now):
 
 
 def _direct_outcome(binding, record, retained, authority, locator, now, source=None):
-    """Validate the two coding-actor denials; source adds current freshness.
+    """The coding-actor reader remains restricted to the two ref-update cases."""
+    require(retained['candidate']['name'] in ('direct-push','coding-update'),'exact coding-actor denial evidence required')
+    return _accepted_outcome(binding,record,retained,authority,locator,now,source)
 
-    The original internal direct-push helper names remain callable by existing
-    consumers. Neither the shared request shape nor this reader admits other cases.
-    """
+
+def _missing_outcome(binding, record, retained, authority, locator, now, source=None):
+    """The merge App must be denied for the absent current-head approval."""
+    require(retained['candidate']['name']=='missing-approval','exact missing-approval evidence required')
+    return _accepted_outcome(binding,record,retained,authority,locator,now,source)
+
+
+def _accepted_outcome(binding, record, retained, authority, locator, now, source):
+    """Shared immutable acceptance/provenance; source adds current freshness."""
     import checks
     from service import _locator
     from trusted_ci_deployment import timestamp
@@ -156,10 +169,10 @@ def _direct_outcome(binding, record, retained, authority, locator, now, source=N
     d, request, candidate = binding['deployment'],retained['request'],retained['candidate']
     s, key = request['snapshot'],record['task_id']
     name=candidate['name']
-    require(name in ('direct-push','coding-update') and locator['run_id']==s['run_id'] and
-            locator['attempt']==s['run_attempt']==1,'exact coding-actor denial evidence required')
+    require(name in ('direct-push','coding-update','missing-approval') and locator['run_id']==s['run_id'] and
+            locator['attempt']==s['run_attempt']==1,'exact accepted host denial evidence required')
     proof=provenance.authenticated_document(authority,d,locator,'trial-host-denial',key,now)
-    value=proof['document']; identity=_direct_identity(binding,request,retained['certificate'],name)
+    value=proof['document']; identity=_accepted_identity(binding,request,retained['certificate'],name)
     object_fields(value,(*identity,'job_id','intent','record','observation','completed'),'closed direct-push outcome')
     require(digest({k:value[k] for k in identity})==digest(identity) and positive(value['job_id']) and
             value['job_id']==proof['job_id'] and positive(value['completed']) and
@@ -175,17 +188,19 @@ def _direct_outcome(binding, record, retained, authority, locator, now, source=N
     observation=value['observation']
     object_fields(observation,('snapshot checks rules reviews synthetic_commit request actor_id before after '
                               'http_status denial_category denied_obligation acceptance').split(),'closed direct-push observation')
-    actor=record['pair']['identities']['apps']['coding']['actor_id']; commit=observation['synthetic_commit']
+    missing=name=='missing-approval'
+    category='required_review' if missing else 'protected_update'
+    actor=record['pair']['identities']['apps']['merge' if missing else 'coding']['actor_id']; commit=observation['synthetic_commit']
     require(observation['snapshot']==s and observation['request']==expected['request'] and
             positive(observation['actor_id']) and observation['actor_id']==actor and
             observation['before']==observation['after']==s['base'] and type(observation['http_status']) is int and
-            observation['http_status'] in (403,405,422) and observation['denial_category']=='protected_update' and
+            observation['http_status'] in (403,405,422) and observation['denial_category']==category and
             observation['denied_obligation'] is None and commit['sha']==s['merge'] and
             [v['sha'] for v in commit['parents']]==[s['base'],s['head']] and
             commit['tree']['sha']==candidate['submitted']['tree'],'intended direct-push denial was not established')
     expected_record=dict(name=name,pr=s['pr'],head=s['head'],base=s['base'],merge=s['merge'],
         tree=commit['tree']['sha'],before=s['base'],after=s['base'],actor_id=actor,request_sent=True,
-        http_status=observation['http_status'],denial_category='protected_update',denied_obligation=None,broker_refusal=None,
+        http_status=observation['http_status'],denial_category=category,denied_obligation=None,broker_refusal=None,
         merge_commit=None,merge_parents=[],merge_tree=None,evidence_digest=digest(observation))
     require(digest(value['record'])==digest(expected_record),'closed direct-push record differs')
     acceptance=observation['acceptance']; coordinates=acceptance['coordinates']; saved=acceptance['proof']
@@ -223,16 +238,21 @@ def _direct_outcome(binding, record, retained, authority, locator, now, source=N
                     c.get('head_sha')==s['merge'] and c.get('status')=='completed' and c.get('conclusion')=='success'
                     for c in entries),'closed direct-push competing obligation failed')
     reviews=observation['reviews']
-    require(isinstance(reviews,list) and 0<len(reviews)<=10000 and all(isinstance(r,dict) and positive(r.get('id')) for r in reviews) and
-            len({r['id'] for r in reviews})==len(reviews) and all(r['user']['id'] in p['reviewers'] and
-            r['user']['id'] not in p['coding_actors'] and r['user']['id']!=candidate['submitted']['bot_id'] and
-            r['user'].get('type')=='User' and r['state']=='APPROVED' and r['commit_id']==s['head'] for r in reviews),
-            'closed direct-push independent human approval missing')
+    if missing:
+        _missing_reviews(reviews,s)
+    else:
+        require(isinstance(reviews,list) and 0<len(reviews)<=10000 and all(isinstance(r,dict) and positive(r.get('id')) for r in reviews) and
+                len({r['id'] for r in reviews})==len(reviews) and all(r['user']['id'] in p['reviewers'] and
+                r['user']['id'] not in p['coding_actors'] and r['user']['id']!=candidate['submitted']['bot_id'] and
+                r['user'].get('type')=='User' and r['state']=='APPROVED' and r['commit_id']==s['head'] for r in reviews),
+                'closed direct-push independent human approval missing')
     if source is not None:
         probe=HostCases(None,source,authority,record['pair']['identities'],None,None,None,lambda:now)
         probe.binding,probe.d=binding,d
         case=dict(name=name,snapshot=s,evidence=evidence_location,coordinates=coordinates,expected_failure=None,mutations=[],prior=None)
-        current=probe._prerequisites(case)['acceptance']
+        prerequisites=probe._prerequisites(case)
+        if missing: _missing_reviews(prerequisites['reviews'],s)
+        current=prerequisites['acceptance']
         require(current['proof']==saved and current['coordinates']==coordinates and
                 all(current['check'][k]==acceptance['check'][k] for k in ('check_id','external_id','expires')),
                 'current direct-push acceptance differs')
@@ -241,6 +261,15 @@ def _direct_outcome(binding, record, retained, authority, locator, now, source=N
                 source.get('/repos/'+p['repository']+'/git/ref/heads/'+quote(p['target'],safe=''))['object']['sha']==s['base'],
                 'direct-push target or candidate changed after denial')
     return dict(locator=locator,document=value,proof={k:v for k,v in proof.items() if k!='document'})
+
+
+def _missing_reviews(reviews, snapshot):
+    require(isinstance(reviews,list) and len(reviews)<=10000 and
+            all(isinstance(r,dict) and positive(r.get('id')) and isinstance(r.get('state'),str) and
+                isinstance(r.get('commit_id'),str) for r in reviews) and
+            len({r['id'] for r in reviews})==len(reviews),'bounded unique missing-approval review inventory required')
+    require(not any(r['state']=='APPROVED' and r['commit_id']==snapshot['head'] for r in reviews),
+            'missing-approval observation has candidate approval')
 
 
 def _acceptance_identity(acceptance):
@@ -541,11 +570,12 @@ def read(admission, authority, locator=None):
     import service
     b, s, d = _context(admission)
     key = admission.record['task_id']
-    if admission.candidate['name'] in ('direct-push','coding-update'): authority=_ClosedDirectAPI(authority)
+    if admission.candidate['name'] in ('direct-push','coding-update','missing-approval'): authority=_ClosedDirectAPI(authority)
     if locator is None:
         locator = service._locator(authority,d,s['run_id'],s['run_attempt'],'trial-host-denial',key)
-    if admission.candidate['name'] in ('direct-push','coding-update'):
-        result=_direct_outcome(b,admission.record,admission.value,authority,locator,admission.clock(),admission.source)
+    if admission.candidate['name'] in ('direct-push','coding-update','missing-approval'):
+        reader=_missing_outcome if admission.candidate['name']=='missing-approval' else _direct_outcome
+        result=reader(b,admission.record,admission.value,authority,locator,admission.clock(),admission.source)
         admission.guard()
         return result
     require(locator['run_id']==s['run_id'] and locator['attempt']==s['run_attempt'], 'host outcome belongs to another run')
@@ -650,14 +680,14 @@ def validate_receipt(value, admission, authority, job_id):
 
 
 def direct_terminal(authority, record, retained, terminal, proof, now, source=None):
-    """A CLOSED coding-actor denial chain. No Admission or live continuation."""
+    """A CLOSED coding-update or missing-review chain. No active admission."""
     from merge_receipts import ActionsReceipts
     from trusted_ci_deployment import timestamp
     object_fields(terminal,('schema_version kind request_digest certificate_digest before after completed recovery host_receipt').split(),
                   'direct-push v2 terminal')
     require(type(terminal['schema_version']) is int and terminal['schema_version']==2 and
-            retained['candidate']['name'] in ('direct-push','coding-update'),
-            'coding-actor v2 denial evidence required; legacy terminals remain held')
+            retained['candidate']['name'] in ('direct-push','coding-update','missing-approval'),
+            'accepted host v2 denial evidence required; legacy terminals remain held')
     authority=_ClosedDirectAPI(authority)
     b=terminal['before']; d=b['deployment']; op=b['fence']['pending']; request=retained['request']
     require(op==retained['pending']['pending'] and b['fence']==retained['pending'] and
@@ -686,7 +716,8 @@ def direct_terminal(authority, record, retained, terminal, proof, now, source=No
     require(all(not reader._matches(k) for k in ('gate','control-ready','not-submitted','dispatch','outcome')),
             'contradictory direct-push broker inventory')
     require(reader.authenticate(artifacts['host-denied'])==host,'direct-push broker receipt differs')
-    outcome=_direct_outcome(b,record,retained,authority,host['host'],now,source)
+    reader=_missing_outcome if retained['candidate']['name']=='missing-approval' else _direct_outcome
+    outcome=reader(b,record,retained,authority,host['host'],now,source)
     require(digest(outcome['document'])==host['host_digest'] and outcome['proof']['job_completed']<=host['issued']<=
             int(timestamp(job['completed_at']).timestamp()),'direct-push broker substituted host evidence')
     return outcome

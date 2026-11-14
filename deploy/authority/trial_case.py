@@ -46,7 +46,7 @@ def _predecessor(original,registry,record,history,index,before,clock):
     location=entry['terminal']; s=prior['request']['snapshot']
     require(location['run_id']==s['run_id'] and location['attempt']==s['run_attempt'], 'prior terminal run differs')
     authority=registry.api
-    if prior['candidate']['name'] in ('direct-push','coding-update'):
+    if prior['candidate']['name'] in ('direct-push','coding-update','missing-approval'):
         from trial_host_case import _ClosedDirectAPI
         authority=_ClosedDirectAPI(authority)
     proof=provenance.authenticated_document(authority,before['deployment'],location,
@@ -59,7 +59,7 @@ def _predecessor(original,registry,record,history,index,before,clock):
         from trial_broker_positive import reconstruct
         return reconstruct(original,registry,record,prior,value,before,clock,proof)
     revocation=['revocation'] if prior['candidate']['name']=='revoked-qualification' else []
-    direct=['recovery','host_receipt'] if prior['candidate']['name'] in ('direct-push','coding-update') else []
+    direct=['recovery','host_receipt'] if prior['candidate']['name'] in ('direct-push','coding-update','missing-approval') else []
     object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split()+revocation+direct,'prior closed terminal')
     if revocation:
         from trial_broker_case import history_revocation

@@ -1000,8 +1000,30 @@ continuation or deadline extension. Exact second-case capability cleanup uses th
 existing `trial_launch.revoke(..., name='coding-update')`; no automatic second-case
 collector or launcher is added. The connected source-local test collects the first
 case, produces and observes the second, revokes its capability, and selects the
-third reservation. Missing-approval's own terminal evidence bridge and all later
-hosted coordination remain unfinished. Modeled transport and denial do not prove
+third reservation.
+The third `missing-approval` case now carries that same strict v2 recovery and
+host-receipt evidence through the existing observation and historical readers.
+Its dedicated outcome reader authenticates the merge App's exact PUT request to
+the reserved PR's merge endpoint, a `required_review` denial, unchanged target,
+original successful acceptance and task/issuer coordinates, and a bounded unique
+review inventory with no current-head approval. Empty review inventories are
+valid for this case; coding cases still require independent approval. Preparation
+and publication retain their normal approval requirements; only local fixtures
+model an external withdrawal afterward, and no coordinator submits or dismisses
+reviews. Active observation also checks current prerequisites, while historical
+progression validates the archived evidence at its original event times without
+minting coding or merge credentials or granting freshness. Legacy missing-approval
+v1 terminals are refused at both observation and historical consumption, with no
+migration or adoption. Fourth-case selection also requires the process-local
+acknowledgment of the third native terminal; a persisted observation after an
+unknown write acknowledgment cannot authorize progression. Exact third-case cleanup remains a separate
+`trial_launch.revoke(..., name='missing-approval')` call. The connected source-local
+test collects the first case, observes and revokes the second, produces and
+observes the third without token minting, revokes its exact capability, and selects
+the fourth `expired-proof` reservation. It does not execute that fourth case as
+part of this evidence slice. Full hosted coordination, qualification receipt
+production and process/credential isolation remain unfinished. ACK-loss fixtures
+do not establish native-owner reconstruction. Modeled transport and denial do not prove
 hosted execution, process or credential isolation, or qualification. All live,
 qualification, activation and release holds remain unchanged.
 Legacy local fixtures drive authenticated job/closed-artifact readers, App
