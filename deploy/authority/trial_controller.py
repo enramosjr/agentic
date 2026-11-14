@@ -161,11 +161,11 @@ class Native:
         completed=native._worker_completion(admission.record,prompt,admission.source)
         require(completed['result']==admission.value['worker'], 'retained CLOSED worker changed')
         admission.worker=completed
-        if name=='direct-push':
+        if name in ('direct-push','coding-update'):
             admission._direct_terminal_candidate()
         else:
             admission._candidate(self.candidates)
-        if name=='direct-push':
+        if name in ('direct-push','coding-update'):
             from trial_host_case import direct_terminal
             direct_terminal(admission.registry.api,admission.record,admission.value,
                             admission.terminal_proof['document'],dict(admission.terminal_proof['producer']),
@@ -327,14 +327,14 @@ class Admission:
             require(terminal_locator['run_id']==s['run_id'] and terminal_locator['attempt']==s['run_attempt'],
                     'terminal producer belongs to another case run')
             authority=self.registry.api
-            if self.candidate['name']=='direct-push':
+            if self.candidate['name'] in ('direct-push','coding-update'):
                 from trial_host_case import _ClosedDirectAPI
                 authority=_ClosedDirectAPI(authority)
             proof=authenticated_document(authority,self.binding['deployment'],terminal_locator,
                                          'trial-case-terminal',self.record['task_id'],self.clock())
             value=proof['document']
             revocation=['revocation'] if self.candidate['name']=='revoked-qualification' else []
-            direct=['recovery','host_receipt'] if self.candidate['name']=='direct-push' else []
+            direct=['recovery','host_receipt'] if self.candidate['name'] in ('direct-push','coding-update') else []
             object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split()+revocation+direct,'closed case terminal')
             if revocation:
                 from trial_broker_case import history_revocation
@@ -517,8 +517,8 @@ class Admission:
         """Read-only counterpart to submission readback; no coding token mint."""
         from datetime import datetime, timezone
         import submission
-        require(self._terminal_read_only and self.candidate['name']=='direct-push',
-                'first-case terminal inspection only')
+        require(self._terminal_read_only and self.candidate['name'] in ('direct-push','coding-update'),
+                'coding-actor denial terminal inspection only')
         candidates=self.value['candidates']['value']
         require(candidates['pending'] is None and len(candidates['candidates'])==len(candidates['requests']) and
                 self.candidate in candidates['candidates'],'complete unchanged candidate preparation required')

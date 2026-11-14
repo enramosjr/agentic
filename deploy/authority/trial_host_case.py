@@ -121,8 +121,9 @@ class _ClosedDirectAPI:
         return entries
 
 
-def _direct_identity(binding, request, certificate):
-    return dict(schema_version=1,kind='trial-host-denial',case='direct-push',
+def _direct_identity(binding, request, certificate, name='direct-push'):
+    require(name in ('direct-push','coding-update'),'exact coding-actor denial case required')
+    return dict(schema_version=1,kind='trial-host-denial',case=name,
         operation_id=request['operation_id'],sequence=binding['fence']['sequence'],
         operation_digest=digest(binding['fence']['pending']),configuration_revision=binding['configuration_revision'],
         deployment_digest=binding['deployment_digest'],certificate_digest=digest(certificate),snapshot=request['snapshot'])
@@ -143,17 +144,22 @@ def _direct_receipt(value, binding, job_id, now):
 
 
 def _direct_outcome(binding, record, retained, authority, locator, now, source=None):
-    """Validate immutable direct-push proof; optional source adds current freshness."""
+    """Validate the two coding-actor denials; source adds current freshness.
+
+    The original internal direct-push helper names remain callable by existing
+    consumers. Neither the shared request shape nor this reader admits other cases.
+    """
     import checks
     from service import _locator
     from trusted_ci_deployment import timestamp
     authority=_ClosedDirectAPI(authority)
     d, request, candidate = binding['deployment'],retained['request'],retained['candidate']
     s, key = request['snapshot'],record['task_id']
-    require(candidate['name']=='direct-push' and locator['run_id']==s['run_id'] and
-            locator['attempt']==s['run_attempt']==1,'exact first direct-push evidence required')
+    name=candidate['name']
+    require(name in ('direct-push','coding-update') and locator['run_id']==s['run_id'] and
+            locator['attempt']==s['run_attempt']==1,'exact coding-actor denial evidence required')
     proof=provenance.authenticated_document(authority,d,locator,'trial-host-denial',key,now)
-    value=proof['document']; identity=_direct_identity(binding,request,retained['certificate'])
+    value=proof['document']; identity=_direct_identity(binding,request,retained['certificate'],name)
     object_fields(value,(*identity,'job_id','intent','record','observation','completed'),'closed direct-push outcome')
     require(digest({k:value[k] for k in identity})==digest(identity) and positive(value['job_id']) and
             value['job_id']==proof['job_id'] and positive(value['completed']) and
@@ -162,7 +168,7 @@ def _direct_outcome(binding, record, retained, authority, locator, now, source=N
     intent_location=_locator(authority,d,s['run_id'],1,'trial-host-intent',key)
     intent=provenance.authenticated_document(authority,d,intent_location,'trial-host-intent',key,now)
     expected=dict(identity,kind='trial-host-intent',job_id=proof['job_id'],
-                  request=_request(d,s,'direct-push'),issued=value['intent'].get('issued'))
+                  request=_request(d,s,name),issued=value['intent'].get('issued'))
     require(digest(intent['document'])==digest(value['intent'])==digest(expected) and intent['job_id']==proof['job_id'] and
             positive(expected['issued']) and proof['job_started']<=expected['issued']<=intent['artifact_created']<=value['completed'],
             'direct-push intent differs or postdates attempt')
@@ -177,7 +183,7 @@ def _direct_outcome(binding, record, retained, authority, locator, now, source=N
             observation['denied_obligation'] is None and commit['sha']==s['merge'] and
             [v['sha'] for v in commit['parents']]==[s['base'],s['head']] and
             commit['tree']['sha']==candidate['submitted']['tree'],'intended direct-push denial was not established')
-    expected_record=dict(name='direct-push',pr=s['pr'],head=s['head'],base=s['base'],merge=s['merge'],
+    expected_record=dict(name=name,pr=s['pr'],head=s['head'],base=s['base'],merge=s['merge'],
         tree=commit['tree']['sha'],before=s['base'],after=s['base'],actor_id=actor,request_sent=True,
         http_status=observation['http_status'],denial_category='protected_update',denied_obligation=None,broker_refusal=None,
         merge_commit=None,merge_parents=[],merge_tree=None,evidence_digest=digest(observation))
@@ -225,7 +231,7 @@ def _direct_outcome(binding, record, retained, authority, locator, now, source=N
     if source is not None:
         probe=HostCases(None,source,authority,record['pair']['identities'],None,None,None,lambda:now)
         probe.binding,probe.d=binding,d
-        case=dict(name='direct-push',snapshot=s,evidence=evidence_location,coordinates=coordinates,expected_failure=None,mutations=[],prior=None)
+        case=dict(name=name,snapshot=s,evidence=evidence_location,coordinates=coordinates,expected_failure=None,mutations=[],prior=None)
         current=probe._prerequisites(case)['acceptance']
         require(current['proof']==saved and current['coordinates']==coordinates and
                 all(current['check'][k]==acceptance['check'][k] for k in ('check_id','external_id','expires')),
@@ -535,10 +541,10 @@ def read(admission, authority, locator=None):
     import service
     b, s, d = _context(admission)
     key = admission.record['task_id']
-    if admission.candidate['name']=='direct-push': authority=_ClosedDirectAPI(authority)
+    if admission.candidate['name'] in ('direct-push','coding-update'): authority=_ClosedDirectAPI(authority)
     if locator is None:
         locator = service._locator(authority,d,s['run_id'],s['run_attempt'],'trial-host-denial',key)
-    if admission.candidate['name']=='direct-push':
+    if admission.candidate['name'] in ('direct-push','coding-update'):
         result=_direct_outcome(b,admission.record,admission.value,authority,locator,admission.clock(),admission.source)
         admission.guard()
         return result
@@ -644,13 +650,14 @@ def validate_receipt(value, admission, authority, job_id):
 
 
 def direct_terminal(authority, record, retained, terminal, proof, now, source=None):
-    """One CLOSED direct-push evidence chain. No Admission or live continuation."""
+    """A CLOSED coding-actor denial chain. No Admission or live continuation."""
     from merge_receipts import ActionsReceipts
     from trusted_ci_deployment import timestamp
     object_fields(terminal,('schema_version kind request_digest certificate_digest before after completed recovery host_receipt').split(),
                   'direct-push v2 terminal')
-    require(type(terminal['schema_version']) is int and terminal['schema_version']==2 and retained['candidate']['name']=='direct-push',
-            'direct-push v2 denial evidence required; legacy terminals remain held')
+    require(type(terminal['schema_version']) is int and terminal['schema_version']==2 and
+            retained['candidate']['name'] in ('direct-push','coding-update'),
+            'coding-actor v2 denial evidence required; legacy terminals remain held')
     authority=_ClosedDirectAPI(authority)
     b=terminal['before']; d=b['deployment']; op=b['fence']['pending']; request=retained['request']
     require(op==retained['pending']['pending'] and b['fence']==retained['pending'] and

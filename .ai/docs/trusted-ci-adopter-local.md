@@ -988,6 +988,22 @@ they do not establish real hosted qualification.
 ACK-loss fixtures model restart policy; separate isolated bundle imports do
 not establish native-owner reconstruction or hosted process/credential isolation.
 All public collection and cleanup paths remain release-held.
+The second `coding-update` case now uses that same strict v2 evidence contract
+through the existing native observation API. Its distinct reserved PR, head and
+task remain bound to the ordered direct-push predecessor; the coding App's exact
+non-force protected-ref request and intended denial are authenticated again from
+the CLOSED host, broker and finalizer evidence. Terminal candidate readback uses
+the original worker export without minting a coding token. Both native observation
+and historical progression refuse legacy coding-update v1 terminals; no migration
+or adoption is supplied. Historical evidence grants no current approval, active
+continuation or deadline extension. Exact second-case capability cleanup uses the
+existing `trial_launch.revoke(..., name='coding-update')`; no automatic second-case
+collector or launcher is added. The connected source-local test collects the first
+case, produces and observes the second, revokes its capability, and selects the
+third reservation. Missing-approval's own terminal evidence bridge and all later
+hosted coordination remain unfinished. Modeled transport and denial do not prove
+hosted execution, process or credential isolation, or qualification. All live,
+qualification, activation and release holds remain unchanged.
 Legacy local fixtures drive authenticated job/closed-artifact readers, App
 proofs, verifier cleanup, effective controls and the actual merge request encoder,
 with GitHub/OCI/kernel/model boundaries modeled. The separate strict lane uses
