@@ -141,6 +141,11 @@ def prepare(a, preparer, approve):
 
 
 def authenticate(candidate, record, worker, history, original, clock, before=None):
+    return _documents(candidate,record,worker,history,original,clock(),before)
+
+
+def _documents(candidate, record, worker, history, original, observed, before=None):
+    """Immutable evidence only; callers establish the observation's authority."""
     from trial_transition import read_native
     require(candidate['name'] in RECIPES and selected(candidate), 'fixed native negative mutation required')
     object_fields(candidate,('name','submitted','controls_digest','transition')+
@@ -159,7 +164,8 @@ def authenticate(candidate, record, worker, history, original, clock, before=Non
             claim['task_id']==result['task_id']==record['task_id'] and claim['name']==result['name']==candidate['name'] and
             result['record_digest']==digest(record) and all(positive(v) for v in (claim['issued'],claim['expires'],result['completed'])) and
             claim == t['intent'] and claim['phase'] == 'negative' and claim['name'] == candidate['name'] and
-            claim['record_digest'] == digest(record) and claim['issued'] <= result['completed'] <= clock() < claim['expires'] and
+            claim['record_digest'] == digest(record) and type(observed) is int and
+            claim['issued'] <= result['completed'] <= observed < claim['expires'] and
             result['intent'] == t['links'][INTENT] and result['intent_digest'] == digest(claim) and
             result['submitted'] == candidate['submitted'], 'negative mutation immutable history differs')
     p = claim['preview']; reservation = claim['reservation']
@@ -188,15 +194,19 @@ def validate(candidate, record, worker, history, source, original, registry, clo
         from trial_case import baseline
         before=baseline(original,registry,record,history,clock)
     claim,result=authenticate(candidate,record,worker,history,original,clock,before)
+    return _source(candidate,record,claim,source,lambda:require(clock()<claim['expires'],'negative mutation expired'))
+
+
+def _source(candidate, record, claim, source, guard):
     p=claim['preview']; reservation=claim['reservation']
     root = '/repos/'+record['trial']['deployment']['policy']['repository']
-    before = submission._read_tree(source,root,reservation['submitted']['tree'],lambda:require(clock()<claim['expires'],'negative mutation expired'))
-    after = submission._read_tree(source,root,candidate['submitted']['tree'],lambda:require(clock()<claim['expires'],'negative mutation expired'))
+    before = submission._read_tree(source,root,reservation['submitted']['tree'],guard)
+    after = submission._read_tree(source,root,candidate['submitted']['tree'],guard)
     before_manifest,after_manifest=manifest(before),manifest(after)
     # authenticate already binds the exact recipe delta between these manifests.
     require(before_manifest == p['before'] and after_manifest == p['after'], 'negative mutation manifest differs')
     from coding_parent import _FencedSource
-    def clock_guard(force=False): require(clock()<claim['expires'],'negative mutation expired')
+    def clock_guard(force=False): guard()
     def deny_write(): require(False,'negative mutation validation is read-only')
     readonly=_FencedSource(source,clock_guard,deny_write)
     head,root=submission._advance_head(readonly,record['trial']['deployment'],reservation['submitted'],candidate['submitted']['tree'],

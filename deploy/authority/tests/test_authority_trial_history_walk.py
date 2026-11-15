@@ -13,7 +13,7 @@ import trial_case
 class HistoryWalkContracts(unittest.TestCase):
     def fixture(self):
         history=[]; documents={}; refs={}; visits=[]
-        record=dict(task_id='a'*32)
+        record=dict(task_id='a'*32,trial=dict(deployment={}))
         for index,name in enumerate(trial_case.CASE_CHAIN[:13]):
             candidate=dict(name=name)
             if name in ('bad-acceptance','replaced-checks','forged-records'):
@@ -42,14 +42,18 @@ class HistoryWalkContracts(unittest.TestCase):
         original,record,history,documents,refs,visits=self.fixture()
         source=object()
         with patch.object(__import__('trial_mutation'),'authenticate',return_value=(dict(preview=dict(baseline={})),None)),\
-             patch.object(__import__('trial_mutation'),'validate',return_value={}) as validate:
-            trial_case.history_guard(original,record,history,lambda:100,None,source)
+             patch.object(__import__('trial_mutation'),'validate',return_value={}) as validate,\
+             patch.object(__import__('provenance'),'authenticated_document',return_value=dict(document={})),\
+             patch.object(__import__('trial_host_case'),'_bad_readback'),\
+             patch.object(__import__('trial_host_case'),'bad_acceptance_terminal') as sixth,\
+             patch.object(__import__('trial_host_case'),'_bad_source') as sixth_source:
+            trial_case.history_guard(original,record,history,lambda:100,object(),source)
             self.assertEqual(len(visits),len(documents))
-            self.assertEqual(validate.call_count,3)
-            visits.clear(); validate.reset_mock()
-            trial_case.history_guard(original,record,history,lambda:100,None,source)
+            self.assertEqual(validate.call_count,2); self.assertEqual(sixth.call_count,1); self.assertEqual(sixth_source.call_count,1)
+            visits.clear(); validate.reset_mock(); sixth.reset_mock(); sixth_source.reset_mock()
+            trial_case.history_guard(original,record,history,lambda:100,object(),source)
             self.assertEqual(len(visits),len(documents),'a later guard must reread every dependency')
-            self.assertEqual(validate.call_count,3)
+            self.assertEqual(validate.call_count,2); self.assertEqual(sixth.call_count,1); self.assertEqual(sixth_source.call_count,1)
 
     def test_substituted_nested_prior_and_later_pointer_changes_refuse(self):
         for fault in ('name','prefix','current-prior','pointer'):
@@ -60,5 +64,14 @@ class HistoryWalkContracts(unittest.TestCase):
             if fault=='current-prior': prior['candidate']['transition']['intent']=dict(phase='current',prior=history[11])
             if fault=='pointer': refs[trial_reference(prior)]='f'*40
             with self.subTest(fault=fault),patch.object(__import__('trial_mutation'),'authenticate',return_value=(dict(preview=dict(baseline={})),None)),\
-                 patch.object(__import__('trial_mutation'),'validate',return_value={}),self.assertRaises(Refusal):
-                trial_case.history_guard(original,record,history,lambda:100,None,object())
+                 patch.object(__import__('trial_mutation'),'validate',return_value={}),\
+                 patch.object(__import__('provenance'),'authenticated_document',return_value=dict(document={})),\
+                 patch.object(__import__('trial_host_case'),'_bad_readback'),\
+                 patch.object(__import__('trial_host_case'),'bad_acceptance_terminal'),\
+                 patch.object(__import__('trial_host_case'),'_bad_source'),self.assertRaises(Refusal):
+                trial_case.history_guard(original,record,history,lambda:100,object(),object())
+
+    def test_sixth_history_cannot_use_an_untrusted_time_without_authority(self):
+        original,record,history,documents,refs,visits=self.fixture()
+        with self.assertRaisesRegex(Refusal,'sixth terminal authority'):
+            trial_case.history_guard(original,record,history[:6],lambda:100)

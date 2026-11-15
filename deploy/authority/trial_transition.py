@@ -601,11 +601,20 @@ def cleanup_context(native, name, operator_api, admin_api, token_factory):
                 c.store(c.root/'trial-workflow').read()==v['workflow'] and c.store(c.root/'trial-candidates').read()==v['candidates'] and
                 c.session.owner==r['origin']['owner'] and c.session.scope==r['origin']['scope'], 'native cleanup ownership changed')
         c.session.registry.unchanged(r['origin']['binding'])
-        history_guard(c.session.registry,r,v['history']+[v['prior']],c.clock,native.registry.api)
         require(v['intent'] is not None, 'no published native allowance intent to clean')
         claim=read_native(c.session.registry,v['intent'],r)
-        require(digest(claim['preview'])==digest(v['preview']) and digest(claim['before'])==digest(v['before']),
+        preview=claim['preview']
+        require(type(claim['schema_version']) is int and claim['schema_version']==1 and
+                claim['kind']=='native-trial-context-intent' and claim['name']==name and claim['record_digest']==digest(r) and
+                digest(preview)==digest(v['preview']) and digest(claim['before'])==digest(v['before']) and
+                claim['prior']==v['prior'] and claim['history']==v['history'] and preview['record_digest']==digest(r) and
+                positive(preview['issued']) and positive(preview['expires']) and
+                r['created']<=preview['issued']<preview['expires']<=min(r['expires'],v['before']['deployment']['expires'],
+                    r['origin']['binding']['fence']['pending']['execution_deadline']) and preview['issued']<=c.clock(),
                 'cleanup substituted original native intent')
+        # Only remove the exact retained allowance. Authenticate its historical
+        # prerequisites at the original admitted intent, never revive execution.
+        history_guard(c.session.registry,r,v['history']+[v['prior']],lambda:preview['issued'],native.registry.api)
         obj=SetupConfigurationSession.__new__(SetupConfigurationSession)
         obj.operator_api,obj.admin_api,obj.identities,obj.preview=operator_api,admin_api,r['pair']['identities'],v['preview']
         obj._native_identity(native.registry.read())

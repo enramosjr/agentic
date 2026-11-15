@@ -40,13 +40,13 @@ def _predecessor(original,registry,record,history,index,before,clock):
     from types import SimpleNamespace
     Admission._retained(SimpleNamespace(binding=before,record=record,value=prior,candidate=prior['candidate'],original=original))
     from trial_mutation import selected as mutated
-    if mutated(prior['candidate']):
+    if mutated(prior['candidate']) and prior['candidate']['name']!='bad-acceptance':
         from trial_mutation import authenticate
         authenticate(prior['candidate'],record,prior['worker'],history[:index],original,clock,before)
     location=entry['terminal']; s=prior['request']['snapshot']
     require(location['run_id']==s['run_id'] and location['attempt']==s['run_attempt'], 'prior terminal run differs')
     authority=registry.api
-    if prior['candidate']['name'] in ('direct-push','coding-update','missing-approval','expired-proof','authority-outage'):
+    if prior['candidate']['name'] in ('direct-push','coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance'):
         from trial_host_case import _ClosedDirectAPI
         authority=_ClosedDirectAPI(authority)
     proof=provenance.authenticated_document(authority,before['deployment'],location,
@@ -59,7 +59,7 @@ def _predecessor(original,registry,record,history,index,before,clock):
         from trial_broker_positive import reconstruct
         return reconstruct(original,registry,record,prior,value,before,clock,proof)
     revocation=['revocation'] if prior['candidate']['name']=='revoked-qualification' else []
-    direct=['recovery','host_receipt'] if prior['candidate']['name'] in ('direct-push','coding-update','missing-approval') else []
+    direct=['recovery','host_receipt'] if prior['candidate']['name'] in ('direct-push','coding-update','missing-approval','bad-acceptance') else []
     expired=['recovery','broker_receipt'] if prior['candidate']['name'] in ('expired-proof','authority-outage') else []
     object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split()+revocation+direct+expired,'prior closed terminal')
     if revocation:
@@ -70,7 +70,10 @@ def _predecessor(original,registry,record,history,index,before,clock):
             type(value['completed']) is int and proof['job_started']<=value['completed']<=proof['artifact_created']<=proof['job_completed'],
             'prior terminal substituted case or interval')
     pending=registry.authenticate_setup_transition(before,{OPERATION:prior['pending']},value['before'])
-    if direct:
+    if prior['candidate']['name']=='bad-acceptance':
+        from trial_host_case import bad_acceptance_terminal
+        bad_acceptance_terminal(registry.api,record,prior,value,proof,clock(),original=original)
+    elif direct:
         from trial_host_case import direct_terminal
         direct_terminal(registry.api,record,prior,value,proof,clock())
     if expired:
@@ -134,7 +137,16 @@ def _history_entry(original,record,prefix,index,entry,clock,authority,source,nes
     if transition is not None and transition['intent']['phase']=='current':
         _history_entry(original,record,prefix,index,transition['intent']['prior'],clock,authority,source,nested_prior=True)
     from trial_mutation import selected as mutated
-    if mutated(prior['candidate']):
+    if prior['candidate']['name']=='bad-acceptance':
+        require(callable(clock) and authority is not None,'authenticated sixth terminal authority required')
+        from trial_host_case import bad_acceptance_terminal,_ClosedDirectAPI,_bad_source,_bad_readback
+        terminal=provenance.authenticated_document(_ClosedDirectAPI(authority),record['trial']['deployment'],
+                    entry['terminal'],'trial-case-terminal',record['task_id'],clock())
+        outcome=bad_acceptance_terminal(authority,record,prior,terminal['document'],terminal,clock(),original=original)
+        if source is not None:
+            _bad_source(source,record,prior,outcome,original,clock)
+            _bad_readback(authority,prior,terminal['document'],terminal,clock(),outcome)
+    elif mutated(prior['candidate']):
         from trial_mutation import authenticate,validate
         require(callable(clock),'current clock required for negative history')
         claim,_=authenticate(prior['candidate'],record,prior['worker'],prefix,original,clock)

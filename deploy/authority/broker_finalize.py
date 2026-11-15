@@ -23,6 +23,7 @@ class Finalizer:
         self._direct_terminal = None
         self._expired_terminal = None
         self._outage_terminal = None
+        self._negative_terminal = None
 
     def _direct_evidence(self, operation_id, sequence, result):
         retained = self._direct_terminal
@@ -40,6 +41,12 @@ class Finalizer:
         retained = self._outage_terminal
         require(retained is not None and retained[:3] == (operation_id, sequence, result),
                 'exact acknowledged authority-outage finalization required')
+        return copy.deepcopy(retained[3])
+
+    def _negative_evidence(self, operation_id, sequence, result):
+        retained = self._negative_terminal
+        require(retained is not None and retained[:3] == (operation_id, sequence, result),
+                'exact acknowledged bad-acceptance finalization required')
         return copy.deepcopy(retained[3])
 
     def finalize(self, operation_id, sequence, broker_job_id):
@@ -77,6 +84,7 @@ class Finalizer:
         self._direct_terminal = None
         self._expired_terminal = None
         self._outage_terminal = None
+        self._negative_terminal = None
         require(isinstance(operation_id, str) and re.fullmatch('[0-9a-f]{32}', operation_id) and
                 positive(sequence) and positive(broker_job_id), 'exact terminal operation required')
         recovery = self._admit()  # Before reading the administrative registry.
@@ -174,5 +182,8 @@ class Finalizer:
             if _admission.candidate['name']=='authority-outage':
                 self._outage_terminal = (operation_id, sequence, copy.deepcopy(result),
                                          copy.deepcopy(dict(recovery=envelope,broker_receipt=no_dispatch)))
+            if _admission.candidate['name']=='bad-acceptance' and __import__('trial_mutation').selected(_admission.candidate):
+                self._negative_terminal = (operation_id, sequence, copy.deepcopy(result),
+                                           copy.deepcopy(dict(recovery=envelope,host_receipt=no_dispatch)))
             return result
         return self.registry.finalize_operation(before['branch_head'], terminal)

@@ -614,11 +614,11 @@ class NativeNewHead(unittest.TestCase):
                 def collecting(session,op):
                     try: return collect(session,op)
                     except Refusal:
-                        moved.append(True); f.origin.api.refs[reference]='0'*40; raise
+                        moved.append(reference); f.origin.api.refs[reference]='0'*40; raise
                 def inventory(store,kind):
                     result=matches(store,kind)
-                    if kind=='not-submitted':
-                        moved.append(True); f.origin.api.refs[reference]='0'*40
+                    if kind=='not-submitted' and store.op['operation_id']==f.admission.request['operation_id']:
+                        moved.append(reference); f.origin.api.refs[reference]='0'*40
                     return result
                 target,attribute,replacement=(broker_session.Session,'_collect',collecting) if boundary=='exception' else (ActionsReceipts,'_matches',inventory)
                 name='broker ('+str(f.admission.candidate['submitted']['pr'])+')'
@@ -631,7 +631,7 @@ class NativeNewHead(unittest.TestCase):
                             app_factory=f.apps,token_factory=f.tokens,uploader_factory=lambda *a:f.upload,sleeper=f.sleeper)
                     self.assertEqual(f.origin.api.refs[reference],'0'*40)
                     f.origin.api.refs[reference]=revision
-                self.assertEqual(len(moved),27)
+                self.assertEqual(moved,references)
                 self.assertFalse(any(a['name'].endswith('-not-submitted') for a in f.remote.artifacts))
                 self.assertIsNotNone(f.registry.binding()['fence']['pending'])
             with self.subTest(boundary=boundary): self.exercise(continuation=check,export_files=spoof_fixture.forged_fixture.EXPORT)

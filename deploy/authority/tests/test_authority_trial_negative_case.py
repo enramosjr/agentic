@@ -12,6 +12,23 @@ import test_authority_trial_outage_case as outage_fixture
 
 
 class Negative(outage_fixture.Outage):
+    def __init__(self, owner, args):
+        super().__init__(owner,args)
+        from test_authority_trial_transition import TransitionHost
+        get,post,tokens=self.source.get,self.source.post,self.tokens
+        def read(path):
+            value=get(path)
+            if path=='/repos/'+self.p['repository']: value['node_id']='fixture-source-node'
+            return value
+        self.source.get=read
+        self.source.post=lambda path,data:TransitionHost.post(self.source,path,data) if path=='/graphql' else post(path,data)
+        def factory(token):
+            scoped=tokens(token); get,post=scoped.get,scoped.post
+            scoped.get=lambda path:self.source.get(path) if path=='/repos/'+self.p['repository'] else get(path)
+            scoped.post=lambda path,data:self.source.post(path,data) if path=='/graphql' or path.startswith('/repos/'+self.p['repository']+'/git/') else post(path,data)
+            return scoped
+        self.tokens=factory; self.preparer.token_factory=factory
+
     def through_fifth(self):
         self.fifth(); self.run('broker'); self.finalize(); self.observe()
         self.original=copy.deepcopy(self.admission.record)
@@ -21,7 +38,14 @@ class Negative(outage_fixture.Outage):
 
     def sixth(self):
         self.through_fifth()
-        self.second('bad-acceptance',111,'fresh-sixth-case')
+        import trial_controller
+        from trusted_ci_policy import digest
+        opening=trial_controller.Native._open
+        def approved(native,prompt,name,*pos,**kw):
+            if name=='bad-acceptance': kw['negative_approve']=digest
+            return opening(native,prompt,name,*pos,**kw)
+        with patch.object(trial_controller.Native,'_open',approved):
+            self.second('bad-acceptance',111,'fresh-sixth-case')
         with self.owner.assertRaisesRegex(Refusal,'pending'): self.coordinate()
         self.owner.assertEqual(self.close_handoff()['host_case'],'bad-acceptance')
         pages=self.source.pages
@@ -316,7 +340,7 @@ class NativeNegative(unittest.TestCase):
             f=Negative(self,args); f.sixth()
             with patch.object(merge_transport,'isolated',side_effect=AssertionError('negative dispatched')):
                 f.rejected(); self.assertFalse(any(c['head_sha']==f.admission.request['snapshot']['merge'] for c in f.checks))
-                self.assertIn('negative-missing-script',f.events)
+                self.assertIn('negative-permissive-script',f.events)
                 self.assertIn('negative-box-clean',f.events); self.assertIn('negative-disk-clean',f.events)
                 f.host(); self.assertEqual(f.run('broker')['state'],'host-denied')
                 terminal=f.finalize(); self.assertEqual(f.observe()['binding'],terminal)

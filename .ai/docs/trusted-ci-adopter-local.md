@@ -703,6 +703,42 @@ Native observation retains all six exact histories without qualifying the trial.
 Missing or substituted evidence and moved predecessor refs preserve the fence.
 Positive verifier, issuer and broker consumers retain their success requirements.
 
+The sixth historical bridge is restricted to the authenticated native
+`bad-acceptance` mutation. Its schema-v2 `trial-case-terminal` carries the exact
+acknowledged recovery envelope and `host_receipt`; finalizer evidence is unavailable
+after a lost acknowledgement or a different invocation. Native observation and
+subsequent history reject v1 sixth terminals. An original-export sixth without
+native mutation provenance can still produce its existing v1 terminal, but that
+terminal cannot authorize observation or seventh-case progression.
+
+The historical reader authenticates original READY and case-handoff consumption,
+read-only credential scope and original producer deadlines, the CLOSED worker,
+approved mutation preview, recipe, manifests and immutable mutation publications.
+It then authenticates the first failed verifier criterion, actual strict issuer
+refusal, publication controls and all five own-App proofs at their original event
+times. The merge App's original host denial must name `required_check` and the exact
+issuer obligation, with independent approval, passing competing checks and unchanged
+candidate/target coordinates. The host request was sent; the subsequent broker
+remained on its `host-denied` no-dispatch path. Conflicting broker inventories refuse.
+
+Native observation verifies the original reserved export and exact mutated source
+read-only, without coding-token minting. It retains current launch/staging, record,
+certificate and deployment deadlines. Historical reads can outlive the short proof
+and consumed credential windows only when the original events satisfied them and
+the remaining current bounds still hold. A lost native observation acknowledgement
+cannot be adopted for seventh selection. Source-local connected tests follow the
+authentic first five, the actual sixth verifier/issuer/host/broker/finalizer path,
+native observation and exact cleanup, then stop at `replaced-checks` selection.
+GitHub and OCI transport remain modeled; these tests do not qualify hosted isolation
+or release any live-trial, deployment, promotion or activation hold.
+
+Expired context and certificate-revocation cleanup first authenticate their exact
+original conditional removal intent. They validate its history at the authenticated
+issuance event while rereading immutable refs and artifact inventories. This only
+restores recognized owned rules or deletes the exact retained token; it grants no
+new credential, source action, observation, or forward execution. Ordinary history
+and progression retain their current time bounds.
+
 The seventh distinct reservation, `replaced-checks`, reauthenticates all six exact
 CLOSED histories and owned native completions against that same immutable original
 trial. Its separate journals and READY/pending/execution refs preserve the original

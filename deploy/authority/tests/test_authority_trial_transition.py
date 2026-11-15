@@ -9,6 +9,115 @@ from test_authority_submission import SubmissionHost, fixture
 from trusted_ci_policy import Refusal,digest
 
 
+class ExpiredCleanupContracts(unittest.TestCase):
+    """Cleanup guard components; native publication and identity I/O are modeled."""
+    def fixture(self, context):
+        from pathlib import Path
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        from trial_handoff import Native
+        from trial_setup import Provision
+        p=dict(repository='owner/source',repository_id=1,target='main')
+        before=dict(deployment=dict(expires=110,policy=p))
+        record=dict(created=10,expires=100,task_id='a'*32,pair=dict(authority_repository='owner/authority',authority_repository_id=2),
+            origin=dict(owner=7,scope='scope',binding=dict(fence=dict(pending=dict(execution_deadline=90)))))
+        prior=dict(revision='b'*40); history=[]
+        preview=dict(issued=20,expires=90,record_digest=digest(record))
+        claim=dict(schema_version=1,kind='native-trial-context-intent',name='new-base',record_digest=digest(record),
+                   preview=copy.deepcopy(preview),before=before,prior=prior,history=history)
+        rule=dict(name='owned',target='branch',enforcement='active',conditions={},rules=[],bypass_actors=[])
+        preview['rules']={key:dict(rule,id=i+1) for i,key in enumerate(('acceptance','updates'))}
+        claim['preview']=copy.deepcopy(preview)
+        value=dict(record=record,name='new-base',before=before,preview=preview,prior=prior,history=history,
+            provisioning=dict(owner='retained'),workflow={},candidates={},phase='intent-started',effects={},policy=None,
+            intent=dict(kind=claim['kind'],revision='c'*40),credential=dict(token='retained-token',revoked=False))
+        if not context:
+            case=dict(history=history,request=dict(operation='retained'),certificate=dict(expires=80),execution=dict(credential=dict(expires=70)))
+            claim=dict(schema_version=1,kind='native-trial-revocation-intent',name='revoked-qualification',
+                record_digest=digest(record),case_digest=digest(case),request_digest=digest(case['request']),issued=20,expires=70,preview={})
+            value=dict(record=record,binding=before,case=case,claim=claim,provisioning=value['provisioning'],
+                intent=dict(kind=claim['kind'],revision='c'*40),credential=value['credential'])
+        class Memory:
+            def __init__(self, document): self.document=copy.deepcopy(document)
+            def read(self): return copy.deepcopy(self.document)
+            def write(self, expected, data):
+                if expected!=self.document: raise Refusal('changed owner')
+                self.document=dict(value=copy.deepcopy(data)); return self.read()
+        key='trial-context-new-base' if context else 'trial-native-revocation'
+        stores={key:Memory(dict(value=value)),'trial':Memory(value['provisioning']),
+                'trial-workflow':Memory({}),'trial-candidates':Memory({})}
+        c=Provision.__new__(Provision); c.root=Path('synthetic-cleanup'); c.document=value['provisioning']; c.clock=lambda:101
+        c.store=lambda path:stores[Path(path).name]
+        c.session=SimpleNamespace(owner=7,scope='scope',registry=SimpleNamespace(unchanged=Mock()))
+        native=Native.__new__(Native); native.provision=c
+        native.registry=SimpleNamespace(api=object(),coordinates=dict(repository='owner/authority',repository_id=2,registry_branch='agentic-registry'),read=lambda:before['deployment'])
+        def get(path):
+            if '/rulesets/' in path:
+                return copy.deepcopy(preview['rules']['acceptance' if '/1?' in path else 'updates'])
+            return dict(id=1,private=True,owner=dict(id=7),default_branch='main')
+        record['pair']['identities']=dict(owner_id=7,apps=dict(admin=dict(id=3)))
+        # Rebind the record digest after completing the modeled identity record.
+        claim['record_digest']=digest(record)
+        if context:
+            claim['preview']['record_digest']=digest(record); value['preview']['record_digest']=digest(record)
+        stores[key]=Memory(dict(value=value))
+        token=Mock(); factory=Mock(return_value=token)
+        return native,stores[key],claim,SimpleNamespace(get=get),factory,token
+
+    def run_cleanup(self, context, native, claim, operator, factory, reader=None, history=None):
+        from unittest.mock import patch
+        from contextlib import ExitStack
+        import trial_broker_case,trial_transition
+        def original_event(original,record,entries,clock,authority): self.assertEqual(clock(),20)
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(__import__('trial_storage'),'install'))
+            stack.enter_context(patch.object(trial_transition,'read_native',side_effect=reader or (lambda *a:copy.deepcopy(claim))))
+            stack.enter_context(patch.object(__import__('trial_case'),'history_guard',side_effect=history or original_event))
+            stack.enter_context(patch.object(__import__('configuration').SetupConfigurationSession,'_native_identity'))
+            stack.enter_context(patch.object(trial_broker_case,'_revocation_identity'))
+            if context: return trial_transition.cleanup_context(native,'new-base',operator,object(),factory)
+            return trial_broker_case.cleanup_revocation(native,operator,object(),factory)
+
+    def test_expired_cleanup_uses_authenticated_original_event_and_exact_token(self):
+        for context in (False,True):
+            with self.subTest(context=context):
+                native,journal,claim,operator,factory,token=self.fixture(context)
+                self.run_cleanup(context,native,claim,operator,factory)
+                factory.assert_called_once_with('retained-token')
+                token.fetch.assert_called_once_with('/installation/token',method='DELETE',binary=True)
+                self.assertTrue(journal.read()['value']['credential']['revoked'])
+
+    def test_substituted_intent_or_invalid_event_blocks_cleanup(self):
+        for context in (False,True):
+            for fault in ('kind','schema','record','prior','history','case','request','issued','boolean-issued','future','expires','missing','pointer','evidence'):
+                if context and fault in ('case','request') or not context and fault=='prior': continue
+                with self.subTest(context=context,fault=fault):
+                    native,journal,claim,operator,factory,token=self.fixture(context)
+                    if fault=='kind': claim['kind']='other'
+                    if fault=='schema': claim['schema_version']=True
+                    if fault=='record': claim['record_digest']='0'*64
+                    if fault=='prior': claim['prior']={}
+                    if fault=='history':
+                        if context: claim['history']=[{}]
+                        else: journal.document['value']['case']['history']=[{}]
+                    if fault=='case': claim['case_digest']='0'*64
+                    if fault=='request': claim['request_digest']='0'*64
+                    event=claim['preview'] if context else claim
+                    if fault=='issued': event['issued']=1
+                    if fault=='boolean-issued': event['issued']=True
+                    if fault=='future': native.provision.clock=lambda:19
+                    if fault=='expires': event['expires']=200
+                    if context and fault in ('issued','boolean-issued','future','expires'):
+                        journal.document['value']['preview']=copy.deepcopy(claim['preview'])
+                    if not context: journal.document['value']['claim']=copy.deepcopy(claim)
+                    if fault=='missing': journal.document['value']['intent']=None
+                    def refused(*args): raise Refusal('changed immutable evidence')
+                    with self.assertRaises(Refusal):
+                        self.run_cleanup(context,native,claim,operator,factory,reader=refused if fault=='pointer' else None,
+                                         history=refused if fault=='evidence' else None)
+                    factory.assert_not_called(); token.fetch.assert_not_called()
+
+
 class CompletionPin(unittest.TestCase):
     def state(self):
         before=dict(binding='b'*12000); after=dict(binding='a'*12000)

@@ -271,9 +271,6 @@ def _negative_terminal(authority, record, retained, terminal, proof, now, source
     from service import _locator,_publication_result
     from trial_host_case import _ClosedDirectAPI
     from trusted_ci_deployment import timestamp
-    from trial_case import _closed,consumption
-    from trial_launch import consumption as ready_consumption
-    from authority_protocol import fingerprint
     object_fields(terminal,('schema_version kind request_digest certificate_digest before after completed recovery broker_receipt').split(),
                   'broker negative v2 terminal')
     require(type(terminal['schema_version']) is int and terminal['schema_version']==2 and
@@ -287,30 +284,7 @@ def _negative_terminal(authority, record, retained, terminal, proof, now, source
             now<min(record['expires'],retained['certificate']['expires'],d['expires']) and
             positive(terminal['completed']) and proof['job_started']<=terminal['completed']<=proof['artifact_created']<=proof['job_completed']<=now,
             'broker negative terminal binding or interval differs')
-    # Reauthenticate the original CLOSED READY and case-consumption preimages.
-    # These finite capabilities constrain original events, not today's history read.
-    execution,launch=retained['execution'],retained['launch']
-    require(execution is not None and launch is not None,'broker negative consumed launch required')
-    object_fields(execution,('publication_revision credential handshake').split(),'broker negative consumed execution')
-    object_fields(launch,('revision credential handshake').split(),'broker negative consumed launch')
-    ready={k:retained[k] for k in ('schema_version','task_id','origin_revision','prompt','candidate','worker','history')}
-    ready.update(kind='trial-case-ready',execution=None)
-    for link,role,initial,revision in (
-            (launch,'trial-case-ready',ready,launch['revision']),
-            (execution,'trial-case-handoff',dict(retained,execution=None),execution['publication_revision'])):
-        credential=link['credential']; locator=link['handshake']
-        object_fields(credential,('revision repository_id permissions token_digest expires').split(),'broker negative retained credential')
-        require(credential['revision']==launch['revision'] and positive(credential['repository_id']) and
-                credential['repository_id']==launch['credential']['repository_id'] and
-                credential['permissions']==dict(contents='read') and fingerprint(credential['token_digest']) and
-                credential['token_digest']==launch['credential']['token_digest'] and positive(credential['expires']) and
-                credential['expires']<=retained['certificate']['expires'] and
-                locator['run_id']==s['run_id'] and locator['attempt']==1,
-                'broker negative retained capability scope or interval differs')
-        consumed=provenance.authenticated_document(authority,d,locator,role,record['task_id'],now)
-        expected=(ready_consumption if role=='trial-case-ready' else consumption)(initial,revision,credential,locator)
-        _closed(consumed,expected,record['created'],credential['expires'])
-        require(proof['job_completed']<credential['expires'],'broker negative original producer outlived capability')
+    _consumed_history(authority,b,record,retained,proof,now)
     envelope=terminal['recovery']; receipt=terminal['broker_receipt']
     object_fields(envelope,('schema_version kind operation_digest configuration_revision deployment_digest producer recovery artifacts facts').split(),
                   'broker negative recovery envelope')
@@ -379,6 +353,39 @@ def _negative_terminal(authority, record, retained, terminal, proof, now, source
     return dict(request_sent=False,broker_refusal=refusal['code'],document=copy.deepcopy(value))
 
 
+def _consumed_history(authority, binding, record, retained, proof, now):
+    """Original read-only capability preimages; never a current delegation."""
+    from trial_case import _closed,consumption
+    from trial_launch import consumption as ready_consumption
+    from authority_protocol import fingerprint
+    d=binding['deployment']; s=retained['request']['snapshot']
+    execution,launch=retained['execution'],retained['launch']
+    require(execution is not None and launch is not None,'broker negative consumed launch required')
+    object_fields(execution,('publication_revision credential handshake').split(),'broker negative consumed execution')
+    object_fields(launch,('revision credential handshake').split(),'broker negative consumed launch')
+    ready={k:retained[k] for k in ('schema_version','task_id','origin_revision','prompt','candidate','worker','history')}
+    ready.update(kind='trial-case-ready',execution=None)
+    proofs=[]
+    for link,role,initial,revision in (
+            (launch,'trial-case-ready',ready,launch['revision']),
+            (execution,'trial-case-handoff',dict(retained,execution=None),execution['publication_revision'])):
+        credential=link['credential']; locator=link['handshake']
+        object_fields(credential,('revision repository_id permissions token_digest expires').split(),'broker negative retained credential')
+        require(credential['revision']==launch['revision'] and positive(credential['repository_id']) and
+                credential['repository_id']==launch['credential']['repository_id'] and
+                credential['permissions']==dict(contents='read') and fingerprint(credential['token_digest']) and
+                credential['token_digest']==launch['credential']['token_digest'] and positive(credential['expires']) and
+                credential['expires']<=retained['certificate']['expires'] and
+                locator['run_id']==s['run_id'] and locator['attempt']==1,
+                'broker negative retained capability scope or interval differs')
+        consumed=provenance.authenticated_document(authority,d,locator,role,record['task_id'],now)
+        expected=(ready_consumption if role=='trial-case-ready' else consumption)(initial,revision,credential,locator)
+        _closed(consumed,expected,record['created'],credential['expires'])
+        require(proof['job_completed']<credential['expires'],'broker negative original producer outlived capability')
+        proofs.append(consumed)
+    return proofs
+
+
 def _outage_history(authority, binding, record, retained, value, reader, intent_created):
     """Reauthenticate original collection documents, never active collection."""
     from control_rendezvous import _ready_document,_response_document
@@ -427,6 +434,13 @@ def _outage_history(authority, binding, record, retained, value, reader, intent_
     final=broker_proofs._read_bound(authority,binding,record['pair']['identities'],s,collection['proofs'],observed,request=ready)
     # This is the original worker artifact, not a task artifact fabricated for the
     # native case. Its immutable receipt/provenance must still match the record.
+    worker=_worker_history(authority,record,retained,observed)
+    references=[evidence,worker,*original['provenance'].values(),*final['provenance'].values(),controls]
+    _artifact_readback(authority,d,references)
+
+
+def _worker_history(authority, record, retained, observed):
+    """Authenticate the original CLOSED worker without native or active admission."""
     worker=provenance.authenticated_document(authority,record['trial']['deployment'],retained['worker']['locator'],
                                               'trial-task',record['task_id'],observed)
     task=dict(task_id=record['task_id'],run_id=record['execution']['handshake']['run_id'],attempt=1,
@@ -452,8 +466,7 @@ def _outage_history(authority, binding, record, retained, value, reader, intent_
                                     submitted=worker['document']['submitted'],hosted_qualified=False,enforcement_active=False) and
             worker['run_id']==record['execution']['handshake']['run_id'] and worker['attempt']==1,
             'historical outage worker differs')
-    references=[evidence,worker,*original['provenance'].values(),*final['provenance'].values(),controls]
-    _artifact_readback(authority,d,references)
+    return worker
 
 
 def certificate_document(initial, consumption):
@@ -645,10 +658,20 @@ def cleanup_revocation(native, operator, admin, token_factory):
             c.session.owner==record['origin']['owner'] and c.session.scope==record['origin']['scope'],
             'native revocation cleanup ownership changed')
     c.session.registry.unchanged(record['origin']['binding'])
-    history_guard(c.session.registry,record,value['case']['history'],c.clock,native.registry.api)
     from trial_transition import read_native
     require(value['intent'] is not None and read_native(c.session.registry,value['intent'],record)==value['claim'],
             'cleanup substituted native revocation intent')
+    claim=value['claim']; case=value['case']
+    require(type(claim['schema_version']) is int and claim['schema_version']==1 and
+            claim['kind']=='native-trial-revocation-intent' and claim['name']=='revoked-qualification' and
+            claim['record_digest']==digest(record) and claim['case_digest']==digest(case) and
+            claim['request_digest']==digest(case['request']) and positive(claim['issued']) and positive(claim['expires']) and
+            record['created']<=claim['issued']<claim['expires']<=min(record['expires'],case['certificate']['expires'],
+                case['execution']['credential']['expires']) and claim['issued']<=c.clock(),
+            'cleanup substituted revocation obligation or original interval')
+    # The authenticated original event proves a removal obligation, not current
+    # permission to mint, delete artifacts, or continue the trial.
+    history_guard(c.session.registry,record,case['history'],lambda:claim['issued'],native.registry.api)
     _revocation_identity(SimpleNamespace(record=record,binding=value['binding']),operator,admin,value['claim']['preview'])
     credential=value['credential']
     if credential is not None and not credential['revoked']:

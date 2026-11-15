@@ -650,7 +650,7 @@ class MutationCompositionContracts(unittest.TestCase):
                 self.assertEqual(f.source.writes,writes); self.assertEqual(f.source.refs,refs)
             self.exercise(continuation=check,export_files=files)
 
-    def test_three_mutation_history_rechecks_six_trees_and_manifests_on_every_guard(self):
+    def test_three_mutation_history_rechecks_export_and_baseline_trees_on_every_guard(self):
         from unittest.mock import patch
         import submission,trial_case,trial_controller,trial_specimen
         from registry import TRIAL
@@ -672,6 +672,9 @@ class MutationCompositionContracts(unittest.TestCase):
             self.assertEqual(len(mutations),3)
             expected=[tree for candidate in mutations for tree in (
                 candidate['transition']['intent']['reservation']['submitted']['tree'],candidate['submitted']['tree'])]
+            sixth=__import__('trial_case').read(f.origin,history[5]['revision'],lambda:f.clock[0])[0]
+            expected.insert(2,f.source.commits[sixth['request']['snapshot']['base']]['tree']['sha'])
+            self.assertNotEqual(f.reviews[0]['commit_id'],sixth['request']['snapshot']['head'])
             reads=[]; manifests=[]
             actual_read=submission._read_tree; actual_manifest=submission.export_manifest
             def read(api,root,revision,guard):
@@ -769,7 +772,7 @@ class MutationCompositionContracts(unittest.TestCase):
             branch=f.admission.candidate['submitted']['branch']; head=f.source.refs[branch]
             f.source.refs[branch]='f'*40
             with self.assertRaises(Refusal): guard()
-            with patch.object(trial_mutation,'validate',return_value={}): guard()
+            with patch.object(__import__('trial_host_case'),'_bad_source',return_value=None): guard()
             f.source.refs[branch]=head
             ref=trial_reference(dict(kind=trial_mutation.INTENT,name='bad-acceptance',task_id=f.admission.record['task_id'],execution=None))
             revision=f.origin.api.refs[ref]; f.origin.api.refs[ref]='0'*40
