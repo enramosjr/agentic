@@ -670,10 +670,15 @@ class MutationCompositionContracts(unittest.TestCase):
             candidates=[f.origin.blob(entry['revision'],TRIAL)[0]['candidate'] for entry in history]
             mutations=[candidate for candidate in candidates if candidate['name'] in trial_specimen.RECIPES]
             self.assertEqual(len(mutations),3)
-            expected=[tree for candidate in mutations for tree in (
-                candidate['transition']['intent']['reservation']['submitted']['tree'],candidate['submitted']['tree'])]
+            expected=[]
+            for entry in history:
+                prior=trial_case.read(f.origin,entry['revision'],lambda:f.clock[0])[0]
+                candidate=prior['candidate']
+                if candidate['name'] not in trial_specimen.RECIPES: continue
+                expected.extend((candidate['transition']['intent']['reservation']['submitted']['tree'],candidate['submitted']['tree']))
+                if candidate['name'] in ('bad-acceptance','replaced-checks'):
+                    expected.append(f.source.commits[prior['request']['snapshot']['base']]['tree']['sha'])
             sixth=__import__('trial_case').read(f.origin,history[5]['revision'],lambda:f.clock[0])[0]
-            expected.insert(2,f.source.commits[sixth['request']['snapshot']['base']]['tree']['sha'])
             self.assertNotEqual(f.reviews[0]['commit_id'],sixth['request']['snapshot']['head'])
             reads=[]; manifests=[]
             actual_read=submission._read_tree; actual_manifest=submission.export_manifest

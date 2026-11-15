@@ -749,15 +749,45 @@ worker and earlier case capabilities cannot authorize the seventh consumers.
 or restart.
 
 This case reuses the failed-verifier, strict issuer refusal, shared host probe and
-pinned Finalizer path above. The shared mutation validator additionally requires
-an actual changed candidate file under `.ai/scripts/tests/` or `.github/workflows/`,
-bound to bytes from the original CLOSED worker export and actual baseline. The
-binary-only default fixture cannot establish this negative. The local connected
-fixture opts into hostile checker/test bytes before the original worker closes
-and before all sixteen reservations; no candidate, tree, baseline or earlier
-artifact is retrofitted. Its permissive candidate lifecycle command still fails
-the actual pinned controller's denial assertion. Native CLOSED observation retains
-all seven histories; positive consumers remain success-only.
+pinned Finalizer path above. The shared live mutation validator additionally requires
+an actual changed candidate file under `.ai/scripts/tests/` or `.github/workflows/`.
+The approved native mutation binds the original CLOSED worker export and complete
+before/after manifests to the fixed permissive lifecycle script and
+`.ai/scripts/tests/test_replaced.py` recipe. Historical evidence requires that exact
+test replacement in the original host mutation inventory; source readback checks
+its actual bytes against the target baseline. The original export may already
+contain the recipe bytes, but the replacement must still differ from the target
+baseline. A binary-only original export without native mutation cannot establish
+this negative. Its permissive candidate lifecycle command still fails the actual
+pinned controller's denial assertion; positive consumers remain success-only.
+
+Only the authenticated native `replaced-checks` mutation exports the seventh v2
+terminal with the exact acknowledged recovery envelope and `host_receipt`. Native
+observation and historical consumption reject seventh v1 terminals. Existing
+original-export execution can still export v1, but cannot authorize observation or
+eighth progression. Separate exact sixth/seventh readers share immutable evidence
+validation; neither reader admits `forged-records`.
+
+The seventh reader authenticates the original worker, READY/handoff consumption,
+mutation publications, failed first verifier criterion, actual strict issuer
+refusal, controls and all five own-App proofs at the original events. It verifies
+the merge App's actual `required_check` denial naming the exact issuer obligation,
+independent approval, successful competing checks and unchanged source/target
+coordinates. Broker inventories must contain only the exact `host-denied` path;
+all referenced artifacts and forbidden receipt inventories are reread after
+blocking evidence and source reads. No observation or history grants a credential.
+
+Native observation checks the original reserved export and mutated source without
+coding-token minting, retaining current launch/staging and authority deadlines.
+Historical guards authenticate original short proof/consumption windows without
+requiring an earlier review to remain current on a later case's head; remaining
+record/certificate/deployment bounds still apply. Lost finalizer acknowledgement
+cannot export evidence; lost native observation acknowledgement cannot authorize
+eighth selection. Exact owned-token removal remains available after expiry.
+The bounded connected source-local fixture follows the authentic first six,
+executes seventh, observes and cleans it up, then stops at `forged-records`
+selection. External GitHub and OCI transport remain modeled; no hosted isolation,
+qualification, promotion or activation claim follows from this evidence.
 
 The eighth distinct reservation, `forged-records`, reauthenticates all seven exact
 CLOSED histories and owned native completions against the immutable original

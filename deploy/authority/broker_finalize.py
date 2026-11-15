@@ -46,7 +46,7 @@ class Finalizer:
     def _negative_evidence(self, operation_id, sequence, result):
         retained = self._negative_terminal
         require(retained is not None and retained[:3] == (operation_id, sequence, result),
-                'exact acknowledged bad-acceptance finalization required')
+                'exact acknowledged native negative finalization required')
         return copy.deepcopy(retained[3])
 
     def finalize(self, operation_id, sequence, broker_job_id):
@@ -182,7 +182,7 @@ class Finalizer:
             if _admission.candidate['name']=='authority-outage':
                 self._outage_terminal = (operation_id, sequence, copy.deepcopy(result),
                                          copy.deepcopy(dict(recovery=envelope,broker_receipt=no_dispatch)))
-            if _admission.candidate['name']=='bad-acceptance' and __import__('trial_mutation').selected(_admission.candidate):
+            if _admission.candidate['name'] in ('bad-acceptance','replaced-checks') and __import__('trial_mutation').selected(_admission.candidate):
                 self._negative_terminal = (operation_id, sequence, copy.deepcopy(result),
                                            copy.deepcopy(dict(recovery=envelope,host_receipt=no_dispatch)))
             return result

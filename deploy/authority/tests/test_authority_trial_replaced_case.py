@@ -29,9 +29,16 @@ class Replaced(negative_fixture.Negative):
             self.native.provision.store(self.native.provision.root/trial_controller.case_journal(base,dict(name=name))).read()
             for name in trial_controller.CASE_CHAIN[:6] for base in ('trial-controller','trial-case-publication')}
 
-    def seventh(self):
+    def seventh(self, mutated=True):
         self.through_sixth()
-        self.second('replaced-checks',113,'fresh-seventh-case')
+        import trial_controller
+        from trusted_ci_policy import digest
+        opening=trial_controller.Native._open
+        def approved(native,prompt,name,*pos,**kw):
+            if name=='replaced-checks' and mutated: kw['negative_approve']=digest
+            return opening(native,prompt,name,*pos,**kw)
+        with patch.object(trial_controller.Native,'_open',approved):
+            self.second('replaced-checks',113,'fresh-seventh-case')
         with self.owner.assertRaisesRegex(Refusal,'pending'): self.coordinate()
         self.owner.assertEqual(self.close_handoff()['host_case'],'replaced-checks')
 
@@ -78,7 +85,7 @@ class NativeReplaced(unittest.TestCase):
 
     def test_original_binary_only_export_cannot_establish_replaced_checks(self):
         def check(*args):
-            f=Replaced(self,args); f.seventh(); f.run('verify')
+            f=Replaced(self,args); f.seventh(mutated=False); f.run('verify')
             for purpose in ('admin','reader','issuer','coding','merge'): f.run('proof',purpose)
             f.run('publication-controls')
             with self.assertRaisesRegex(Refusal,'replacement missing'): f.run('publish')
