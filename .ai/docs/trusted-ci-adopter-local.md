@@ -866,6 +866,27 @@ receipt cannot close this named case. Native CLOSED observation retains all nine
 histories and leaves the original trial unqualified. Local hostile source checks
 enter only the existing source API fixture, never trusted role or task artifacts.
 
+Only the ninth native `spoofed-source` finalization exports a v2 terminal with the
+exact acknowledged recovery envelope and `host_receipt`; the v1 shape is refused by
+native observation, historical consumption and tenth selection. The exact ninth
+reader shares the immutable envelope, interval, closed-inventory and readback
+checks of the sixth through eighth readers but has no verifier evidence, issuer
+refusal or mutation inventory: it rejects any candidate that carries a mutation
+transition. It authenticates the original worker and consumption history, the
+`trial-publication-observation` and its intent (whose source observation must equal
+the intent's, name an exact foreign-App success on the synthetic merge, show no
+authoritative success, and satisfy every other required obligation and independent
+approval), the host intent and denial (exact required-check HTTP 403/405/422 with the
+merge App) and the broker `host-denied` receipt. The task digest is the ordinary
+admitted-candidate task. A `trial-publication-denial` or `evidence` artifact is never
+accepted for this case. Native observation reads the original reserved export and the
+current foreign check, rules and review without minting a coding token or invoking task
+admission; historical readers authenticate the original intervals and the retained
+candidate and synthetic-merge commits without live prerequisites. Lost finalizer or
+native acknowledgements cannot export evidence or select `new-head`, and exact owned
+cleanup survives expiry. This adds no hosted isolation, qualification, promotion or
+activation.
+
 The tenth original reservation, `new-head`, uses a separately journaled historical
 preparation on the same PR. The native owner captures the exact frozen source-base
 tree as the old verification fixture; this is not another model result. It appends

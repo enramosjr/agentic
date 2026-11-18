@@ -255,7 +255,7 @@ class NativeNewHead(unittest.TestCase):
                 value['terminal']['binding']['fence']['completed'][-1]['receipt_digest']='0'*64
                 store.write(saved,value)
                 writes=copy.deepcopy(f.source.writes)
-                with self.assertRaisesRegex(Refusal,'owned.*(completion|terminal)|first native completion|live archived controller changed'):
+                with self.assertRaisesRegex(Refusal,'owned.*(completion|terminal)|first native completion|live archived controller changed|active controller acknowledgement unavailable'):
                     trial_controller.Native(f.preparer)._open_prior('prompt',f.source)
                 self.assertEqual(f.source.writes,writes)
                 self.assertIsNone(f.native.provision.store(f.native.provision.root/'trial-transition-new-head-prior').read())
