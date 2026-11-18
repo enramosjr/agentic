@@ -111,6 +111,15 @@ class FrameworkPolicyTests(unittest.TestCase):
                 self.assertIn(name, result.stderr)
                 path.unlink()
 
+    def test_nested_node_modules_documents_are_not_framework_source(self):
+        self.write('pkg/node_modules/dep/README.md', '# Dependency\n')
+        self.assertEqual(self.cli().returncode, 0)
+        self.write('pkg/notes.md', '# Task\n')
+        result = self.cli()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('pkg/notes.md', result.stderr)
+        self.assertNotIn('node_modules', result.stderr)
+
     def test_invalid_or_missing_identity_and_inventory_fail_closed(self):
         for data in ({'repository_kind': 'adopter'}, {'repository_kind': 'typo'},
                      {'repository_kind': 'framework'}, {'repository_kind': 'framework', 'source_documents': 'README.md'}):

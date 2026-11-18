@@ -100,7 +100,7 @@ def paths(root: Path, snapshot: str) -> set[str]:
         for name in directories:
             child = Path(directory) / name
             rel = child.relative_to(root)
-            if name in {'.git', '__pycache__'} or (len(rel.parts) == 1 and name in OPERATIONAL):
+            if name in {'.git', '__pycache__', 'node_modules'} or (len(rel.parts) == 1 and name in OPERATIONAL):
                 continue
             if rel.parts[0] not in KIT_ROOTS and (child / '.git').exists():
                 continue
