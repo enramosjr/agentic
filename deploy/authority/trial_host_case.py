@@ -732,7 +732,7 @@ def _host_terminal(authority, retained, terminal, proof, now):
 
 def _negative_case(retained):
     name=retained['candidate']['name']
-    require(name in ('bad-acceptance','replaced-checks'),'only sixth/seventh negative history is admitted')
+    require(name in ('bad-acceptance','replaced-checks','forged-records'),'only sixth/seventh/eighth negative history is admitted')
     return name
 
 
@@ -742,6 +742,10 @@ def bad_acceptance_terminal(authority, record, retained, terminal, proof, now, s
 
 def replaced_checks_terminal(authority, record, retained, terminal, proof, now, source=None, original=None):
     return _negative_terminal(authority,record,retained,terminal,proof,now,source,original,name='replaced-checks')
+
+
+def forged_records_terminal(authority, record, retained, terminal, proof, now, source=None, original=None):
+    return _negative_terminal(authority,record,retained,terminal,proof,now,source,original,name='forged-records')
 
 
 def _negative_identity(binding, retained):
@@ -881,14 +885,14 @@ def _negative_outcome(authority, binding, record, retained, locator, now, source
 
 
 def _negative_terminal(authority, record, retained, terminal, proof, now, source=None, original=None, *, name):
-    """Exact sixth/seventh immutable evidence; never live or successful admission."""
+    """Exact sixth/seventh/eighth immutable evidence; never live or successful admission."""
     from trial_broker_case import _consumed_history,_worker_history
     from trusted_ci_deployment import timestamp
     from trial_mutation import selected,_documents
     object_fields(terminal,('schema_version kind request_digest certificate_digest before after completed recovery host_receipt').split(),
                   'native negative v2 terminal')
     require(type(terminal['schema_version']) is int and terminal['schema_version']==2 and terminal['kind']=='trial-case-terminal' and
-            name in ('bad-acceptance','replaced-checks') and retained['candidate']['name']==name and selected(retained['candidate']) and
+            name in ('bad-acceptance','replaced-checks','forged-records') and retained['candidate']['name']==name and selected(retained['candidate']) and
             original is not None and terminal['request_digest']==digest(retained['request']) and
             terminal['certificate_digest']==digest(retained['certificate']),'exact native negative v2 terminal required')
     b=terminal['before']; d=b['deployment']; certificate=retained['certificate']; op=b['fence']['pending']
@@ -924,20 +928,20 @@ def _negative_terminal(authority, record, retained, terminal, proof, now, source
     mutations=outcome['document']['observation']['mutations']
     _negative_mutations(name,before,after,mutations)
     if source is not None:
-        reader=_bad_source if name=='bad-acceptance' else _replaced_source
+        reader={'bad-acceptance':_bad_source,'replaced-checks':_replaced_source,'forged-records':_forged_source}[name]
         reader(source,record,retained,outcome,original,lambda:now)
     require(digest(outcome['document'])==host['host_digest'] and
             outcome['proof']['job_completed']<=host['issued']<=int(timestamp(job['completed_at']).timestamp()),
             'native negative receipt substituted host evidence')
     outcome['_references']=[proof,worker,*consumed,*outcome['_references']]
-    reader=_bad_readback if name=='bad-acceptance' else _replaced_readback
+    reader={'bad-acceptance':_bad_readback,'replaced-checks':_replaced_readback,'forged-records':_forged_readback}[name]
     reader(authority,retained,terminal,proof,now,outcome)
     return outcome
 
 
 def _negative_mutations(name, before, after, mutations):
     """Pure inventory binding; the caller authenticates the documents and event."""
-    require(name in ('bad-acceptance','replaced-checks'),'only sixth/seventh mutation inventory is admitted')
+    require(name in ('bad-acceptance','replaced-checks','forged-records'),'only sixth/seventh/eighth mutation inventory is admitted')
     # The source baseline also includes paths absent from the worker's export.
     require(isinstance(mutations,list) and mutations and len(mutations)<=len(after) and
             all(isinstance(m,dict) and set(m)=={'path','sha256'} and isinstance(m['path'],str) and m['path'] in after for m in mutations) and
@@ -949,6 +953,10 @@ def _negative_mutations(name, before, after, mutations):
         path='.ai/scripts/tests/test_replaced.py'
         require(dict(path=path,sha256=after[path]['sha256']) in mutations,
                 'replaced-checks original test replacement missing')
+    if name=='forged-records':
+        path='knowledge/history/lifecycle/forged.json'
+        require(path in after and dict(path=path,sha256=after[path]['sha256']) in mutations,
+                'forged-records original forged receipt missing')
 
 
 def _negative_readback(authority, retained, terminal, proof, now, outcome):
@@ -989,6 +997,11 @@ def _replaced_source(source, record, retained, outcome, original, clock):
     return _negative_source(source,record,retained,outcome,original,clock)
 
 
+def _forged_source(source, record, retained, outcome, original, clock):
+    require(_negative_case(retained)=='forged-records','exact eighth source required')
+    return _negative_source(source,record,retained,outcome,original,clock)
+
+
 def _bad_readback(authority, retained, terminal, proof, now, outcome):
     require(_negative_case(retained)=='bad-acceptance','exact sixth readback required')
     return _negative_readback(authority,retained,terminal,proof,now,outcome)
@@ -996,4 +1009,9 @@ def _bad_readback(authority, retained, terminal, proof, now, outcome):
 
 def _replaced_readback(authority, retained, terminal, proof, now, outcome):
     require(_negative_case(retained)=='replaced-checks','exact seventh readback required')
+    return _negative_readback(authority,retained,terminal,proof,now,outcome)
+
+
+def _forged_readback(authority, retained, terminal, proof, now, outcome):
+    require(_negative_case(retained)=='forged-records','exact eighth readback required')
     return _negative_readback(authority,retained,terminal,proof,now,outcome)

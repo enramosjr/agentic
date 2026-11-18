@@ -161,14 +161,14 @@ class Native:
         completed=native._worker_completion(admission.record,prompt,admission.source)
         require(completed['result']==admission.value['worker'], 'retained CLOSED worker changed')
         admission.worker=completed
-        if name in ('bad-acceptance','replaced-checks'):
-            from trial_host_case import bad_acceptance_terminal,replaced_checks_terminal
+        if name in ('bad-acceptance','replaced-checks','forged-records'):
+            from trial_host_case import bad_acceptance_terminal,replaced_checks_terminal,forged_records_terminal
             from trial_case import read as read_case
             publication=native.provision.store(native.provision.root/case_journal('trial-case-publication',admission.candidate)).read()
             case,record=read_case(native.provision.session.registry,publication['value']['revision_bound'],admission.clock)
             require(record==admission.record and case['request']==admission.request and case['certificate']==admission.value['certificate'],
                     'negative terminal substituted consumed case')
-            reader=bad_acceptance_terminal if name=='bad-acceptance' else replaced_checks_terminal
+            reader={'bad-acceptance':bad_acceptance_terminal,'replaced-checks':replaced_checks_terminal,'forged-records':forged_records_terminal}[name]
             outcome=reader(admission.registry.api,record,case,admission.terminal_proof['document'],
                 admission.terminal_proof['producer'],admission.clock(),admission.source,native.provision.session.registry)
             admission._negative_terminal_candidate(outcome)
@@ -225,7 +225,7 @@ class Native:
                 require(previous is not None and previous['value']['phase']=='terminal' and
                         previous['value']['name']==prior_name and previous['value']['prompt_digest']==digest(prompt) and
                         'locator' in previous['value']['terminal'], 'owned independently observed first terminal required')
-                if prior_name in ('missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks'):
+                if prior_name in ('missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records'):
                     # Historical proof cannot adopt an uncertain native observation.
                     prior_key=case_journal('trial-controller',dict(name=prior_name))
                     acknowledged(c,prior_key,c.store(c.root/prior_key),previous)
@@ -353,14 +353,14 @@ class Admission:
             require(terminal_locator['run_id']==s['run_id'] and terminal_locator['attempt']==s['run_attempt'],
                     'terminal producer belongs to another case run')
             authority=self.registry.api
-            if self.candidate['name'] in ('direct-push','coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks'):
+            if self.candidate['name'] in ('direct-push','coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records'):
                 from trial_host_case import _ClosedDirectAPI
                 authority=_ClosedDirectAPI(authority)
             proof=authenticated_document(authority,self.binding['deployment'],terminal_locator,
                                          'trial-case-terminal',self.record['task_id'],self.clock())
             value=proof['document']
             revocation=['revocation'] if self.candidate['name']=='revoked-qualification' else []
-            direct=['recovery','host_receipt'] if self.candidate['name'] in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks') else []
+            direct=['recovery','host_receipt'] if self.candidate['name'] in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks','forged-records') else []
             expired=['recovery','broker_receipt'] if self.candidate['name'] in ('expired-proof','authority-outage') else []
             object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split()+revocation+direct+expired,'closed case terminal')
             if revocation:
@@ -549,7 +549,7 @@ class Admission:
 
     def _negative_terminal_candidate(self, outcome):
         from trial_mutation import _documents
-        require(self._terminal_read_only and self.candidate['name'] in ('bad-acceptance','replaced-checks'),'sixth/seventh terminal inspection only')
+        require(self._terminal_read_only and self.candidate['name'] in ('bad-acceptance','replaced-checks','forged-records'),'sixth/seventh/eighth terminal inspection only')
         claim,_=_documents(self.candidate,self.record,self.value['worker'],self.value['history'],
             self.native.provision.session.registry,outcome['document']['intent']['issued'])
         self._terminal_export(claim['reservation'])

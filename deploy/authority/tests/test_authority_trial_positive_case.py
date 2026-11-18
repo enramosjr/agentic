@@ -676,7 +676,7 @@ class MutationCompositionContracts(unittest.TestCase):
                 candidate=prior['candidate']
                 if candidate['name'] not in trial_specimen.RECIPES: continue
                 expected.extend((candidate['transition']['intent']['reservation']['submitted']['tree'],candidate['submitted']['tree']))
-                if candidate['name'] in ('bad-acceptance','replaced-checks'):
+                if candidate['name'] in ('bad-acceptance','replaced-checks','forged-records'):
                     expected.append(f.source.commits[prior['request']['snapshot']['base']]['tree']['sha'])
             sixth=__import__('trial_case').read(f.origin,history[5]['revision'],lambda:f.clock[0])[0]
             self.assertNotEqual(f.reviews[0]['commit_id'],sixth['request']['snapshot']['head'])

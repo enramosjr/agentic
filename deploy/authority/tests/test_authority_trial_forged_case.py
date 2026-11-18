@@ -28,9 +28,16 @@ class Forged(replaced_fixture.Replaced):
             self.native.provision.store(self.native.provision.root/trial_controller.case_journal(base,dict(name=name))).read()
             for name in trial_controller.CASE_CHAIN[:7] for base in ('trial-controller','trial-case-publication')}
 
-    def eighth(self):
+    def eighth(self, mutated=True):
         self.through_seventh()
-        self.second('forged-records',115,'fresh-eighth-case')
+        import trial_controller
+        from trusted_ci_policy import digest
+        opening=trial_controller.Native._open
+        def approved(native,prompt,name,*pos,**kw):
+            if name=='forged-records' and mutated: kw['negative_approve']=digest
+            return opening(native,prompt,name,*pos,**kw)
+        with patch.object(trial_controller.Native,'_open',approved):
+            self.second('forged-records',115,'fresh-eighth-case')
         with self.owner.assertRaisesRegex(Refusal,'pending'): self.coordinate()
         self.owner.assertEqual(self.close_handoff()['host_case'],'forged-records')
 
@@ -77,7 +84,7 @@ class NativeForged(unittest.TestCase):
 
     def test_replacement_only_export_cannot_establish_forged_records(self):
         def check(*args):
-            f=Forged(self,args); f.eighth(); f.run('verify')
+            f=Forged(self,args); f.eighth(mutated=False); f.run('verify')
             for purpose in ('admin','reader','issuer','coding','merge'): f.run('proof',purpose)
             f.run('publication-controls')
             with self.assertRaisesRegex(Refusal,'forged receipt fixture missing'): f.run('publish')

@@ -40,13 +40,13 @@ def _predecessor(original,registry,record,history,index,before,clock):
     from types import SimpleNamespace
     Admission._retained(SimpleNamespace(binding=before,record=record,value=prior,candidate=prior['candidate'],original=original))
     from trial_mutation import selected as mutated
-    if mutated(prior['candidate']) and prior['candidate']['name'] not in ('bad-acceptance','replaced-checks'):
+    if mutated(prior['candidate']) and prior['candidate']['name'] not in ('bad-acceptance','replaced-checks','forged-records'):
         from trial_mutation import authenticate
         authenticate(prior['candidate'],record,prior['worker'],history[:index],original,clock,before)
     location=entry['terminal']; s=prior['request']['snapshot']
     require(location['run_id']==s['run_id'] and location['attempt']==s['run_attempt'], 'prior terminal run differs')
     authority=registry.api
-    if prior['candidate']['name'] in ('direct-push','coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks'):
+    if prior['candidate']['name'] in ('direct-push','coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records'):
         from trial_host_case import _ClosedDirectAPI
         authority=_ClosedDirectAPI(authority)
     proof=provenance.authenticated_document(authority,before['deployment'],location,
@@ -59,7 +59,7 @@ def _predecessor(original,registry,record,history,index,before,clock):
         from trial_broker_positive import reconstruct
         return reconstruct(original,registry,record,prior,value,before,clock,proof)
     revocation=['revocation'] if prior['candidate']['name']=='revoked-qualification' else []
-    direct=['recovery','host_receipt'] if prior['candidate']['name'] in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks') else []
+    direct=['recovery','host_receipt'] if prior['candidate']['name'] in ('direct-push','coding-update','missing-approval','bad-acceptance','replaced-checks','forged-records') else []
     expired=['recovery','broker_receipt'] if prior['candidate']['name'] in ('expired-proof','authority-outage') else []
     object_fields(value,('schema_version kind request_digest certificate_digest before after completed').split()+revocation+direct+expired,'prior closed terminal')
     if revocation:
@@ -70,9 +70,9 @@ def _predecessor(original,registry,record,history,index,before,clock):
             type(value['completed']) is int and proof['job_started']<=value['completed']<=proof['artifact_created']<=proof['job_completed'],
             'prior terminal substituted case or interval')
     pending=registry.authenticate_setup_transition(before,{OPERATION:prior['pending']},value['before'])
-    if prior['candidate']['name'] in ('bad-acceptance','replaced-checks'):
-        from trial_host_case import bad_acceptance_terminal,replaced_checks_terminal
-        reader=bad_acceptance_terminal if prior['candidate']['name']=='bad-acceptance' else replaced_checks_terminal
+    if prior['candidate']['name'] in ('bad-acceptance','replaced-checks','forged-records'):
+        from trial_host_case import bad_acceptance_terminal,replaced_checks_terminal,forged_records_terminal
+        reader={'bad-acceptance':bad_acceptance_terminal,'replaced-checks':replaced_checks_terminal,'forged-records':forged_records_terminal}[prior['candidate']['name']]
         reader(registry.api,record,prior,value,proof,clock(),original=original)
     elif direct:
         from trial_host_case import direct_terminal
@@ -138,15 +138,15 @@ def _history_entry(original,record,prefix,index,entry,clock,authority,source,nes
     if transition is not None and transition['intent']['phase']=='current':
         _history_entry(original,record,prefix,index,transition['intent']['prior'],clock,authority,source,nested_prior=True)
     from trial_mutation import selected as mutated
-    if prior['candidate']['name'] in ('bad-acceptance','replaced-checks'):
-        ordinal='sixth' if prior['candidate']['name']=='bad-acceptance' else 'seventh'
+    if prior['candidate']['name'] in ('bad-acceptance','replaced-checks','forged-records'):
+        ordinal={'bad-acceptance':'sixth','replaced-checks':'seventh','forged-records':'eighth'}[prior['candidate']['name']]
         require(callable(clock) and authority is not None,'authenticated '+ordinal+' terminal authority required')
-        from trial_host_case import (bad_acceptance_terminal,replaced_checks_terminal,_ClosedDirectAPI,
-                                     _bad_source,_bad_readback,_replaced_source,_replaced_readback)
-        sixth=prior['candidate']['name']=='bad-acceptance'
-        reader=bad_acceptance_terminal if sixth else replaced_checks_terminal
-        source_reader=_bad_source if sixth else _replaced_source
-        readback=_bad_readback if sixth else _replaced_readback
+        from trial_host_case import (bad_acceptance_terminal,replaced_checks_terminal,forged_records_terminal,_ClosedDirectAPI,
+                                     _bad_source,_bad_readback,_replaced_source,_replaced_readback,_forged_source,_forged_readback)
+        reader,source_reader,readback={
+            'bad-acceptance':(bad_acceptance_terminal,_bad_source,_bad_readback),
+            'replaced-checks':(replaced_checks_terminal,_replaced_source,_replaced_readback),
+            'forged-records':(forged_records_terminal,_forged_source,_forged_readback)}[prior['candidate']['name']]
         terminal=provenance.authenticated_document(_ClosedDirectAPI(authority),record['trial']['deployment'],
                     entry['terminal'],'trial-case-terminal',record['task_id'],clock())
         outcome=reader(authority,record,prior,terminal['document'],terminal,clock(),original=original)

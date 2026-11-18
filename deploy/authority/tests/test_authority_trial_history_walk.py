@@ -46,19 +46,25 @@ class HistoryWalkContracts(unittest.TestCase):
              patch.object(__import__('provenance'),'authenticated_document',return_value=dict(document={})),\
              patch.object(__import__('trial_host_case'),'_bad_readback'),\
              patch.object(__import__('trial_host_case'),'_replaced_readback'),\
+             patch.object(__import__('trial_host_case'),'_forged_readback'),\
+             patch.object(__import__('trial_host_case'),'forged_records_terminal') as eighth,\
+             patch.object(__import__('trial_host_case'),'_forged_source') as eighth_source,\
              patch.object(__import__('trial_host_case'),'replaced_checks_terminal') as seventh,\
              patch.object(__import__('trial_host_case'),'_replaced_source') as seventh_source,\
              patch.object(__import__('trial_host_case'),'bad_acceptance_terminal') as sixth,\
              patch.object(__import__('trial_host_case'),'_bad_source') as sixth_source:
             trial_case.history_guard(original,record,history,lambda:100,object(),source)
             self.assertEqual(len(visits),len(documents))
-            self.assertEqual(validate.call_count,1); self.assertEqual(sixth.call_count,1); self.assertEqual(sixth_source.call_count,1)
+            self.assertEqual(validate.call_count,0); self.assertEqual(sixth.call_count,1); self.assertEqual(sixth_source.call_count,1)
             self.assertEqual(seventh.call_count,1); self.assertEqual(seventh_source.call_count,1)
+            self.assertEqual(eighth.call_count,1); self.assertEqual(eighth_source.call_count,1)
             visits.clear(); validate.reset_mock(); sixth.reset_mock(); sixth_source.reset_mock(); seventh.reset_mock(); seventh_source.reset_mock()
+            eighth.reset_mock(); eighth_source.reset_mock()
             trial_case.history_guard(original,record,history,lambda:100,object(),source)
             self.assertEqual(len(visits),len(documents),'a later guard must reread every dependency')
-            self.assertEqual(validate.call_count,1); self.assertEqual(sixth.call_count,1); self.assertEqual(sixth_source.call_count,1)
+            self.assertEqual(validate.call_count,0); self.assertEqual(sixth.call_count,1); self.assertEqual(sixth_source.call_count,1)
             self.assertEqual(seventh.call_count,1); self.assertEqual(seventh_source.call_count,1)
+            self.assertEqual(eighth.call_count,1); self.assertEqual(eighth_source.call_count,1)
 
     def test_substituted_nested_prior_and_later_pointer_changes_refuse(self):
         for fault in ('name','prefix','current-prior','pointer'):
@@ -73,6 +79,9 @@ class HistoryWalkContracts(unittest.TestCase):
                  patch.object(__import__('provenance'),'authenticated_document',return_value=dict(document={})),\
                  patch.object(__import__('trial_host_case'),'_bad_readback'),\
                  patch.object(__import__('trial_host_case'),'_replaced_readback'),\
+                 patch.object(__import__('trial_host_case'),'_forged_readback'),\
+                 patch.object(__import__('trial_host_case'),'forged_records_terminal'),\
+                 patch.object(__import__('trial_host_case'),'_forged_source'),\
                  patch.object(__import__('trial_host_case'),'replaced_checks_terminal'),\
                  patch.object(__import__('trial_host_case'),'_replaced_source'),\
                  patch.object(__import__('trial_host_case'),'bad_acceptance_terminal'),\

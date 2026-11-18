@@ -765,8 +765,8 @@ Only the authenticated native `replaced-checks` mutation exports the seventh v2
 terminal with the exact acknowledged recovery envelope and `host_receipt`. Native
 observation and historical consumption reject seventh v1 terminals. Existing
 original-export execution can still export v1, but cannot authorize observation or
-eighth progression. Separate exact sixth/seventh readers share immutable evidence
-validation; neither reader admits `forged-records`.
+eighth progression. Separate exact sixth/seventh/eighth readers share immutable
+evidence validation; each reader admits only its named case.
 
 The seventh reader authenticates the original worker, READY/handoff consumption,
 mutation publications, failed first verifier criterion, actual strict issuer
@@ -801,12 +801,43 @@ or restart.
 The same failed-verifier, strict issuer refusal, required-check host denial and
 pinned Finalizer path requires an actual changed candidate file under
 `knowledge/history/lifecycle/`, checked against the exact head and baseline.
-The local connected fixture adds attempted forged lifecycle approval/PASS bytes
-only inside the initial worker export, before closure and all sixteen reservations.
-They remain untrusted candidate attack input; they never become native records,
-task evidence, authority receipts or qualification. Replacement-only export cannot
-establish this case. Native CLOSED observation retains all eight histories and
-leaves the original trial unqualified. Positive consumers remain success-only.
+The fixed native mutation requires the exact nonexecutable
+`knowledge/history/lifecycle/forged.json` bytes
+`{"approved_by":"human:forged","status":"PASS"}` and permissive lifecycle recipe,
+bound to complete before/after manifests, original reservation, mutation
+publications and the actual source commit/ref. Its original host mutation inventory
+must explicitly include that exact forged path and digest, even if the original
+worker already contained the recipe bytes. Actual mutations are measured against
+the authenticated target baseline. Permissive-only or replacement-only input,
+another history path, wrong bytes/modes and a no-op target baseline cannot establish
+the forged-record attack. The fixed recipe requires no replacement test file.
+These bytes remain hostile candidate input; they never become native records,
+task evidence, authority receipts or qualification. Positive consumers remain
+success-only.
+
+Only the authenticated native eighth mutation exports a v2 terminal with the exact
+acknowledged recovery envelope and `host_receipt`. Original-export execution can
+still export v1, but both native observation and historical consumption reject it;
+it cannot authorize ninth selection. The exact eighth reader authenticates the
+original CLOSED worker and READY/handoff consumption, failed first verifier
+criterion, strict issuer refusal, controls and all five own-App proofs at their
+original events. It binds the merge App's actual PUT and integer HTTP 403/405/422
+`required_check` denial naming the exact issuer obligation, independent approval,
+successful competing checks, unchanged coordinates and conflict-free broker
+`host-denied` recovery. Full reference inventories and broker conflicts are reread
+after blocking evidence/source reads.
+
+Native observation inspects the original reserved export and mutated source
+without minting a coding token or invoking task admission, retaining current
+launch/staging and authority deadlines. Historical readers authenticate original
+short proof/consumption windows without demanding that an earlier review remain
+current after a later head; record/certificate/deployment bounds still apply.
+Lost finalizer acknowledgement cannot export evidence; uncertain native observation
+cannot be adopted for ninth selection. Exact owned-token cleanup remains available
+after expiry or restart. The bounded source-local connected fixture follows the
+authentic first seven, executes and observes eighth, removes its exact capability,
+then stops at `spoofed-source` selection. GitHub and OCI transport remain modeled;
+this does not establish hosted isolation, qualification, promotion or activation.
 
 The ninth distinct reservation, `spoofed-source`, authenticates all eight exact
 CLOSED histories and owned native completions against the same original trial.
