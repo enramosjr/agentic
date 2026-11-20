@@ -730,9 +730,15 @@ def _host_terminal(authority, retained, terminal, proof, now):
     return b,host,job
 
 
+def new_head_current(candidate):
+    """The tenth original reservation's host denial; its historical preparation keeps the v1 terminal."""
+    return candidate.get('name')=='new-head' and candidate.get('transition',{}).get('intent',{}).get('phase')=='current'
+
+
 def _negative_case(retained):
     name=retained['candidate']['name']
-    require(name in ('bad-acceptance','replaced-checks','forged-records','spoofed-source'),'only sixth through ninth negative history is admitted')
+    require(name in ('bad-acceptance','replaced-checks','forged-records','spoofed-source') or new_head_current(retained['candidate']),
+            'only sixth through tenth negative history is admitted')
     return name
 
 
@@ -750,6 +756,10 @@ def forged_records_terminal(authority, record, retained, terminal, proof, now, s
 
 def spoofed_source_terminal(authority, record, retained, terminal, proof, now, source=None, original=None):
     return _negative_terminal(authority,record,retained,terminal,proof,now,source,original,name='spoofed-source')
+
+
+def new_head_terminal(authority, record, retained, terminal, proof, now, source=None, original=None, registry=None):
+    return _negative_terminal(authority,record,retained,terminal,proof,now,source,original,name='new-head',registry=registry)
 
 
 def _negative_identity(binding, retained):
@@ -790,8 +800,10 @@ def _negative_prerequisites(observation, binding, retained):
             'native negative independent approval missing')
 
 
-def _negative_publication(authority, binding, record, retained, evidence, task_digest, events, now, spoof=False):
-    """Historical issuer refusal, or (spoof) the named source observation; never both."""
+def _negative_publication(authority, binding, record, retained, evidence, task_digest, events, now, spoof=False, prior=None):
+    """Historical issuer refusal, or (spoof) the named source observation; never both.
+
+    The tenth case also names the identity of its old same-PR issuer acceptance."""
     import broker_proofs
     from service import _locator,_publication_result
     d=binding['deployment']; s=retained['request']['snapshot']; identity=_negative_identity(binding,retained)
@@ -823,10 +835,12 @@ def _negative_publication(authority, binding, record, retained, evidence, task_d
         object_fields(inputs,('proofs proofs_digest controls controls_digest task_digest source').split(),
                       'historical source observation inputs')
         observation=value['observation']
-        object_fields(observation,('snapshot checks rules reviews').split(),'historical source observation')
-        require(inputs['source']==observation and observation['snapshot']==s and inputs['task_digest']==task_digest,
+        object_fields(observation,('snapshot checks rules reviews').split()+(['prior'] if prior is not None else []),
+                      'historical source observation')
+        require(inputs['source']==observation and observation['snapshot']==s and inputs['task_digest']==task_digest and
+                (prior is None or digest(observation['prior'])==digest(prior)),
                 'historical source observation or task differs')
-        _spoof_prerequisites(observation,binding,retained)
+        _source_prerequisites(observation,binding,retained)
     else:
         object_fields(inputs,('proofs proofs_digest controls controls_digest task_digest evidence evidence_digest').split(),
                       'historical issuer inputs')
@@ -846,7 +860,7 @@ def _negative_publication(authority, binding, record, retained, evidence, task_d
     return dict(locator=location,digest=digest(value)),[proof,saved,controls,*([] if spoof else [evidence]),*proofs['provenance'].values()]
 
 
-def _negative_outcome(authority, binding, record, retained, locator, now, source):
+def _negative_outcome(authority, binding, record, retained, locator, now, source, original=None, registry=None):
     from service import _locator
     d=binding['deployment']; s=retained['request']['snapshot']; key=record['task_id']
     require(locator['run_id']==s['run_id'] and locator['attempt']==s['run_attempt']==1,'native negative host run differs')
@@ -864,10 +878,11 @@ def _negative_outcome(authority, binding, record, retained, locator, now, source
             saved['document']==value['intent']==intent and saved['job_id']==proof['job_id'] and positive(intent['issued']) and
             proof['job_started']==saved['job_started']<=intent['issued']<=saved['artifact_created']<=value['completed'] and
             saved['job_completed']==proof['job_completed'],'native negative host intent differs')
-    observation=value['observation']; spoof=_negative_case(retained)=='spoofed-source'
+    observation=value['observation']; stale=_negative_case(retained)=='new-head'
+    spoof=stale or _negative_case(retained)=='spoofed-source'
     object_fields(observation,('snapshot checks rules reviews synthetic_commit request actor_id before after http_status '
-                              'denial_category denied_obligation publication').split()+([] if spoof else ['negative','mutations']),
-                  'historical native negative observation')
+                              'denial_category denied_obligation publication').split()+([] if spoof else ['negative','mutations'])+
+                  (['prior'] if stale else []),'historical native negative observation')
     actor=record['pair']['identities']['apps']['merge']['actor_id']; commit=observation['synthetic_commit']
     require(observation['snapshot']==s and observation['request']==intent['request'] and positive(observation['actor_id']) and
             observation['actor_id']==actor and observation['before']==observation['after']==s['base'] and
@@ -883,11 +898,17 @@ def _negative_outcome(authority, binding, record, retained, locator, now, source
     if spoof:
         # No verifier mutation or failed acceptance exists; the named source
         # observation replaces that evidence and the issuer is never invoked.
-        _spoof_prerequisites(observation,binding,retained)
-        evidence=None
-        case=dict(name='spoofed-source',snapshot=s,evidence=None,coordinates=dict(task_digest=digest(_spoof_task(retained))),
-                  expected_failure=None,mutations=[],prior=None)
+        _source_prerequisites(observation,binding,retained)
+        evidence=None; accepted=None; old_proof=[]
+        if stale:
+            accepted,old_evidence=_stale_prior(authority,binding,record,retained,observation['prior'],original,now,
+                                               intent['issued'],value['completed'])
+            old_proof=[old_evidence]
+        case=dict(name=_negative_case(retained),snapshot=s,evidence=None,
+                  coordinates=dict(task_digest=digest(_negative_task(retained) if stale else _spoof_task(retained))),
+                  expected_failure=None,mutations=[],prior=accepted)
     else:
+        old_proof=[]
         _negative_prerequisites(observation,binding,retained)
         location=_locator(authority,d,s['run_id'],1,'evidence',s['pr'])
         evidence=provenance.authenticated_document(authority,d,location,'evidence',s['pr'],now)
@@ -896,33 +917,40 @@ def _negative_outcome(authority, binding, record, retained, locator, now, source
         case=dict(name=_negative_case(retained),snapshot=s,evidence=location,coordinates=dict(task_digest=digest(_negative_task(retained))),
                   expected_failure=d['policy']['checks'][0],mutations=observation['mutations'],prior=None)
     publication,references=_negative_publication(authority,binding,record,retained,evidence,
-                                 case['coordinates']['task_digest'],(intent['issued'],value['completed']),now,spoof=spoof)
+                                 case['coordinates']['task_digest'],(intent['issued'],value['completed']),now,spoof=spoof,
+                                 prior=_acceptance_identity(observation['prior']) if stale else None)
     require(observation['publication']==publication,'historical issuer publication differs')
     if source is not None:
-        probe=HostCases(None,source,authority,record['pair']['identities'],None,None,None,lambda:now)
+        require(not stale or registry is not None,'native tenth current prior acceptance needs its trial registry')
+        probe=HostCases(registry,source,authority,record['pair']['identities'],None,None,None,lambda:now)
         probe.binding,probe.d=binding,d
         current=probe._prerequisites(case)
         require(spoof or (current['negative']==evidence and current['mutations']==observation['mutations']),'current native negative differs')
+        require(not stale or digest(_acceptance_identity(current['prior']))==digest(_acceptance_identity(observation['prior'])),
+                'current native prior acceptance differs')
         from authority_github import Readers,current_snapshot
         require(current_snapshot(Readers(source,authority,d),d,s['pr'],s['run_id'],1)==s and
                 source.get('/repos/'+d['policy']['repository']+'/git/ref/heads/'+quote(d['policy']['target'],safe=''))['object']['sha']==s['base'],
                 'native negative target or candidate changed')
     return dict(locator=locator,document=value,proof={k:v for k,v in proof.items() if k!='document'},
-                _references=[proof,saved,*references])
+                _references=[proof,saved,*old_proof,*references])
 
 
-def _negative_terminal(authority, record, retained, terminal, proof, now, source=None, original=None, *, name):
-    """Exact sixth through ninth immutable evidence; never live or successful admission."""
+def _negative_terminal(authority, record, retained, terminal, proof, now, source=None, original=None, *, name, registry=None):
+    """Exact sixth through tenth immutable evidence; never live or successful admission."""
     from trial_broker_case import _consumed_history,_worker_history
     from trusted_ci_deployment import timestamp
     from trial_mutation import selected,_documents
-    spoof=name=='spoofed-source'
+    stale=name=='new-head'
+    spoof=stale or name=='spoofed-source'
     object_fields(terminal,('schema_version kind request_digest certificate_digest before after completed recovery host_receipt').split(),
                   'native negative v2 terminal')
-    # The ninth attack has no worker mutation; its candidate must not carry one.
+    # The ninth attack has no worker mutation or transition. The tenth has only its
+    # current same-PR transition, never a mutation claim.
     require(type(terminal['schema_version']) is int and terminal['schema_version']==2 and terminal['kind']=='trial-case-terminal' and
-            name in ('bad-acceptance','replaced-checks','forged-records','spoofed-source') and retained['candidate']['name']==name and
-            (not selected(retained['candidate']) and 'transition' not in retained['candidate'] if spoof else selected(retained['candidate'])) and
+            name in ('bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head') and retained['candidate']['name']==name and
+            (new_head_current(retained['candidate']) and not selected(retained['candidate']) if stale else
+             not selected(retained['candidate']) and 'transition' not in retained['candidate'] if spoof else selected(retained['candidate'])) and
             original is not None and terminal['request_digest']==digest(retained['request']) and
             terminal['certificate_digest']==digest(retained['certificate']),'exact native negative v2 terminal required')
     b=terminal['before']; d=b['deployment']; certificate=retained['certificate']; op=b['fence']['pending']
@@ -946,11 +974,11 @@ def _negative_terminal(authority, record, retained, terminal, proof, now, source
     consumed=_consumed_history(authority,b,record,retained,proof,now)
     worker=_worker_history(authority,record,retained,now)
     _,host,job=_host_terminal(authority,retained,terminal,proof,now)
-    outcome=_negative_outcome(authority,b,record,retained,host['host'],now,source)
+    outcome=_negative_outcome(authority,b,record,retained,host['host'],now,source,original,registry)
     event=outcome['document']['intent']['issued']
     if spoof:
         require(outcome['proof']['job_completed']<min(certificate['expires'],op['execution_deadline']),
-                'native spoofed-source host job outlived its operation')
+                'native '+name+' host job outlived its operation')
     else:
         claim,_=_documents(retained['candidate'],record,retained['worker'],retained['history'],original,event)
         prior=claim['preview']['baseline']; pending=copy.deepcopy(prior['fence'])
@@ -963,14 +991,14 @@ def _negative_terminal(authority, record, retained, terminal, proof, now, source
         _negative_mutations(name,before,after,mutations)
     if source is not None:
         reader={'bad-acceptance':_bad_source,'replaced-checks':_replaced_source,'forged-records':_forged_source,
-                'spoofed-source':_spoof_source}[name]
+                'spoofed-source':_spoof_source,'new-head':_new_head_source}[name]
         reader(source,record,retained,outcome,original,lambda:now)
     require(digest(outcome['document'])==host['host_digest'] and
             outcome['proof']['job_completed']<=host['issued']<=int(timestamp(job['completed_at']).timestamp()),
             'native negative receipt substituted host evidence')
     outcome['_references']=[proof,worker,*consumed,*outcome['_references']]
     reader={'bad-acceptance':_bad_readback,'replaced-checks':_replaced_readback,'forged-records':_forged_readback,
-            'spoofed-source':_spoof_readback}[name]
+            'spoofed-source':_spoof_readback,'new-head':_new_head_readback}[name]
     reader(authority,retained,terminal,proof,now,outcome)
     return outcome
 
@@ -1053,18 +1081,66 @@ def _spoof_prerequisites(observation, binding, retained):
                 for c in observation['checks']),'actual spoofed issuer success missing')
 
 
+def _source_prerequisites(observation, binding, retained):
+    """Ninth: a foreign success. Tenth: no success at all; both keep every other host obligation."""
+    if _negative_case(retained)=='new-head': return _negative_prerequisites(observation,binding,retained)
+    return _spoof_prerequisites(observation,binding,retained)
+
+
+def _stale_prior(authority, binding, record, retained, prior, original, now, issued, completed):
+    """Immutable same-PR old issuer acceptance behind the tenth stale-head denial.
+
+    The acceptance is re-derived from the original authenticated historical terminal and
+    must equal the one the transition intent froze; the host's read of it must equal that."""
+    import checks
+    from trial_transition import prior_acceptance
+    require(original is not None and new_head_current(retained['candidate']),'exact tenth historical acceptance authority required')
+    intent=retained['candidate']['transition']['intent']; s=retained['request']['snapshot']; d=binding['deployment']
+    accepted=prior_acceptance(original,authority,record,intent['prior'],lambda:now)
+    require(digest(accepted)==digest(intent['acceptance']),'historical acceptance changed after transition')
+    old=accepted['snapshot']; coordinates=accepted['coordinates']
+    require(digest(accepted['deployment'])==digest(d) and old['pr']==s['pr'] and old['head']!=s['head'] and
+            old['base']==s['base'] and old['merge']!=s['merge'],'stale-head prior coordinates differ')
+    object_fields(prior,('proof','check','coordinates'),'historical prior acceptance')
+    object_fields(prior['check'],('check_id','external_id','observed','expires'),'historical prior check')
+    evidence=provenance.authenticated_document(authority,d,accepted['evidence'],'evidence',old['pr'],now)
+    provenance.validate_evidence(evidence['document'],d,old,coordinates['configuration_revision'],evidence['job_id'],issued)
+    check=prior['check']
+    require(prior['proof']==evidence and prior['coordinates']==coordinates and
+            coordinates['evidence_job_id']==evidence['job_id'] and coordinates['evidence_digest']==digest(evidence['document']) and
+            positive(check['check_id']) and check['external_id']==checks.intent(d,old,coordinates,issued) and
+            type(check['observed']) is int and coordinates['operation']['created']<=check['observed']<=completed and
+            check['expires']==min(d['expires'],coordinates['operation']['execution_deadline']),
+            'historical prior acceptance differs from its original observation')
+    return accepted,evidence
+
+
 def _spoof_source(source, record, retained, outcome, original, clock):
-    """Immutable candidate and synthetic-merge integrity; the live foreign check is not rechecked here."""
     require(_negative_case(retained)=='spoofed-source','exact ninth source required')
+    return _candidate_source(source,record,retained,outcome,clock,'spoofed-source')
+
+
+def _new_head_source(source, record, retained, outcome, original, clock):
+    require(_negative_case(retained)=='new-head','exact tenth source required')
+    return _candidate_source(source,record,retained,outcome,clock,'new-head')
+
+
+def _candidate_source(source, record, retained, outcome, clock, name):
+    """Immutable candidate and synthetic-merge integrity; the live source facts are not rechecked here."""
     d=record['trial']['deployment']; s=retained['request']['snapshot']; tree=retained['candidate']['submitted']['tree']
     require(clock()<min(record['expires'],retained['certificate']['expires'],d['expires']),
-            'native spoofed-source current authority expired')
+            'native '+name+' current authority expired')
     root='/repos/'+d['policy']['repository']
     head=source.get(root+'/git/commits/'+s['head']); merge=source.get(root+'/git/commits/'+s['merge'])
     recorded=outcome['document']['observation']['synthetic_commit']
     require(head.get('sha')==s['head'] and head['tree']['sha']==tree and merge.get('sha')==s['merge'] and
             [v['sha'] for v in merge['parents']]==[s['base'],s['head']] and
-            merge['tree']['sha']==recorded['tree']['sha']==tree,'native spoofed-source candidate or merge commit changed')
+            merge['tree']['sha']==recorded['tree']['sha']==tree,'native '+name+' candidate or merge commit changed')
+
+
+def _new_head_readback(authority, retained, terminal, proof, now, outcome):
+    require(_negative_case(retained)=='new-head','exact tenth readback required')
+    return _negative_readback(authority,retained,terminal,proof,now,outcome)
 
 
 def _spoof_readback(authority, retained, terminal, proof, now, outcome):

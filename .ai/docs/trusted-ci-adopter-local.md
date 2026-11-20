@@ -908,6 +908,29 @@ obligation, and requires absence of current own-App success. Only the exact issu
 required-check denial and named `new-head` outcome can close it. The original
 deadlines, all nine predecessor histories and their 27 refs remain binding.
 
+Only the tenth native current-phase `new-head` finalization exports a v2 terminal with
+the exact acknowledged recovery envelope and `host_receipt`; the v1 shape is refused by
+native observation, historical consumption and `new-base` selection. The separately
+journaled historical preparation keeps its v1 no-dispatch terminal. The exact tenth
+reader shares the immutable envelope, interval, closed-inventory and readback checks of
+the sixth through ninth readers and, like the ninth, has no verifier evidence, issuer
+refusal or mutation inventory; it rejects a candidate that carries a mutation
+transition. It authenticates the original worker and consumption history, the
+`trial-publication-observation` and its intent (which must name no authoritative
+success on the current synthetic merge and satisfy every other required obligation and
+independent approval), the host intent and denial (exact required-check HTTP
+403/405/422 with the merge App) and the broker `host-denied` receipt. Its task digest is
+the transition task of the admitted candidate. The tenth reader additionally re-derives
+the old same-PR acceptance from the authenticated historical terminal, requires it to
+equal the acceptance frozen in the transition intent, binds its old head, merge, check
+identity and original evidence to the host's observation, and keeps that evidence in the
+readback inventory. Native observation reads the current old success live through the
+trial registry, never minting a coding token; historical readers authenticate the
+original intervals and retained commits without live prerequisites. Lost finalizer or
+native acknowledgements cannot export evidence or select `new-base`, and exact owned
+cleanup survives expiry. This adds no hosted isolation, qualification, promotion or
+activation.
+
 The next reservations, `new-base` and `policy-transition`, each prepare genuine
 same-PR historical acceptance from the frozen native baseline tree. Their heads
 remain unchanged while the base advances. The existing native configuration engine

@@ -48,6 +48,9 @@ class HistoryWalkContracts(unittest.TestCase):
              patch.object(__import__('trial_host_case'),'_replaced_readback'),\
              patch.object(__import__('trial_host_case'),'_forged_readback'),\
              patch.object(__import__('trial_host_case'),'_spoof_readback'),\
+             patch.object(__import__('trial_host_case'),'_new_head_readback'),\
+             patch.object(__import__('trial_host_case'),'new_head_terminal') as tenth,\
+             patch.object(__import__('trial_host_case'),'_new_head_source') as tenth_source,\
              patch.object(__import__('trial_host_case'),'spoofed_source_terminal') as ninth,\
              patch.object(__import__('trial_host_case'),'_spoof_source') as ninth_source,\
              patch.object(__import__('trial_host_case'),'forged_records_terminal') as eighth,\
@@ -62,14 +65,17 @@ class HistoryWalkContracts(unittest.TestCase):
             self.assertEqual(seventh.call_count,1); self.assertEqual(seventh_source.call_count,1)
             self.assertEqual(eighth.call_count,1); self.assertEqual(eighth_source.call_count,1)
             self.assertEqual(ninth.call_count,1); self.assertEqual(ninth_source.call_count,1)
+            self.assertEqual(tenth.call_count,1); self.assertEqual(tenth_source.call_count,1)
             visits.clear(); validate.reset_mock(); sixth.reset_mock(); sixth_source.reset_mock(); seventh.reset_mock(); seventh_source.reset_mock()
             eighth.reset_mock(); eighth_source.reset_mock(); ninth.reset_mock(); ninth_source.reset_mock()
+            tenth.reset_mock(); tenth_source.reset_mock()
             trial_case.history_guard(original,record,history,lambda:100,object(),source)
             self.assertEqual(len(visits),len(documents),'a later guard must reread every dependency')
             self.assertEqual(validate.call_count,0); self.assertEqual(sixth.call_count,1); self.assertEqual(sixth_source.call_count,1)
             self.assertEqual(seventh.call_count,1); self.assertEqual(seventh_source.call_count,1)
             self.assertEqual(eighth.call_count,1); self.assertEqual(eighth_source.call_count,1)
             self.assertEqual(ninth.call_count,1); self.assertEqual(ninth_source.call_count,1)
+            self.assertEqual(tenth.call_count,1); self.assertEqual(tenth_source.call_count,1)
 
     def test_substituted_nested_prior_and_later_pointer_changes_refuse(self):
         for fault in ('name','prefix','current-prior','pointer'):
