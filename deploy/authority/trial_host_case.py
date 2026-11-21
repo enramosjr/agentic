@@ -735,10 +735,19 @@ def new_head_current(candidate):
     return candidate.get('name')=='new-head' and candidate.get('transition',{}).get('intent',{}).get('phase')=='current'
 
 
+def new_base_current(candidate):
+    """The eleventh original reservation's host denial; its historical preparation keeps the v1 terminal."""
+    return candidate.get('name')=='new-base' and candidate.get('transition',{}).get('intent',{}).get('phase')=='current'
+
+
+def stale_current(candidate):
+    return new_head_current(candidate) or new_base_current(candidate)
+
+
 def _negative_case(retained):
     name=retained['candidate']['name']
-    require(name in ('bad-acceptance','replaced-checks','forged-records','spoofed-source') or new_head_current(retained['candidate']),
-            'only sixth through tenth negative history is admitted')
+    require(name in ('bad-acceptance','replaced-checks','forged-records','spoofed-source') or stale_current(retained['candidate']),
+            'only sixth through eleventh negative history is admitted')
     return name
 
 
@@ -760,6 +769,10 @@ def spoofed_source_terminal(authority, record, retained, terminal, proof, now, s
 
 def new_head_terminal(authority, record, retained, terminal, proof, now, source=None, original=None, registry=None):
     return _negative_terminal(authority,record,retained,terminal,proof,now,source,original,name='new-head',registry=registry)
+
+
+def new_base_terminal(authority, record, retained, terminal, proof, now, source=None, original=None, registry=None):
+    return _negative_terminal(authority,record,retained,terminal,proof,now,source,original,name='new-base',registry=registry)
 
 
 def _negative_identity(binding, retained):
@@ -878,7 +891,7 @@ def _negative_outcome(authority, binding, record, retained, locator, now, source
             saved['document']==value['intent']==intent and saved['job_id']==proof['job_id'] and positive(intent['issued']) and
             proof['job_started']==saved['job_started']<=intent['issued']<=saved['artifact_created']<=value['completed'] and
             saved['job_completed']==proof['job_completed'],'native negative host intent differs')
-    observation=value['observation']; stale=_negative_case(retained)=='new-head'
+    observation=value['observation']; stale=_negative_case(retained) in ('new-head','new-base')
     spoof=stale or _negative_case(retained)=='spoofed-source'
     object_fields(observation,('snapshot checks rules reviews synthetic_commit request actor_id before after http_status '
                               'denial_category denied_obligation publication').split()+([] if spoof else ['negative','mutations'])+
@@ -921,7 +934,7 @@ def _negative_outcome(authority, binding, record, retained, locator, now, source
                                  prior=_acceptance_identity(observation['prior']) if stale else None)
     require(observation['publication']==publication,'historical issuer publication differs')
     if source is not None:
-        require(not stale or registry is not None,'native tenth current prior acceptance needs its trial registry')
+        require(not stale or registry is not None,'native stale current prior acceptance needs its trial registry')
         probe=HostCases(registry,source,authority,record['pair']['identities'],None,None,None,lambda:now)
         probe.binding,probe.d=binding,d
         current=probe._prerequisites(case)
@@ -941,15 +954,15 @@ def _negative_terminal(authority, record, retained, terminal, proof, now, source
     from trial_broker_case import _consumed_history,_worker_history
     from trusted_ci_deployment import timestamp
     from trial_mutation import selected,_documents
-    stale=name=='new-head'
+    stale=name in ('new-head','new-base')
     spoof=stale or name=='spoofed-source'
     object_fields(terminal,('schema_version kind request_digest certificate_digest before after completed recovery host_receipt').split(),
                   'native negative v2 terminal')
     # The ninth attack has no worker mutation or transition. The tenth has only its
     # current same-PR transition, never a mutation claim.
     require(type(terminal['schema_version']) is int and terminal['schema_version']==2 and terminal['kind']=='trial-case-terminal' and
-            name in ('bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head') and retained['candidate']['name']==name and
-            (new_head_current(retained['candidate']) and not selected(retained['candidate']) if stale else
+            name in ('bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head','new-base') and retained['candidate']['name']==name and
+            (stale_current(retained['candidate']) and not selected(retained['candidate']) if stale else
              not selected(retained['candidate']) and 'transition' not in retained['candidate'] if spoof else selected(retained['candidate'])) and
             original is not None and terminal['request_digest']==digest(retained['request']) and
             terminal['certificate_digest']==digest(retained['certificate']),'exact native negative v2 terminal required')
@@ -991,14 +1004,14 @@ def _negative_terminal(authority, record, retained, terminal, proof, now, source
         _negative_mutations(name,before,after,mutations)
     if source is not None:
         reader={'bad-acceptance':_bad_source,'replaced-checks':_replaced_source,'forged-records':_forged_source,
-                'spoofed-source':_spoof_source,'new-head':_new_head_source}[name]
+                'spoofed-source':_spoof_source,'new-head':_new_head_source,'new-base':_new_base_source}[name]
         reader(source,record,retained,outcome,original,lambda:now)
     require(digest(outcome['document'])==host['host_digest'] and
             outcome['proof']['job_completed']<=host['issued']<=int(timestamp(job['completed_at']).timestamp()),
             'native negative receipt substituted host evidence')
     outcome['_references']=[proof,worker,*consumed,*outcome['_references']]
     reader={'bad-acceptance':_bad_readback,'replaced-checks':_replaced_readback,'forged-records':_forged_readback,
-            'spoofed-source':_spoof_readback,'new-head':_new_head_readback}[name]
+            'spoofed-source':_spoof_readback,'new-head':_new_head_readback,'new-base':_new_base_readback}[name]
     reader(authority,retained,terminal,proof,now,outcome)
     return outcome
 
@@ -1083,7 +1096,7 @@ def _spoof_prerequisites(observation, binding, retained):
 
 def _source_prerequisites(observation, binding, retained):
     """Ninth: a foreign success. Tenth: no success at all; both keep every other host obligation."""
-    if _negative_case(retained)=='new-head': return _negative_prerequisites(observation,binding,retained)
+    if _negative_case(retained) in ('new-head','new-base'): return _negative_prerequisites(observation,binding,retained)
     return _spoof_prerequisites(observation,binding,retained)
 
 
@@ -1094,13 +1107,15 @@ def _stale_prior(authority, binding, record, retained, prior, original, now, iss
     must equal the one the transition intent froze; the host's read of it must equal that."""
     import checks
     from trial_transition import prior_acceptance
-    require(original is not None and new_head_current(retained['candidate']),'exact tenth historical acceptance authority required')
+    require(original is not None and stale_current(retained['candidate']),'exact stale historical acceptance authority required')
     intent=retained['candidate']['transition']['intent']; s=retained['request']['snapshot']; d=binding['deployment']
     accepted=prior_acceptance(original,authority,record,intent['prior'],lambda:now)
     require(digest(accepted)==digest(intent['acceptance']),'historical acceptance changed after transition')
     old=accepted['snapshot']; coordinates=accepted['coordinates']
-    require(digest(accepted['deployment'])==digest(d) and old['pr']==s['pr'] and old['head']!=s['head'] and
-            old['base']==s['base'] and old['merge']!=s['merge'],'stale-head prior coordinates differ')
+    moved=(old['head']!=s['head'] and old['base']==s['base']) if retained['candidate']['name']=='new-head' else (
+            old['head']==s['head'] and old['base']!=s['base'])
+    require(digest(accepted['deployment'])==digest(d) and old['pr']==s['pr'] and moved and old['merge']!=s['merge'],
+            'stale prior coordinates differ')
     object_fields(prior,('proof','check','coordinates'),'historical prior acceptance')
     object_fields(prior['check'],('check_id','external_id','observed','expires'),'historical prior check')
     evidence=provenance.authenticated_document(authority,d,accepted['evidence'],'evidence',old['pr'],now)
@@ -1125,6 +1140,11 @@ def _new_head_source(source, record, retained, outcome, original, clock):
     return _candidate_source(source,record,retained,outcome,clock,'new-head')
 
 
+def _new_base_source(source, record, retained, outcome, original, clock):
+    require(_negative_case(retained)=='new-base','exact eleventh source required')
+    return _candidate_source(source,record,retained,outcome,clock,'new-base')
+
+
 def _candidate_source(source, record, retained, outcome, clock, name):
     """Immutable candidate and synthetic-merge integrity; the live source facts are not rechecked here."""
     d=record['trial']['deployment']; s=retained['request']['snapshot']; tree=retained['candidate']['submitted']['tree']
@@ -1140,6 +1160,11 @@ def _candidate_source(source, record, retained, outcome, clock, name):
 
 def _new_head_readback(authority, retained, terminal, proof, now, outcome):
     require(_negative_case(retained)=='new-head','exact tenth readback required')
+    return _negative_readback(authority,retained,terminal,proof,now,outcome)
+
+
+def _new_base_readback(authority, retained, terminal, proof, now, outcome):
+    require(_negative_case(retained)=='new-base','exact eleventh readback required')
     return _negative_readback(authority,retained,terminal,proof,now,outcome)
 
 

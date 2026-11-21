@@ -161,20 +161,22 @@ class Native:
         completed=native._worker_completion(admission.record,prompt,admission.source)
         require(completed['result']==admission.value['worker'], 'retained CLOSED worker changed')
         admission.worker=completed
-        if name in ('bad-acceptance','replaced-checks','forged-records','spoofed-source') or name=='new-head' and phase is None:
-            from trial_host_case import bad_acceptance_terminal,replaced_checks_terminal,forged_records_terminal,spoofed_source_terminal,new_head_terminal
+        stale=name in ('new-head','new-base') and phase is None
+        if name in ('bad-acceptance','replaced-checks','forged-records','spoofed-source') or stale:
+            from trial_host_case import (bad_acceptance_terminal,replaced_checks_terminal,forged_records_terminal,spoofed_source_terminal,
+                                         new_head_terminal,new_base_terminal)
             from trial_case import read as read_case
             publication=native.provision.store(native.provision.root/case_journal('trial-case-publication',admission.candidate)).read()
             case,record=read_case(native.provision.session.registry,publication['value']['revision_bound'],admission.clock)
             require(record==admission.record and case['request']==admission.request and case['certificate']==admission.value['certificate'],
                     'negative terminal substituted consumed case')
             reader={'bad-acceptance':bad_acceptance_terminal,'replaced-checks':replaced_checks_terminal,'forged-records':forged_records_terminal,
-                    'spoofed-source':spoofed_source_terminal,'new-head':new_head_terminal}[name]
+                    'spoofed-source':spoofed_source_terminal,'new-head':new_head_terminal,'new-base':new_base_terminal}[name]
             outcome=reader(admission.registry.api,record,case,admission.terminal_proof['document'],
                 admission.terminal_proof['producer'],admission.clock(),admission.source,native.provision.session.registry,
-                **(dict(registry=admission.registry) if name=='new-head' else {}))
-            if name=='new-head':
-                # The tenth reserved export is validated by the existing read-only transition readback.
+                **(dict(registry=admission.registry) if stale else {}))
+            if stale:
+                # The tenth and eleventh reserved exports are validated by the existing read-only transition readback.
                 admission._candidate(self.candidates)
             else:
                 admission._negative_terminal_candidate(outcome)
@@ -231,7 +233,7 @@ class Native:
                 require(previous is not None and previous['value']['phase']=='terminal' and
                         previous['value']['name']==prior_name and previous['value']['prompt_digest']==digest(prompt) and
                         'locator' in previous['value']['terminal'], 'owned independently observed first terminal required')
-                if prior_name in ('missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head'):
+                if prior_name in ('missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source','new-head','new-base'):
                     # Historical proof cannot adopt an uncertain native observation.
                     prior_key=case_journal('trial-controller',dict(name=prior_name))
                     acknowledged(c,prior_key,c.store(c.root/prior_key),previous)
@@ -359,8 +361,8 @@ class Admission:
             require(terminal_locator['run_id']==s['run_id'] and terminal_locator['attempt']==s['run_attempt'],
                     'terminal producer belongs to another case run')
             authority=self.registry.api
-            from trial_host_case import new_head_current
-            tenth=new_head_current(self.candidate)
+            from trial_host_case import stale_current
+            tenth=stale_current(self.candidate)
             if tenth or self.candidate['name'] in ('direct-push','coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source'):
                 from trial_host_case import _ClosedDirectAPI
                 authority=_ClosedDirectAPI(authority)

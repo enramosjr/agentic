@@ -182,7 +182,7 @@ class Finalizer:
             if _admission.candidate['name']=='authority-outage':
                 self._outage_terminal = (operation_id, sequence, copy.deepcopy(result),
                                          copy.deepcopy(dict(recovery=envelope,broker_receipt=no_dispatch)))
-            if _admission.candidate['name']=='spoofed-source' or __import__('trial_host_case').new_head_current(_admission.candidate) or (
+            if _admission.candidate['name']=='spoofed-source' or __import__('trial_host_case').stale_current(_admission.candidate) or (
                     _admission.candidate['name'] in ('bad-acceptance','replaced-checks','forged-records') and
                     __import__('trial_mutation').selected(_admission.candidate)):
                 self._negative_terminal = (operation_id, sequence, copy.deepcopy(result),

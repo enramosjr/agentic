@@ -931,6 +931,21 @@ native acknowledgements cannot export evidence or select `new-base`, and exact o
 cleanup survives expiry. This adds no hosted isolation, qualification, promotion or
 activation.
 
+Only the eleventh native current-phase `new-base` finalization exports a v2 terminal
+with the exact acknowledged recovery envelope and `host_receipt`; the v1 shape is refused
+by native observation, historical consumption and `policy-transition` selection. Its
+separately journaled historical preparation keeps its v1 no-dispatch terminal. The
+eleventh reader is the tenth reader with the stale coordinate reversed: the frozen old
+acceptance must share the current head and PR but name an older base and merge commit.
+It re-derives that acceptance from the authenticated historical terminal, requires it to
+equal the one frozen in the transition intent, and authenticates the finite native
+context chain that moved the base before the current terminal is read. Native
+observation reads the old success live through the trial registry and mints no coding
+token; historical readers authenticate the original intervals and retained commits
+without live prerequisites. Lost finalizer or native acknowledgements cannot export
+evidence or select `policy-transition`, and exact owned cleanup survives expiry. This
+adds no hosted isolation, qualification, promotion or activation.
+
 The next reservations, `new-base` and `policy-transition`, each prepare genuine
 same-PR historical acceptance from the frozen native baseline tree. Their heads
 remain unchanged while the base advances. The existing native configuration engine

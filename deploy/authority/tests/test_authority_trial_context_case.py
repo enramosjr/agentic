@@ -114,23 +114,29 @@ class Context(previous.NewHead):
         return operator,target
 
     def advance_case(self, name, prior_run, current_run):
+        old=self.pending_case(name,prior_run,current_run)
+        result=self.finalize(); self.owner.assertEqual(self.observe()['binding'],result)
+        self.owner.assertEqual(self.admission.request['snapshot']['head'],old['head'])
+        self.owner.assertNotEqual(self.admission.request['snapshot']['base'],old['base'])
+        return self.link
+
+    def pending_case(self, name, prior_run, current_run, after_prior=None):
+        """Everything up to the host-denied broker receipt; the caller finalizes."""
         self.prior_case(name,prior_run)
+        if after_prior is not None: after_prior()
         if not hasattr(self,'operator'):
             self.operator,self.target=self.context_transport()
         old=self.admission.request['snapshot']
         admin=self.apps(self.d['apps']['admin'],self.api.secrets['AGENTIC_ADMIN_PRIVATE_KEY'])
         with patch.object(bootstrap,'installation_token',NATIVE_MINT):
-            link=trial_controller.Native(self.preparer).transition_context('prompt',name,self.operator,admin,digest,self.tokens)
+            self.link=trial_controller.Native(self.preparer).transition_context('prompt',name,self.operator,admin,digest,self.tokens)
         self.d=self.registry.read(); self.p=self.d['policy']; self.phase=None
         self.second(name,current_run,'fresh-'+name+'-current')
         with self.owner.assertRaisesRegex(Refusal,'pending'): self.coordinate()
         self.owner.assertEqual(self.close_handoff()['host_case'],name)
         self.observed(); self.host()
         self.owner.assertEqual(self.run('broker')['state'],'host-denied')
-        result=self.finalize(); self.owner.assertEqual(self.observe()['binding'],result)
-        self.owner.assertEqual(self.admission.request['snapshot']['head'],old['head'])
-        self.owner.assertNotEqual(self.admission.request['snapshot']['base'],old['base'])
-        return link
+        return old
 
     def human_ready(self):
         self.through_tenth(); self.advance_case('new-base',123,125)

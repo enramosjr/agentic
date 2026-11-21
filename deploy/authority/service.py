@@ -1007,7 +1007,7 @@ def _case_producer(environment, hint, node, role, clock=None, api_factory=GitHub
                 if admitted.candidate['name']=='authority-outage':
                     document.update(schema_version=2,**finalizer._outage_evidence(
                         admitted.request['operation_id'],admitted.request['sequence'],result))
-                if admitted.candidate['name']=='spoofed-source' or __import__('trial_host_case').new_head_current(admitted.candidate) or (
+                if admitted.candidate['name']=='spoofed-source' or __import__('trial_host_case').stale_current(admitted.candidate) or (
                         admitted.candidate['name'] in ('bad-acceptance','replaced-checks','forged-records') and
                         __import__('trial_mutation').selected(admitted.candidate)):
                     document.update(schema_version=2,**finalizer._negative_evidence(

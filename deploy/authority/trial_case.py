@@ -46,8 +46,8 @@ def _predecessor(original,registry,record,history,index,before,clock):
     location=entry['terminal']; s=prior['request']['snapshot']
     require(location['run_id']==s['run_id'] and location['attempt']==s['run_attempt'], 'prior terminal run differs')
     authority=registry.api
-    from trial_host_case import new_head_current
-    tenth=new_head_current(prior['candidate'])
+    from trial_host_case import stale_current
+    tenth=stale_current(prior['candidate'])
     if tenth or prior['candidate']['name'] in ('direct-push','coding-update','missing-approval','expired-proof','authority-outage','bad-acceptance','replaced-checks','forged-records','spoofed-source'):
         from trial_host_case import _ClosedDirectAPI
         authority=_ClosedDirectAPI(authority)
@@ -73,9 +73,9 @@ def _predecessor(original,registry,record,history,index,before,clock):
             'prior terminal substituted case or interval')
     pending=registry.authenticate_setup_transition(before,{OPERATION:prior['pending']},value['before'])
     if tenth or prior['candidate']['name'] in ('bad-acceptance','replaced-checks','forged-records','spoofed-source'):
-        from trial_host_case import bad_acceptance_terminal,replaced_checks_terminal,forged_records_terminal,spoofed_source_terminal,new_head_terminal
+        from trial_host_case import bad_acceptance_terminal,replaced_checks_terminal,forged_records_terminal,spoofed_source_terminal,new_head_terminal,new_base_terminal
         reader={'bad-acceptance':bad_acceptance_terminal,'replaced-checks':replaced_checks_terminal,'forged-records':forged_records_terminal,
-                'spoofed-source':spoofed_source_terminal,'new-head':new_head_terminal}[prior['candidate']['name']]
+                'spoofed-source':spoofed_source_terminal,'new-head':new_head_terminal,'new-base':new_base_terminal}[prior['candidate']['name']]
         reader(registry.api,record,prior,value,proof,clock(),original=original)
     elif direct:
         from trial_host_case import direct_terminal
@@ -141,19 +141,22 @@ def _history_entry(original,record,prefix,index,entry,clock,authority,source,nes
     if transition is not None and transition['intent']['phase']=='current':
         _history_entry(original,record,prefix,index,transition['intent']['prior'],clock,authority,source,nested_prior=True)
     from trial_mutation import selected as mutated
-    from trial_host_case import new_head_current
-    if new_head_current(prior['candidate']) or prior['candidate']['name'] in ('bad-acceptance','replaced-checks','forged-records','spoofed-source'):
-        ordinal={'bad-acceptance':'sixth','replaced-checks':'seventh','forged-records':'eighth','spoofed-source':'ninth','new-head':'tenth'}[prior['candidate']['name']]
+    from trial_host_case import stale_current
+    if stale_current(prior['candidate']) or prior['candidate']['name'] in ('bad-acceptance','replaced-checks','forged-records','spoofed-source'):
+        ordinal={'bad-acceptance':'sixth','replaced-checks':'seventh','forged-records':'eighth','spoofed-source':'ninth','new-head':'tenth',
+                 'new-base':'eleventh'}[prior['candidate']['name']]
         require(callable(clock) and authority is not None,'authenticated '+ordinal+' terminal authority required')
-        from trial_host_case import (bad_acceptance_terminal,replaced_checks_terminal,forged_records_terminal,spoofed_source_terminal,new_head_terminal,_ClosedDirectAPI,
+        from trial_host_case import (bad_acceptance_terminal,replaced_checks_terminal,forged_records_terminal,spoofed_source_terminal,new_head_terminal,
+                                     new_base_terminal,_ClosedDirectAPI,
                                      _bad_source,_bad_readback,_replaced_source,_replaced_readback,_forged_source,_forged_readback,
-                                     _spoof_source,_spoof_readback,_new_head_source,_new_head_readback)
+                                     _spoof_source,_spoof_readback,_new_head_source,_new_head_readback,_new_base_source,_new_base_readback)
         reader,source_reader,readback={
             'bad-acceptance':(bad_acceptance_terminal,_bad_source,_bad_readback),
             'replaced-checks':(replaced_checks_terminal,_replaced_source,_replaced_readback),
             'forged-records':(forged_records_terminal,_forged_source,_forged_readback),
             'spoofed-source':(spoofed_source_terminal,_spoof_source,_spoof_readback),
-            'new-head':(new_head_terminal,_new_head_source,_new_head_readback)}[prior['candidate']['name']]
+            'new-head':(new_head_terminal,_new_head_source,_new_head_readback),
+            'new-base':(new_base_terminal,_new_base_source,_new_base_readback)}[prior['candidate']['name']]
         terminal=provenance.authenticated_document(_ClosedDirectAPI(authority),record['trial']['deployment'],
                     entry['terminal'],'trial-case-terminal',record['task_id'],clock())
         outcome=reader(authority,record,prior,terminal['document'],terminal,clock(),original=original)
