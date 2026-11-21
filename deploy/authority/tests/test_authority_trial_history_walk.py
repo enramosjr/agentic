@@ -3,7 +3,7 @@ import backend_test_support
 import copy
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import DEFAULT, patch
 
 from registry import trial_reference
 from trusted_ci_policy import Refusal
@@ -13,7 +13,7 @@ import trial_case
 class HistoryWalkContracts(unittest.TestCase):
     def fixture(self):
         history=[]; documents={}; refs={}; visits=[]
-        record=dict(task_id='a'*32,trial=dict(deployment={}))
+        record=dict(task_id='a'*32,expires=getattr(self,'record_expires',1000),trial=dict(deployment=dict(expires=getattr(self,'trial_expires',1000))))
         for index,name in enumerate(trial_case.CASE_CHAIN[:13]):
             candidate=dict(name=name)
             if name in ('bad-acceptance','replaced-checks','forged-records'):
@@ -25,7 +25,7 @@ class HistoryWalkContracts(unittest.TestCase):
                     candidate=dict(name=name,transition=dict(intent=dict(phase='prior'))),history=copy.deepcopy(history),worker={},
                     execution=dict(publication_revision=f'{1100+index:040x}'),launch=dict(revision=f'{2100+index:040x}'))
             entry=dict(revision=f'{index+1:040x}',terminal={})
-            documents[entry['revision']]=dict(kind='trial-case-handoff',task_id=record['task_id'],candidate=candidate,
+            documents[entry['revision']]=dict(kind='trial-case-handoff',task_id=record['task_id'],candidate=candidate,certificate=dict(expires=getattr(self,'certificate_expires',1000)),
                 history=copy.deepcopy(history),worker={},execution=dict(publication_revision=f'{1000+index:040x}'),
                 launch=dict(revision=f'{2000+index:040x}'))
             history.append(entry)
@@ -44,12 +44,7 @@ class HistoryWalkContracts(unittest.TestCase):
         with patch.object(__import__('trial_mutation'),'authenticate',return_value=(dict(preview=dict(baseline={})),None)),\
              patch.object(__import__('trial_mutation'),'validate',return_value={}) as validate,\
              patch.object(__import__('provenance'),'authenticated_document',return_value=dict(document={})),\
-             patch.object(__import__('trial_host_case'),'_bad_readback'),\
-             patch.object(__import__('trial_host_case'),'_replaced_readback'),\
-             patch.object(__import__('trial_host_case'),'_forged_readback'),\
-             patch.object(__import__('trial_host_case'),'_spoof_readback'),\
-             patch.object(__import__('trial_host_case'),'_new_head_readback'),\
-             patch.object(__import__('trial_host_case'),'_new_base_readback'),\
+             patch.multiple(__import__('trial_host_case'),**dict.fromkeys(['_bad_readback', '_replaced_readback', '_forged_readback', '_spoof_readback', '_new_head_readback', '_new_base_readback'],DEFAULT)),\
              patch.object(__import__('trial_host_case'),'new_base_terminal') as eleventh,\
              patch.object(__import__('trial_host_case'),'_new_base_source') as eleventh_source,\
              patch.object(__import__('trial_host_case'),'new_head_terminal') as tenth,\

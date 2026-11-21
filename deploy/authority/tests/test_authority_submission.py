@@ -1,5 +1,6 @@
 """Source-only submission contracts; no model, GitHub or hosted admission proof."""
 import backend_test_support
+from backend_test_support import fast_copy
 import copy
 import unittest
 import io
@@ -28,7 +29,7 @@ class SubmissionHost(GitHost):
                 raise HostRefusal(404)
             return {'object': {'sha': self.refs[branch]}}
         if '/pulls/' in path:
-            return copy.deepcopy(next(pr for pr in self.prs if str(pr['number']) == path.rsplit('/', 1)[1]))
+            return fast_copy(next(pr for pr in self.prs if str(pr['number']) == path.rsplit('/', 1)[1]))
         if '/git/trees/' in path:
             result = super().get(path)
             result['sha'] = path.rsplit('/', 1)[1].split('?')[0]
@@ -38,7 +39,7 @@ class SubmissionHost(GitHost):
         if path == '/installation/repositories':
             return [{'id': 123}]
         if '/pulls?' in path:
-            return copy.deepcopy(self.prs)
+            return fast_copy(self.prs)
         raise AssertionError(path)
     def post(self, path, data):
         self.writes.append((path, copy.deepcopy(data)))
@@ -68,7 +69,7 @@ class SubmissionHost(GitHost):
         if self.fail_after and path.endswith(self.fail_after):
             self.fail_after = None
             raise OSError('synthetic lost submission acknowledgement')
-        return copy.deepcopy(result)
+        return fast_copy(result)
 
 
 def fixture():

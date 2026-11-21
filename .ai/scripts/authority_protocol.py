@@ -9,6 +9,7 @@ import tempfile
 from trusted_ci_policy import (Refusal, digest, loads, object_fields, positive,
                                require, validate_policy, validate_report)
 
+CONTROL_CHARACTER = re.compile('[\\x00-\\x1f]')
 ADAPTERS = ('github-actions', 'aws', 'azure')
 STATES = ('setup', 'qualification', 'active', 'blocked', 'revoked')
 DEPLOYMENT_FIELDS = ('schema_version policy adapter account resources generation apps '
@@ -41,7 +42,7 @@ def validate_deployment(d):
     require(isinstance(resources, dict) and 0 < len(resources) <= 32 and
             all(isinstance(k, str) and re.fullmatch('[a-z][a-z_]{0,39}', k) and
                 isinstance(v, str) and 0 < len(v) <= 2048 and
-                not any(ord(c) < 32 for c in v) for k, v in resources.items()),
+                not CONTROL_CHARACTER.search(v) for k, v in resources.items()),
             'invalid resource inventory')
     require(resources.get('authority') == d['policy']['authority_repository'],
             'authority resource mismatch')

@@ -1,5 +1,6 @@
 """One native dispatch, exact closed token consumer, original signed run binding."""
 import backend_test_support
+from backend_test_support import fast_copy
 import copy
 import hashlib
 import unittest
@@ -57,7 +58,7 @@ class Dispatch(unittest.TestCase):
                 return [proof.job] if collection == 'jobs' else ([] if absent else [proof.artifact])
             return pages(route, collection)
         api.post, api.pages = send, runs
-        api.get = lambda route: copy.deepcopy(proof.run) if '/actions/runs/100' in route else get(route)
+        api.get = lambda route: fast_copy(proof.run) if '/actions/runs/100' in route else get(route)
         api.fetch = lambda route, **kwargs: proof.raw if '/actions/artifacts/900/zip' in route else fetch(route, **kwargs)
         controller = credential_workflow.TrialWorkflow(delegate, api, c.store(c.root / 'trial-workflow'))
         return controller, c, reg, production, clock, proof, dispatched, published

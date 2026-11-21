@@ -535,7 +535,7 @@ class Admission:
         require(self.registry.ref(self.registry.coordinates['registry_branch']) == self.binding['branch_head'] and
                 self.registry.ref(trial_branch) == self.binding['software_revision'], 'trial changed during original observation')
         from trial_case import history_guard
-        history_guard(original,r,self.value['history'],self.clock,self.registry.api,self.source)
+        history_guard(original,r,self.value['history'],self.clock,self.registry.api,self.source,self.__dict__.setdefault('_verified',{}))
         from trial_transition import guard as transition_guard
         transition_guard(self)
         d = self.binding['deployment']

@@ -1,5 +1,6 @@
 """Exact native runtime-pin consent and recovery against a fake variable API."""
 import backend_test_support
+from backend_test_support import fast_copy
 import copy
 import unittest
 from unittest.mock import patch
@@ -12,11 +13,11 @@ from trusted_ci_policy import Refusal, digest
 
 class Journal:
     def __init__(self): self.document = None
-    def read(self): return copy.deepcopy(self.document)
+    def read(self): return fast_copy(self.document)
     def write(self, before, value):
         if before != self.document: raise Refusal('fixture CAS changed')
         self.document = dict(generation=1 if before is None else before['generation'] + 1,
-                             value=copy.deepcopy(value))
+                             value=fast_copy(value))
         return self.read()
 
 

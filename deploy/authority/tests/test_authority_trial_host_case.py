@@ -1,5 +1,6 @@
 """Real native launch and shared host denial, with only remote boundaries faked."""
 import backend_test_support
+from backend_test_support import fast_copy
 import copy
 import unittest
 from unittest.mock import patch
@@ -62,8 +63,8 @@ class Sequential(HostFixture):
         def remote(path):
             match=re.search(r'/actions/runs/(\d+)',path)
             return self.runs.get(int(match[1])) if match else None
-        self.api.get=lambda path:copy.deepcopy(remote(path).run) if remote(path) else get(path)
-        self.api.pages=lambda path,collection=None:copy.deepcopy(remote(path).jobs if collection=='jobs' else remote(path).artifacts) if remote(path) else pages(path,collection)
+        self.api.get=lambda path:fast_copy(remote(path).run) if remote(path) else get(path)
+        self.api.pages=lambda path,collection=None:fast_copy(remote(path).jobs if collection=='jobs' else remote(path).artifacts) if remote(path) else pages(path,collection)
         def download(path,**kw):
             if '/actions/artifacts/' in path:
                 identity=int(path.split('/')[-2])

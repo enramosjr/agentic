@@ -7,6 +7,29 @@ for directory in (ROOT / '.ai/scripts/tests', ROOT / '.ai/scripts', ROOT / 'depl
     sys.path.insert(0, str(directory))
 
 
+_ATOMS = (str, int, float, bool, bytes, type(None))
+
+
+def fast_copy(value):
+    """Independent copy of a JSON-shaped fixture document, several times faster than deepcopy.
+
+    Fixture fakes copy on every read and the documents grow with each case, so deepcopy's
+    memo bookkeeping dominates the native suites. This keeps container types (tuples stay
+    tuples) and falls back to deepcopy for anything else. Fixture documents are trees: shared
+    substructure is copied per reference, which deepcopy would preserve."""
+    kind = type(value)
+    if kind in _ATOMS:
+        return value
+    if kind is dict:
+        return {key: fast_copy(item) for key, item in value.items()}
+    if kind is list:
+        return [fast_copy(item) for item in value]
+    if kind is tuple:
+        return tuple(fast_copy(item) for item in value)
+    import copy
+    return copy.deepcopy(value)
+
+
 def config(adapter='aws'):
     return dict(adapter=adapter, deployment='agentic-123', authority='owner/authority',
                 branch='main', account=('123456789012' if adapter == 'aws' else

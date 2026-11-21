@@ -1,5 +1,6 @@
 """Real native setup/dispatch to a fresh hosted admission without native journals."""
 import backend_test_support
+from backend_test_support import fast_copy
 import copy
 import hashlib
 import json
@@ -43,8 +44,8 @@ class Hosted(unittest.TestCase):
                 value = dict(value, sha=route.split('/git/trees/')[1].split('?')[0])
             return value
         api.get = source_tree
-        api.pages = lambda route, collection=None: copy.deepcopy(jobs) if '/runs/100/' in route and collection == 'jobs' else (
-            copy.deepcopy([a for a, _ in artifacts]) if '/runs/100/' in route and collection == 'artifacts' else pages(route, collection))
+        api.pages = lambda route, collection=None: fast_copy(jobs) if '/runs/100/' in route and collection == 'jobs' else (
+            fast_copy([a for a, _ in artifacts]) if '/runs/100/' in route and collection == 'artifacts' else pages(route, collection))
         def read_transport(route, **kwargs):
             if '/actions/artifacts/' in route:
                 return next(raw for a, raw in artifacts if route.endswith('/' + str(a['id']) + '/zip'))

@@ -122,13 +122,18 @@ def fresh_capability(original,value,record,token,clock):
         require(digest(token)!=prior['execution']['credential']['token_digest'], 'historical capability cannot authorize current transition')
 
 
-def history_guard(original,record,history,clock=None,authority=None,source=None):
+def history_guard(original,record,history,clock=None,authority=None,source=None,verified=None):
+    """Reread every dependency; `verified` is one admission's in-memory table of entries it already authenticated.
+
+    The table only skips re-deriving the immutable terminal semantics. Every guard still
+    rereads the case blobs and pointers, the expiry bounds, each retained artifact's
+    presence, digest and expiry, and the live source facts."""
     require(isinstance(history,list) and len(history)<=len(CASE_CHAIN),'bounded native progression history required')
     for index,entry in enumerate(history):
-        _history_entry(original,record,history[:index],index,entry,clock,authority,source)
+        _history_entry(original,record,history[:index],index,entry,clock,authority,source,verified=verified)
 
 
-def _history_entry(original,record,prefix,index,entry,clock,authority,source,nested_prior=False):
+def _history_entry(original,record,prefix,index,entry,clock,authority,source,nested_prior=False,verified=None):
     # Prefix dependencies have already been checked in this invocation. A
     # current transition adds one prior node, not another copy of that prefix.
     prior=original.blob(entry['revision'],TRIAL)[0]
@@ -157,12 +162,28 @@ def _history_entry(original,record,prefix,index,entry,clock,authority,source,nes
             'spoofed-source':(spoofed_source_terminal,_spoof_source,_spoof_readback),
             'new-head':(new_head_terminal,_new_head_source,_new_head_readback),
             'new-base':(new_base_terminal,_new_base_source,_new_base_readback)}[prior['candidate']['name']]
-        terminal=provenance.authenticated_document(_ClosedDirectAPI(authority),record['trial']['deployment'],
-                    entry['terminal'],'trial-case-terminal',record['task_id'],clock())
-        outcome=reader(authority,record,prior,terminal['document'],terminal,clock(),original=original)
-        if source is not None:
-            source_reader(source,record,prior,outcome,original,clock)
+        # The key pins everything the derivation reads from immutable storage: the
+        # exact case blob, the terminal locator and the verified chain before it.
+        key=None if verified is None else (entry['revision'],digest(entry['terminal']),digest(prior),
+                                           tuple(e['revision'] for e in prefix))
+        cached=None if key is None else verified.get(key)
+        if cached is not None:
+            terminal,outcome=cached
+            # Time-dependent bounds of the derivation, rechecked on every guard.
+            require(clock()<min(record['expires'],prior['certificate']['expires'],record['trial']['deployment']['expires'],
+                                terminal['document']['before']['deployment']['expires']),
+                    'authenticated history evidence expired')
+            # Presence, digest and expiry of every retained artifact are never cached.
             readback(authority,prior,terminal['document'],terminal,clock(),outcome)
+            if source is not None: source_reader(source,record,prior,outcome,original,clock)
+        else:
+            terminal=provenance.authenticated_document(_ClosedDirectAPI(authority),record['trial']['deployment'],
+                        entry['terminal'],'trial-case-terminal',record['task_id'],clock())
+            outcome=reader(authority,record,prior,terminal['document'],terminal,clock(),original=original)
+            if source is not None:
+                source_reader(source,record,prior,outcome,original,clock)
+                readback(authority,prior,terminal['document'],terminal,clock(),outcome)
+            if key is not None: verified[key]=(terminal,outcome)
     elif mutated(prior['candidate']):
         from trial_mutation import authenticate,validate
         require(callable(clock),'current clock required for negative history')
@@ -456,6 +477,7 @@ class Hosted:
         self._context_recovery = self.candidate['name']=='context-transition' and role=='finalize'
         self._context_issuance = None
         self._positive = None
+        self._verified = {}
         self._seal = copy.deepcopy(self._state())
         if role == 'finalize':
             from broker_finalize import Finalizer
@@ -526,7 +548,7 @@ class Hosted:
                 self.original.ref(trial_reference(self.case)) == self.revision and
                 self.registry.ref(self.registry.coordinates['registry_branch']) == self.binding['branch_head'] and
                 self.registry.ref(trial_branch) == self.binding['software_revision'], 'case pointers moved during live observation')
-        history_guard(self.original,r,self.case['history'],self.clock,self.registry.api,self.source)
+        history_guard(self.original,r,self.case['history'],self.clock,self.registry.api,self.source,self._verified)
         from trial_transition import guard as transition_guard
         transition_guard(self)
         from trial_transition import context_guard
