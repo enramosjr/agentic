@@ -44,7 +44,9 @@ class HistoryWalkContracts(unittest.TestCase):
         with patch.object(__import__('trial_mutation'),'authenticate',return_value=(dict(preview=dict(baseline={})),None)),\
              patch.object(__import__('trial_mutation'),'validate',return_value={}) as validate,\
              patch.object(__import__('provenance'),'authenticated_document',return_value=dict(document={})),\
-             patch.multiple(__import__('trial_host_case'),**dict.fromkeys(['_bad_readback', '_replaced_readback', '_forged_readback', '_spoof_readback', '_new_head_readback', '_new_base_readback'],DEFAULT)),\
+             patch.multiple(__import__('trial_host_case'),**dict.fromkeys(['_bad_readback', '_replaced_readback', '_forged_readback', '_spoof_readback', '_new_head_readback', '_new_base_readback', '_policy_transition_readback'],DEFAULT)),\
+             patch.object(__import__('trial_host_case'),'policy_transition_terminal') as twelfth,\
+             patch.object(__import__('trial_host_case'),'_policy_transition_source') as twelfth_source,\
              patch.object(__import__('trial_host_case'),'new_base_terminal') as eleventh,\
              patch.object(__import__('trial_host_case'),'_new_base_source') as eleventh_source,\
              patch.object(__import__('trial_host_case'),'new_head_terminal') as tenth,\
@@ -65,9 +67,11 @@ class HistoryWalkContracts(unittest.TestCase):
             self.assertEqual(ninth.call_count,1); self.assertEqual(ninth_source.call_count,1)
             self.assertEqual(tenth.call_count,1); self.assertEqual(tenth_source.call_count,1)
             self.assertEqual(eleventh.call_count,1); self.assertEqual(eleventh_source.call_count,1)
+            self.assertEqual(twelfth.call_count,1); self.assertEqual(twelfth_source.call_count,1)
             visits.clear(); validate.reset_mock(); sixth.reset_mock(); sixth_source.reset_mock(); seventh.reset_mock(); seventh_source.reset_mock()
             eighth.reset_mock(); eighth_source.reset_mock(); ninth.reset_mock(); ninth_source.reset_mock()
             tenth.reset_mock(); tenth_source.reset_mock(); eleventh.reset_mock(); eleventh_source.reset_mock()
+            twelfth.reset_mock(); twelfth_source.reset_mock()
             trial_case.history_guard(original,record,history,lambda:100,object(),source)
             self.assertEqual(len(visits),len(documents),'a later guard must reread every dependency')
             self.assertEqual(validate.call_count,0); self.assertEqual(sixth.call_count,1); self.assertEqual(sixth_source.call_count,1)
@@ -76,6 +80,7 @@ class HistoryWalkContracts(unittest.TestCase):
             self.assertEqual(ninth.call_count,1); self.assertEqual(ninth_source.call_count,1)
             self.assertEqual(tenth.call_count,1); self.assertEqual(tenth_source.call_count,1)
             self.assertEqual(eleventh.call_count,1); self.assertEqual(eleventh_source.call_count,1)
+            self.assertEqual(twelfth.call_count,1); self.assertEqual(twelfth_source.call_count,1)
 
     def test_substituted_nested_prior_and_later_pointer_changes_refuse(self):
         for fault in ('name','prefix','current-prior','pointer'):

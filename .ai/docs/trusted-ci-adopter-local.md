@@ -946,6 +946,22 @@ without live prerequisites. Lost finalizer or native acknowledgements cannot exp
 evidence or select `policy-transition`, and exact owned cleanup survives expiry. This
 adds no hosted isolation, qualification, promotion or activation.
 
+Only the twelfth native current-phase `policy-transition` finalization exports a v2
+terminal with the exact acknowledged recovery envelope and `host_receipt`; the v1 shape
+is refused by native observation, historical consumption and `human-update` selection.
+Its separately journaled historical preparation keeps its v1 no-dispatch terminal. The
+twelfth reader is the eleventh reader with the policy epoch changed: the frozen old
+acceptance must share the current head and PR, name an older base and merge commit, and
+carry the previous policy, differing from the current one in its epoch and check name
+only. The old success is authenticated and rechecked under that previous deployment,
+while the host denial names the current epoch's check, which has no success at all.
+It re-derives the acceptance from the authenticated historical terminal, requires it to
+equal the one frozen in the transition intent, and authenticates the finite native
+context chain, including its policy transition, before the current terminal is read.
+Lost finalizer or native acknowledgements cannot export evidence or select
+`human-update`, and exact owned cleanup survives expiry. This adds no hosted isolation,
+qualification, promotion or activation.
+
 The next reservations, `new-base` and `policy-transition`, each prepare genuine
 same-PR historical acceptance from the frozen native baseline tree. Their heads
 remain unchanged while the base advances. The existing native configuration engine

@@ -12,8 +12,9 @@ import trial_case
 import trial_host_case
 
 STALE = ('bad_acceptance_terminal', 'replaced_checks_terminal', 'forged_records_terminal', 'spoofed_source_terminal',
-         'new_head_terminal', 'new_base_terminal')
-SOURCES = ('_bad_source', '_replaced_source', '_forged_source', '_spoof_source', '_new_head_source', '_new_base_source')
+         'new_head_terminal', 'new_base_terminal', 'policy_transition_terminal')
+SOURCES = ('_bad_source', '_replaced_source', '_forged_source', '_spoof_source', '_new_head_source', '_new_base_source',
+           '_policy_transition_source')
 NAME = 'trial-case-terminal-' + 'a'*32 + '-1'
 
 

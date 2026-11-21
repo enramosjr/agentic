@@ -59,7 +59,7 @@ class NewBasePrerequisiteContracts(unittest.TestCase):
         self.assertFalse(trial_host_case.new_base_current(dict(name='new-base')))
         for name in ('new-head', 'policy-transition', 'human-update'):
             self.assertFalse(trial_host_case.new_base_current(dict(name=name, transition=dict(intent=dict(phase='current')))))
-        self.assertFalse(trial_host_case.stale_current(dict(name='policy-transition', transition=dict(intent=dict(phase='current')))))
+        self.assertFalse(trial_host_case.stale_current(dict(name='human-update', transition=dict(intent=dict(phase='current')))))
         for other in ('spoofed-source', 'new-head'):
             wrong = dict(retained, candidate=dict(retained['candidate'], name=other))
             with self.assertRaises(Refusal): trial_host_case._new_base_source(None, None, wrong, None, None, None)
