@@ -25,6 +25,7 @@ for Windows. Codex hooks include Windows launchers. See
 - [Install and upgrade](docs/install-and-upgrade.md): drift, conflicts and hooks.
 - [Windows and Linux runtime](docs/windows-runtime.md): native process, review and verification contracts.
 - [Lifecycle](docs/lifecycle.md): stages, checks and committed audit evidence.
+- [Trusted CI](docs/trusted-ci.md): separate acceptance authority and hosted merge controls; deployment qualification required.
 - [Learning contract](docs/learning-loop.md) and [workflow](docs/learning-loop-playbook.md).
 - [Brownfield deltas](lifecycle.md#brownfield-deltas): approval-bound requirement changes.
 

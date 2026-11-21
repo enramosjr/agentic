@@ -139,3 +139,9 @@ prevent a green summary. Default-branch required checks use the successful names
 Require an up-to-date branch and retain the existing pull-request and branch-safety
 rules. Record the candidate SHA, completed workflow URL, and ruleset readback in
 the delivery evidence; a submitted or skipped matrix is not a passing baseline.
+
+These candidate-controlled checks remain additional qualification. The
+[trusted CI authority](trusted-ci.md) evaluates approved critical assertions
+outside candidate control and publishes through a separate App. Linux execution
+may use Docker or Podman (including a Windows Podman WSL2 backend); unavailable
+disk-backed isolation and hosted denial tests remain unqualified.

@@ -99,10 +99,83 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Framework regression segment
         run: python .ai/scripts/run_tests.py -j 4 --shard ${{ matrix.shard }}/8
+  authority_backend:
+    name: Authority backend / ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.9', '3.15']
+    env:
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Local backend contracts without provider credentials or privileges
+        run: python -m unittest discover -s deploy/authority/tests
+      - name: Install optional AWS SDK for offline signing
+        if: matrix.python == '3.15'
+        run: python -m pip install -r deploy/authority/requirements-aws.txt
+      - name: Offline real-SDK signing with synthetic credentials
+        if: matrix.python == '3.15'
+        run: python deploy/authority/test_aws_signing.py
+      - name: Install optional model-auth cryptography
+        if: matrix.python == '3.15'
+        run: python -m pip install -r deploy/authority/requirements-auth.txt
+      - name: Check optional dependency consistency
+        if: matrix.python == '3.15'
+        run: python -m pip check
+      - name: Offline real App signatures without PEM files
+        if: matrix.python == '3.15'
+        run: python deploy/authority/test_bootstrap_signing.py
+      - name: Offline real-encryption model credential contracts
+        if: matrix.python == '3.15'
+        run: python deploy/authority/test_model_vault.py
+      - name: Offline real-signature authorization contracts
+        if: matrix.python == '3.15'
+        run: python deploy/authority/test_model_oidc.py
+      - name: Offline durable model refresh contracts
+        if: matrix.python == '3.15'
+        run: python deploy/authority/test_model_auth.py
+      - name: Offline local consent callback contracts
+        if: matrix.python == '3.15'
+        run: python deploy/authority/test_model_consent.py
+      - name: Offline protected credential staging and service contracts
+        if: matrix.python == '3.15'
+        run: python deploy/authority/test_setup_credentials.py
+      - name: Offline encrypted task delivery and source credential contracts
+        if: matrix.python == '3.15'
+        run: python deploy/authority/test_task_service.py
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        if: matrix.python == '3.15'
+        with:
+          node-version: '24'
+      - name: Install locked artifact client without lifecycle scripts
+        if: matrix.python == '3.15'
+        run: npm ci --ignore-scripts --no-audit --no-fund --prefix deploy/authority/artifact_upload
+      - name: Audit locked artifact client dependencies
+        if: matrix.python == '3.15'
+        run: npm audit --omit=dev --audit-level=moderate --prefix deploy/authority/artifact_upload
+      - name: Offline artifact upload boundary contracts
+        if: matrix.python == '3.15'
+        run: node deploy/authority/artifact_upload/test_upload.mjs
+      - name: Offline fixed credential action contracts
+        if: matrix.python == '3.15'
+        run: node deploy/authority/artifact_upload/test_action.mjs
+      - name: Offline real artifact SDK archive contracts
+        if: matrix.python == '3.15'
+        run: node deploy/authority/artifact_upload/test_sdk.mjs
   qualification:
     name: Qualification
     if: always()
-    needs: [source_hygiene, windows_preflight, regression_segments]
+    needs: [source_hygiene, windows_preflight, regression_segments, authority_backend]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -110,5 +183,6 @@ jobs:
         env:
           PREFLIGHT_RESULT: ${{ needs.windows_preflight.result }}
           SEGMENTS_RESULT: ${{ needs.regression_segments.result }}
+          BACKEND_RESULT: ${{ needs.authority_backend.result }}
           HYGIENE_RESULT: ${{ needs.source_hygiene.result }}
-        run: '[[ "$HYGIENE_RESULT" == success && "$PREFLIGHT_RESULT" == success && "$SEGMENTS_RESULT" == success ]]'
+        run: '[[ "$HYGIENE_RESULT" == success && "$PREFLIGHT_RESULT" == success && "$SEGMENTS_RESULT" == success && "$BACKEND_RESULT" == success ]]'

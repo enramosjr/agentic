@@ -1,0 +1,110 @@
+"""History dependency traversal components; no native acceptance is modeled."""
+import backend_test_support
+import copy
+from types import SimpleNamespace
+import unittest
+from unittest.mock import DEFAULT, patch
+
+from registry import trial_reference
+from trusted_ci_policy import Refusal
+import trial_case
+
+
+class HistoryWalkContracts(unittest.TestCase):
+    def fixture(self):
+        history=[]; documents={}; refs={}; visits=[]
+        record=dict(task_id='a'*32,expires=getattr(self,'record_expires',1000),trial=dict(deployment=dict(expires=getattr(self,'trial_expires',1000))))
+        for index,name in enumerate(trial_case.CASE_CHAIN[:13]):
+            candidate=dict(name=name)
+            if name in ('bad-acceptance','replaced-checks','forged-records'):
+                candidate['transition']=dict(intent=dict(phase='negative'))
+            if name in ('new-head','new-base','policy-transition'):
+                old=dict(revision=f'{100+index:040x}',terminal={})
+                candidate['transition']=dict(intent=dict(phase='current',prior=old))
+                documents[old['revision']]=dict(kind='trial-case-handoff',task_id=record['task_id'],
+                    candidate=dict(name=name,transition=dict(intent=dict(phase='prior'))),history=copy.deepcopy(history),worker={},
+                    execution=dict(publication_revision=f'{1100+index:040x}'),launch=dict(revision=f'{2100+index:040x}'))
+            entry=dict(revision=f'{index+1:040x}',terminal={})
+            documents[entry['revision']]=dict(kind='trial-case-handoff',task_id=record['task_id'],candidate=candidate,certificate=dict(expires=getattr(self,'certificate_expires',1000)),
+                history=copy.deepcopy(history),worker={},execution=dict(publication_revision=f'{1000+index:040x}'),
+                launch=dict(revision=f'{2000+index:040x}'))
+            history.append(entry)
+        for revision,value in documents.items():
+            refs[trial_reference(value)]=revision
+            refs[trial_reference(dict(value,execution=None))]=value['execution']['publication_revision']
+            refs[trial_reference(dict(value,kind='trial-case-ready',execution=None))]=value['launch']['revision']
+        def blob(revision,path):
+            visits.append(revision)
+            return copy.deepcopy(documents[revision]),None
+        return SimpleNamespace(blob=blob,ref=lambda name:refs[name]),record,history,documents,refs,visits
+
+    def test_each_current_and_prior_node_is_validated_once_per_guard_call(self):
+        original,record,history,documents,refs,visits=self.fixture()
+        source=object()
+        with patch.object(__import__('trial_mutation'),'authenticate',return_value=(dict(preview=dict(baseline={})),None)),\
+             patch.object(__import__('trial_mutation'),'validate',return_value={}) as validate,\
+             patch.object(__import__('provenance'),'authenticated_document',return_value=dict(document={})),\
+             patch.multiple(__import__('trial_host_case'),**dict.fromkeys(['_bad_readback', '_replaced_readback', '_forged_readback', '_spoof_readback', '_new_head_readback', '_new_base_readback', '_policy_transition_readback'],DEFAULT)),\
+             patch.object(__import__('trial_host_case'),'policy_transition_terminal') as twelfth,\
+             patch.object(__import__('trial_host_case'),'_policy_transition_source') as twelfth_source,\
+             patch.object(__import__('trial_host_case'),'new_base_terminal') as eleventh,\
+             patch.object(__import__('trial_host_case'),'_new_base_source') as eleventh_source,\
+             patch.object(__import__('trial_host_case'),'new_head_terminal') as tenth,\
+             patch.object(__import__('trial_host_case'),'_new_head_source') as tenth_source,\
+             patch.object(__import__('trial_host_case'),'spoofed_source_terminal') as ninth,\
+             patch.object(__import__('trial_host_case'),'_spoof_source') as ninth_source,\
+             patch.object(__import__('trial_host_case'),'forged_records_terminal') as eighth,\
+             patch.object(__import__('trial_host_case'),'_forged_source') as eighth_source,\
+             patch.object(__import__('trial_host_case'),'replaced_checks_terminal') as seventh,\
+             patch.object(__import__('trial_host_case'),'_replaced_source') as seventh_source,\
+             patch.object(__import__('trial_host_case'),'bad_acceptance_terminal') as sixth,\
+             patch.object(__import__('trial_host_case'),'_bad_source') as sixth_source:
+            trial_case.history_guard(original,record,history,lambda:100,object(),source)
+            self.assertEqual(len(visits),len(documents))
+            self.assertEqual(validate.call_count,0); self.assertEqual(sixth.call_count,1); self.assertEqual(sixth_source.call_count,1)
+            self.assertEqual(seventh.call_count,1); self.assertEqual(seventh_source.call_count,1)
+            self.assertEqual(eighth.call_count,1); self.assertEqual(eighth_source.call_count,1)
+            self.assertEqual(ninth.call_count,1); self.assertEqual(ninth_source.call_count,1)
+            self.assertEqual(tenth.call_count,1); self.assertEqual(tenth_source.call_count,1)
+            self.assertEqual(eleventh.call_count,1); self.assertEqual(eleventh_source.call_count,1)
+            self.assertEqual(twelfth.call_count,1); self.assertEqual(twelfth_source.call_count,1)
+            visits.clear(); validate.reset_mock(); sixth.reset_mock(); sixth_source.reset_mock(); seventh.reset_mock(); seventh_source.reset_mock()
+            eighth.reset_mock(); eighth_source.reset_mock(); ninth.reset_mock(); ninth_source.reset_mock()
+            tenth.reset_mock(); tenth_source.reset_mock(); eleventh.reset_mock(); eleventh_source.reset_mock()
+            twelfth.reset_mock(); twelfth_source.reset_mock()
+            trial_case.history_guard(original,record,history,lambda:100,object(),source)
+            self.assertEqual(len(visits),len(documents),'a later guard must reread every dependency')
+            self.assertEqual(validate.call_count,0); self.assertEqual(sixth.call_count,1); self.assertEqual(sixth_source.call_count,1)
+            self.assertEqual(seventh.call_count,1); self.assertEqual(seventh_source.call_count,1)
+            self.assertEqual(eighth.call_count,1); self.assertEqual(eighth_source.call_count,1)
+            self.assertEqual(ninth.call_count,1); self.assertEqual(ninth_source.call_count,1)
+            self.assertEqual(tenth.call_count,1); self.assertEqual(tenth_source.call_count,1)
+            self.assertEqual(eleventh.call_count,1); self.assertEqual(eleventh_source.call_count,1)
+            self.assertEqual(twelfth.call_count,1); self.assertEqual(twelfth_source.call_count,1)
+
+    def test_substituted_nested_prior_and_later_pointer_changes_refuse(self):
+        for fault in ('name','prefix','current-prior','pointer'):
+            original,record,history,documents,refs,visits=self.fixture()
+            prior=documents[f'{111:040x}']
+            if fault=='name': prior['candidate']['name']='new-head'
+            if fault=='prefix': prior['history']=[]
+            if fault=='current-prior': prior['candidate']['transition']['intent']=dict(phase='current',prior=history[11])
+            if fault=='pointer': refs[trial_reference(prior)]='f'*40
+            with self.subTest(fault=fault),patch.object(__import__('trial_mutation'),'authenticate',return_value=(dict(preview=dict(baseline={})),None)),\
+                 patch.object(__import__('trial_mutation'),'validate',return_value={}),\
+                 patch.object(__import__('provenance'),'authenticated_document',return_value=dict(document={})),\
+                 patch.object(__import__('trial_host_case'),'_bad_readback'),\
+                 patch.object(__import__('trial_host_case'),'_replaced_readback'),\
+                 patch.object(__import__('trial_host_case'),'_forged_readback'),\
+                 patch.object(__import__('trial_host_case'),'forged_records_terminal'),\
+                 patch.object(__import__('trial_host_case'),'_forged_source'),\
+                 patch.object(__import__('trial_host_case'),'replaced_checks_terminal'),\
+                 patch.object(__import__('trial_host_case'),'_replaced_source'),\
+                 patch.object(__import__('trial_host_case'),'bad_acceptance_terminal'),\
+                 patch.object(__import__('trial_host_case'),'_bad_source'),self.assertRaises(Refusal):
+                trial_case.history_guard(original,record,history,lambda:100,object(),object())
+
+    def test_sixth_history_cannot_use_an_untrusted_time_without_authority(self):
+        original,record,history,documents,refs,visits=self.fixture()
+        with self.assertRaisesRegex(Refusal,'sixth terminal authority'):
+            trial_case.history_guard(original,record,history[:6],lambda:100)

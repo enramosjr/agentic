@@ -104,6 +104,12 @@ After bootstrap, run project tooling from the target root. Every script answers 
 
 ## The basic workflow
 
+For an independently administered merge boundary, see the
+[trusted CI integration](.ai/docs/trusted-ci.md). It separates critical acceptance
+and App credentials from the coding environment while retaining local hooks.
+Deployment qualification is still required; installing the kit does not activate
+hosted enforcement.
+
 In Claude Code the stage skills are available as commands, and Codex reads the same skills. Each one runs its stage and checks its exit condition before the next may start.
 
 1. **`spec`** clarifies the request and writes a testable spec with acceptance criteria.
