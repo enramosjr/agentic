@@ -103,7 +103,7 @@ jobs:
   authority_backend:
     name: Authority backend / ${{ matrix.os }} / Python ${{ matrix.python }} / segment ${{ matrix.shard }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 40
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:

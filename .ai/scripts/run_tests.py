@@ -53,15 +53,31 @@ def selected(test_id: str, shard: tuple[int, int] | None) -> bool:
     return slot == index - 1
 
 
+def balanced(test_ids: list[str], shard: tuple[int, int]) -> set[str]:
+    """Tests of this shard when each test is its own group. Classes named `Native*` build long evidence
+    chains, so they are dealt out round-robin in id order (every shard gets within one of the same
+    number); the cheap rest is split by hash."""
+    index, count = shard
+    heavy = sorted(i for i in test_ids if 'Native' in i.rsplit('.', 2)[-2])
+    chosen = {i for rank, i in enumerate(heavy) if rank % count == index - 1}
+    return chosen | {i for i in test_ids if i not in set(heavy) and selected(i, shard)}
+
+
 def groups(start: Path, shard: tuple[int, int] | None = None, per_test: bool = False) -> dict[str, int]:
     """Test count per `module.Class`, or one group per test with `per_test`; a module that fails to import or
     load is its own group, named by the module."""
     sys.path.insert(0, str(start))
     counts: dict[str, int] = {}
     suite = unittest.TestLoader().discover(str(start), top_level_dir=str(start))
-    for test in leaves(suite):
+    tests = list(leaves(suite))
+    if per_test and shard is not None:
+        chosen = balanced([t.id() for t in tests if not t.id().startswith("unittest.loader.")], shard)
+    for test in tests:
         test_id = test.id()
-        if not selected(test_id, shard):
+        if per_test and shard is not None and not test_id.startswith("unittest.loader."):
+            if test_id not in chosen:
+                continue
+        elif not selected(test_id, shard):
             continue
         if test_id.startswith("unittest.loader."):
             key = test_id.rsplit(".", 1)[1]
@@ -187,7 +203,9 @@ def main(argv: list[str] | None = None) -> int:
     names = sorted(counts, key=lambda n: -counts[n])  # Larger classes first shortens the tail.
     resume = Resume(start, args.shard)
     with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
-        results = list(pool.map(lambda n: run_group(start, n, counts[n], resume, args.shard), names))
+        # A per-test group names its exact test, so its worker needs no shard filter.
+        worker_shard = None if args.per_test else args.shard
+        results = list(pool.map(lambda n: run_group(start, n, counts[n], resume, worker_shard), names))
 
     run = sum(r["run"] for r in results)
     failures = [f for r in results for f in r["failures"]]

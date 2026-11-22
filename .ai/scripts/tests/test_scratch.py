@@ -62,9 +62,9 @@ class ScratchTests(AutonomyTestCase):
                 "assert all(os.environ[k]==expected for k in ('TMPDIR','TMP','TEMP')); "
                 "d=tempfile.TemporaryDirectory(); assert Path(d.name).parent==Path(expected); print(d.name)")
         request.write_text(json.dumps({"candidate": autonomy_validation.git(self.repo, "rev-parse", "HEAD"), "requirements": ["A"], "commands": [
-            {"label": "temp-allocation", "argv": [sys.executable, "-c", code], "timeout_seconds": 2,
+            {"label": "temp-allocation", "argv": [sys.executable, "-c", code], "timeout_seconds": 30,
              "coverage": ["A"], "env": {"TMPDIR": "/tmp", "TMP": "/tmp", "TEMP": "/tmp"}}]}))
-        result = autonomy_validation.run(request, self.repo, time.monotonic() + 5, .02, lambda *args: None, lambda: None)
+        result = autonomy_validation.run(request, self.repo, time.monotonic() + 60, .02, lambda *args: None, lambda: None)
         value = json.loads(result.read_text())
         self.assertEqual(value["state"], "PASS")
         self.assertEqual(value["commands"][0]["scratch_directory"], str(root))

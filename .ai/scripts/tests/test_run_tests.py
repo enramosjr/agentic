@@ -63,6 +63,24 @@ class ShardTests(unittest.TestCase):
             lines = marker.read_text().splitlines()
             self.assertEqual(len(lines), len(set(lines)), 'a method ran more than once')
 
+    def test_per_test_shards_spread_heavy_native_tests_evenly_and_run_each_once(self):
+        ids = [f'm{n}.NativeCase.test_{i:02}' for n in range(3) for i in range(10)] + [f'm.Light.test_{i}' for i in range(40)]
+        parts = [run_tests.balanced(ids, (index, 4)) for index in range(1, 5)]
+        self.assertEqual(sorted(i for part in parts for i in part), sorted(ids))
+        heavy = [sum('Native' in i for i in part) for part in parts]
+        self.assertLessEqual(max(heavy) - min(heavy), 1, heavy)
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root, marker = Path(directory), Path(outside) / 'runs'
+            self.fixture(root, marker, count=8)
+            ran = 0
+            for index in (1, 2):
+                result = subprocess.run([sys.executable, str(Path(run_tests.__file__)), '-s', str(root), '-j', '2',
+                                         '--per-test', '--shard', f'{index}/2'],
+                                        cwd=root, capture_output=True, text=True, timeout=60)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                ran += int(result.stdout.split('Ran ')[1].split(' ')[0])
+            self.assertEqual(ran, 8)
+
     def test_per_test_failure_is_reported_and_nonzero(self):
         with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
             root = Path(directory)
