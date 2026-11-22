@@ -15,7 +15,7 @@ concurrency:
 jobs:
   source_hygiene:
     name: Framework source hygiene
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@v6
@@ -83,7 +83,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-latest]
         python: ['3.9', '3.15']
         shard: [1, 2, 3, 4, 5, 6, 7, 8]
     env:
@@ -106,7 +106,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-24.04, windows-latest]
         python: ['3.9', '3.15']
         shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     env:
@@ -120,6 +120,9 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
+      - name: Install optional model-auth cryptography
+        if: matrix.python == '3.15'
+        run: python -m pip install -r deploy/authority/requirements-auth.txt
       - name: Local backend contracts without provider credentials or privileges
         run: python .ai/scripts/run_tests.py -s deploy/authority/tests --per-test -j 4 --shard ${{ matrix.shard }}/16
       - name: Install optional AWS SDK for offline signing
@@ -128,9 +131,6 @@ jobs:
       - name: Offline real-SDK signing with synthetic credentials
         if: matrix.python == '3.15' && matrix.shard == 1
         run: python deploy/authority/test_aws_signing.py
-      - name: Install optional model-auth cryptography
-        if: matrix.python == '3.15' && matrix.shard == 1
-        run: python -m pip install -r deploy/authority/requirements-auth.txt
       - name: Check optional dependency consistency
         if: matrix.python == '3.15' && matrix.shard == 1
         run: python -m pip check

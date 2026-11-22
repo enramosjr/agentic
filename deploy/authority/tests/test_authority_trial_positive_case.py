@@ -166,7 +166,11 @@ class RuntimeContracts(unittest.TestCase):
             Harness().fixture()
         provision.assert_not_called()
 
+    def require_native(self):
+        if getattr(negative_fixture.NativeNegative,'__unittest_skip__',False): self.skipTest('optional cryptography required')
+
     def test_fresh_cli_import_keeps_positive_store_real_under_native_fixture(self):
+        self.require_native()
         from pathlib import Path
         import subprocess
         import sys
@@ -195,6 +199,7 @@ finally:
         self.assertEqual(result.returncode,0,result.stdout)
 
     def test_strict_native_journal_factory_survives_return_from_fixture_setup(self):
+        self.require_native()
         import authority_private
         import private_setup
         import trial_broker_positive

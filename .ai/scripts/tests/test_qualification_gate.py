@@ -23,7 +23,7 @@ class QualificationGateTests(unittest.TestCase):
         shards = re.search(r'shard: \[([\d, ]+)\]', backend).group(1)
         self.assertEqual([int(n) for n in shards.split(',')], list(range(1, count + 1)))
         self.assertIn("python: ['3.9', '3.15']", backend)
-        self.assertIn('os: [ubuntu-latest, windows-latest]', backend)
+        self.assertIn('os: [ubuntu-24.04, windows-latest]', backend)
         self.assertNotIn('continue-on-error', backend)
         self.assertNotIn('AGENTIC_TEST_RESUME', backend)
         self.assertNotIn('unittest discover', backend)

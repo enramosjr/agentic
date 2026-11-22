@@ -65,11 +65,16 @@ def _windows(path, directory, harden=False, parent=False):
     token, size = w.HANDLE(), w.DWORD()
     require(api.OpenProcessToken(kernel.GetCurrentProcess(), 8, c.byref(token)), 'setup owner token unavailable')
     try:
-        api.GetTokenInformation(token, 1, None, 0, c.byref(size))
-        require(0 < size.value <= 65536, 'bounded setup owner required')
-        buffer = c.create_string_buffer(size.value)
-        require(api.GetTokenInformation(token, 1, buffer, size, c.byref(size)), 'setup owner unavailable')
-        current_sid = sid_text(c.cast(buffer, c.POINTER(pointer))[0])
+        def token_sid(kind):
+            api.GetTokenInformation(token, kind, None, 0, c.byref(size))
+            require(0 < size.value <= 65536, 'bounded setup owner required')
+            buffer = c.create_string_buffer(size.value)
+            require(api.GetTokenInformation(token, kind, buffer, size, c.byref(size)), 'setup owner unavailable')
+            return sid_text(c.cast(buffer, c.POINTER(pointer))[0])
+        current_sid = token_sid(1)  # TokenUser
+        # TokenOwner: the owner Windows assigns to objects this process creates. For an elevated
+        # administrator that is BUILTIN\Administrators, which the ancestor policy below already trusts.
+        creator_owner = token_sid(4)
     finally: kernel.CloseHandle(token)
 
     if harden:
@@ -117,7 +122,7 @@ def _windows(path, directory, harden=False, parent=False):
                 if path.parent != path: dangerous |= 0x10000  # Deleting this ancestor also substitutes the path.
                 require(not mask & dangerous, 'another OS user can replace setup storage through an ancestor')
             return
-        require(owner_sid == current_sid and control.value & 0x1000 and size_info.count == 1,
+        require(owner_sid in (current_sid, creator_owner) and control.value & 0x1000 and size_info.count == 1,
                 'protected single-owner setup DACL required')
         ace = pointer()
         require(api.GetAce(acl, 0, c.byref(ace)), 'setup ACE unavailable')
