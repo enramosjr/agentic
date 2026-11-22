@@ -1092,7 +1092,7 @@ REPORT_SETUP_PINS = {
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
+    '.ai/scripts/process_runtime.py': '8c7cc9ff2e265f4bc8b4e79e91e67816ce8304ed874b0fc293bb051976a7256e',
 }
 
 
@@ -1700,7 +1700,7 @@ INSTALLER_DOC_SETUP_PINS = {
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
+    '.ai/scripts/process_runtime.py': '8c7cc9ff2e265f4bc8b4e79e91e67816ce8304ed874b0fc293bb051976a7256e',
 }
 
 
@@ -2159,7 +2159,7 @@ VALIDATION_POLICY_SETUP_PINS = {
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
+    '.ai/scripts/process_runtime.py': '8c7cc9ff2e265f4bc8b4e79e91e67816ce8304ed874b0fc293bb051976a7256e',
 }
 
 
@@ -2621,7 +2621,7 @@ AUDIT_DOC_SETUP_PINS = {
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
+    '.ai/scripts/process_runtime.py': '8c7cc9ff2e265f4bc8b4e79e91e67816ce8304ed874b0fc293bb051976a7256e',
 }
 
 
@@ -3096,7 +3096,7 @@ ANALYSIS_CONVERGENCE_DOC_SETUP_PINS = {
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
+    '.ai/scripts/process_runtime.py': '8c7cc9ff2e265f4bc8b4e79e91e67816ce8304ed874b0fc293bb051976a7256e',
 }
 
 
@@ -3590,7 +3590,7 @@ STAGE_DOC_SETUP_PINS = {
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
+    '.ai/scripts/process_runtime.py': '8c7cc9ff2e265f4bc8b4e79e91e67816ce8304ed874b0fc293bb051976a7256e',
 }
 
 
@@ -4125,7 +4125,7 @@ TIER_DOC_SETUP_PINS = {
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
+    '.ai/scripts/process_runtime.py': '8c7cc9ff2e265f4bc8b4e79e91e67816ce8304ed874b0fc293bb051976a7256e',
 }
 
 
@@ -4656,7 +4656,7 @@ ASSURANCE_DOC_SETUP_PINS = {
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
+    '.ai/scripts/process_runtime.py': '8c7cc9ff2e265f4bc8b4e79e91e67816ce8304ed874b0fc293bb051976a7256e',
 }
 
 
@@ -5173,7 +5173,7 @@ AGENTS_BUDGET_SETUP_PINS = {
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
+    '.ai/scripts/process_runtime.py': '8c7cc9ff2e265f4bc8b4e79e91e67816ce8304ed874b0fc293bb051976a7256e',
 }
 
 
@@ -5658,7 +5658,7 @@ SEMANTIC_LENS_SETUP_PINS = {
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
+    '.ai/scripts/process_runtime.py': '8c7cc9ff2e265f4bc8b4e79e91e67816ce8304ed874b0fc293bb051976a7256e',
 }
 
 
@@ -6266,7 +6266,7 @@ SKILL_FRONTMATTER_SETUP_PINS = {
     '.ai/scripts/pr_hook.py': 'f92e5f0d5218593f96aa17f1dfe37706ac19e9cce952fe75d8f6114a603eef79',
     '.ai/scripts/review_guard.py': 'b0a2e9cdf362560431bd2b3d9f19a078b81c1eabe594101cbe1d6a9223f98ad3',
     '.ai/scripts/ledger.py': 'fc2423e775969cdc28173f970d7c676e6ad254e8f5e120abb89a5c1244b80cab',
-    '.ai/scripts/process_runtime.py': '01208897479c25a2037423d375f1707a083f1f68a6f7abaa368bed2db62c663f',
+    '.ai/scripts/process_runtime.py': '8c7cc9ff2e265f4bc8b4e79e91e67816ce8304ed874b0fc293bb051976a7256e',
 }
 
 

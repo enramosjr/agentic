@@ -24,6 +24,9 @@ class QualificationGateTests(unittest.TestCase):
         self.assertEqual([int(n) for n in shards.split(',')], list(range(1, count + 1)))
         self.assertIn("python: ['3.9', '3.15']", backend)
         self.assertIn('os: [ubuntu-24.04, windows-latest]', backend)
+        # Only the 3.9 Windows backend combination is dropped; it skips the native tests.
+        self.assertIn("exclude:\n          # Windows hardening runs on 3.15, where the native tests run; 3.9 skips them.\n"
+                      "          - os: windows-latest\n            python: '3.9'", backend)
         self.assertNotIn('continue-on-error', backend)
         self.assertNotIn('AGENTIC_TEST_RESUME', backend)
         self.assertNotIn('unittest discover', backend)
