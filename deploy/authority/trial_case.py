@@ -122,13 +122,25 @@ def fresh_capability(original,value,record,token,clock):
         require(digest(token)!=prior['execution']['credential']['token_digest'], 'historical capability cannot authorize current transition')
 
 
-def history_guard(original,record,history,clock=None,authority=None,source=None,verified=None):
-    """Reread every dependency; `verified` is one admission's in-memory table of entries it already authenticated.
+def verified_table(authority):
+    """In-memory table of entries already authenticated through this authority reader; never persisted.
 
+    Scoped to the reader object so every guard in one process shares it and a different
+    deployment or test world starts empty. Readers that cannot carry state get none."""
+    try: return authority.__dict__.setdefault('_verified_history',{})
+    except AttributeError: return None
+
+
+def history_guard(original,record,history,clock=None,authority=None,source=None,verified=None):
+    """Reread every dependency, skipping only re-derivation of terminals this process already authenticated.
+
+    `verified` is a table to use, None for the authority-scoped table, or False for none.
     The table only skips re-deriving the immutable terminal semantics. Every guard still
     rereads the case blobs and pointers, the expiry bounds, each retained artifact's
     presence, digest and expiry, and the live source facts."""
     require(isinstance(history,list) and len(history)<=len(CASE_CHAIN),'bounded native progression history required')
+    if verified is None: verified=verified_table(authority)
+    elif verified is False: verified=None
     for index,entry in enumerate(history):
         _history_entry(original,record,history[:index],index,entry,clock,authority,source,verified=verified)
 
@@ -165,8 +177,8 @@ def _history_entry(original,record,prefix,index,entry,clock,authority,source,nes
             'policy-transition':(policy_transition_terminal,_policy_transition_source,_policy_transition_readback)}[prior['candidate']['name']]
         # The key pins everything the derivation reads from immutable storage: the
         # exact case blob, the terminal locator and the verified chain before it.
-        key=None if verified is None else (entry['revision'],digest(entry['terminal']),digest(prior),
-                                           tuple(e['revision'] for e in prefix))
+        key=None if verified is None else (record['task_id'],digest(record['trial']['deployment']),entry['revision'],
+                                           digest(entry['terminal']),digest(prior),tuple(e['revision'] for e in prefix))
         cached=None if key is None else verified.get(key)
         if cached is not None:
             terminal,outcome=cached
@@ -478,7 +490,6 @@ class Hosted:
         self._context_recovery = self.candidate['name']=='context-transition' and role=='finalize'
         self._context_issuance = None
         self._positive = None
-        self._verified = {}
         self._seal = copy.deepcopy(self._state())
         if role == 'finalize':
             from broker_finalize import Finalizer
@@ -549,7 +560,7 @@ class Hosted:
                 self.original.ref(trial_reference(self.case)) == self.revision and
                 self.registry.ref(self.registry.coordinates['registry_branch']) == self.binding['branch_head'] and
                 self.registry.ref(trial_branch) == self.binding['software_revision'], 'case pointers moved during live observation')
-        history_guard(self.original,r,self.case['history'],self.clock,self.registry.api,self.source,self._verified)
+        history_guard(self.original,r,self.case['history'],self.clock,self.registry.api,self.source)
         from trial_transition import guard as transition_guard
         transition_guard(self)
         from trial_transition import context_guard

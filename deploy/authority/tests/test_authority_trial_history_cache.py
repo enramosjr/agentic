@@ -59,7 +59,7 @@ class HistoryCache(unittest.TestCase):
 
     def guard(self, verified=True, clock=None):
         trial_case.history_guard(self.original, self.record, self.history, clock or (lambda: self.clock[0]), self.authority,
-                                 self.source, self.verified if verified else None)
+                                 self.source, self.verified if verified else False)
 
     def derivations(self):
         return sum(r.call_count for r in self.readers.values())
@@ -79,6 +79,21 @@ class HistoryCache(unittest.TestCase):
     def test_no_table_means_full_derivation_every_guard(self):
         self.guard(verified=False); self.guard(verified=False)
         self.assertEqual(self.derivations(), 2*len(STALE))
+
+    def default_guard(self, authority):
+        trial_case.history_guard(self.original, self.record, self.history, lambda: self.clock[0], authority, self.source)
+
+    def test_default_table_is_shared_by_one_authority_reader_and_not_across_readers(self):
+        self.default_guard(self.authority); self.default_guard(self.authority)
+        self.assertEqual(self.derivations(), len(STALE), 'a second caller of the same reader reuses the table')
+        other = Authority(); self.default_guard(other)
+        self.assertEqual(self.derivations(), 2*len(STALE), 'another reader starts empty')
+
+    def test_default_table_is_per_deployment(self):
+        self.default_guard(self.authority)
+        self.record['trial']['deployment']['epoch'] = 2
+        self.default_guard(self.authority)
+        self.assertEqual(self.derivations(), 2*len(STALE), 'another deployment is a different key')
 
     def test_replaced_artifact_with_same_id_and_other_digest_fails_a_later_guard(self):
         self.guard()
