@@ -17,13 +17,24 @@ from unittest import mock
 SCRIPTS = Path(__file__).resolve().parents[1]
 ROOT = SCRIPTS.parents[1]
 sys.path.insert(0, str(SCRIPTS))
-# Detached git auto-maintenance after a fixture commit would add and remove lock files while the
-# measurement snapshots the repositories it builds.
-os.environ.update(GIT_CONFIG_COUNT="2", GIT_CONFIG_KEY_0="gc.auto", GIT_CONFIG_VALUE_0="0",
-                  GIT_CONFIG_KEY_1="maintenance.auto", GIT_CONFIG_VALUE_1="false")
 import disk_tmp  # noqa: E402,F401
 import assurance_demo  # noqa: E402
 import assurance_measure as measure  # noqa: E402
+
+# Detached git auto-maintenance after a fixture commit would add and remove lock files while the
+# measurement snapshots the repositories it builds. Set only while this module's tests run: the
+# runner imports every module in its parent process, and these variables would reach all workers.
+_MAINTENANCE_OFF = dict(GIT_CONFIG_COUNT="2", GIT_CONFIG_KEY_0="gc.auto", GIT_CONFIG_VALUE_0="0",
+                        GIT_CONFIG_KEY_1="maintenance.auto", GIT_CONFIG_VALUE_1="false")
+_environment = mock.patch.dict(os.environ, _MAINTENANCE_OFF)
+
+
+def setUpModule():
+    _environment.start()
+
+
+def tearDownModule():
+    _environment.stop()
 
 NAMES = ("feature", "requirement-change", "regression", "stale-evidence", "dependency", "handoff")
 LIMIT = "Measures mechanism behavior on fixtures, not agent outcomes."
