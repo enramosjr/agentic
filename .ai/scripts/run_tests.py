@@ -53,12 +53,17 @@ def selected(test_id: str, shard: tuple[int, int] | None) -> bool:
     return slot == index - 1
 
 
+def is_heavy(test_id: str) -> bool:
+    """Classes named `*Native*` or `*Terminal*` build long evidence chains, minutes per test."""
+    owner = test_id.rsplit('.', 2)[-2]
+    return 'Native' in owner or 'Terminal' in owner
+
+
 def balanced(test_ids: list[str], shard: tuple[int, int]) -> set[str]:
-    """Tests of this shard when each test is its own group. Classes named `Native*` build long evidence
-    chains, so they are dealt out round-robin in id order (every shard gets within one of the same
-    number); the cheap rest is split by hash."""
+    """Tests of this shard when each test is its own group. Heavy tests are dealt out round-robin in id
+    order (every shard gets within one of the same number); the cheap rest is split by hash."""
     index, count = shard
-    heavy = sorted(i for i in test_ids if 'Native' in i.rsplit('.', 2)[-2])
+    heavy = sorted(i for i in test_ids if is_heavy(i))
     chosen = {i for rank, i in enumerate(heavy) if rank % count == index - 1}
     return chosen | {i for i in test_ids if i not in set(heavy) and selected(i, shard)}
 
@@ -200,7 +205,8 @@ def main(argv: list[str] | None = None) -> int:
     counts = groups(start, args.shard, args.per_test)
     if args.shard is not None and not counts:
         parser.error('shard contains no tests')
-    names = sorted(counts, key=lambda n: -counts[n])  # Larger classes first shortens the tail.
+    # Larger classes, then known-heavy tests, first shortens the tail.
+    names = sorted(counts, key=lambda n: (-counts[n], not (args.per_test and is_heavy(n))))
     resume = Resume(start, args.shard)
     with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
         # A per-test group names its exact test, so its worker needs no shard filter.
