@@ -82,6 +82,7 @@ class RemoteRoutingContracts(unittest.TestCase):
         with self.assertRaises(Refusal): authority_remote.route('setup', ['--deployment', 'candidate.json'])
         with self.assertRaises(Refusal): authority_remote.route('destroy', [])
 
+    @unittest.skipIf(sys.version_info < (3, 11), 'optional native setup requires Python 3.11 or newer')
     def test_optional_environment_executes_acquired_entry_with_no_inherited_service_root(self):
         with self.temporary() as folder:
             root = Path(folder) / 'release'

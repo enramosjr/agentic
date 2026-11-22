@@ -110,6 +110,7 @@ class RuntimeContracts(unittest.TestCase):
             if existing: self.assertIs(f.sleeper,prior)
 
     def test_strict_source_owner_resolution_uses_the_provider_human_directory(self):
+        self.require_native()
         from unittest.mock import patch
         from urllib.parse import quote
         from positive_fixture import Harness,Strict
