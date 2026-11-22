@@ -49,6 +49,30 @@ class ShardTests(unittest.TestCase):
             self.assertEqual(len(actual), 128)
             self.assertEqual(set(actual), {f'test_fixture.Cases.test_{i:03}' for i in range(128)})
 
+    def test_per_test_groups_run_each_method_once_in_its_own_process(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root, marker = Path(directory), Path(outside) / 'runs'
+            self.fixture(root, marker, count=6)
+            self.assertEqual(run_tests.groups(root), {'test_fixture.Cases': 6})
+            self.assertEqual(run_tests.groups(root, per_test=True), {f'test_fixture.Cases.test_{i:03}': 1 for i in range(6)})
+            result = subprocess.run([sys.executable, str(Path(run_tests.__file__)), '-s', str(root), '-j', '3', '--per-test'],
+                                    cwd=root, capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn('Ran 6 tests', result.stdout)
+            # Concurrent appends to one marker file can interleave on Windows, so only duplicates are checked here.
+            lines = marker.read_text().splitlines()
+            self.assertEqual(len(lines), len(set(lines)), 'a method ran more than once')
+
+    def test_per_test_failure_is_reported_and_nonzero(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            self.fixture(root, Path(outside) / 'runs', fail=True, count=3)
+            result = subprocess.run([sys.executable, str(Path(run_tests.__file__)), '-s', str(root), '-j', '3', '--per-test'],
+                                    cwd=root, capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('deliberate segment failure', result.stdout)
+            self.assertIn('FAILED (failures=1)', result.stdout)
+
     def test_failed_segment_returns_nonzero(self):
         with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
             root, marker = Path(directory), Path(outside) / 'runs'

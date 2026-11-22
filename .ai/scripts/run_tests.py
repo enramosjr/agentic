@@ -53,8 +53,9 @@ def selected(test_id: str, shard: tuple[int, int] | None) -> bool:
     return slot == index - 1
 
 
-def groups(start: Path, shard: tuple[int, int] | None = None) -> dict[str, int]:
-    """Test count per `module.Class`; a module that fails to import or load is its own group, named by the module."""
+def groups(start: Path, shard: tuple[int, int] | None = None, per_test: bool = False) -> dict[str, int]:
+    """Test count per `module.Class`, or one group per test with `per_test`; a module that fails to import or
+    load is its own group, named by the module."""
     sys.path.insert(0, str(start))
     counts: dict[str, int] = {}
     suite = unittest.TestLoader().discover(str(start), top_level_dir=str(start))
@@ -62,7 +63,10 @@ def groups(start: Path, shard: tuple[int, int] | None = None) -> dict[str, int]:
         test_id = test.id()
         if not selected(test_id, shard):
             continue
-        key = test_id.rsplit(".", 1)[1] if test_id.startswith("unittest.loader.") else test_id.rsplit(".", 1)[0]
+        if test_id.startswith("unittest.loader."):
+            key = test_id.rsplit(".", 1)[1]
+        else:
+            key = test_id if per_test else test_id.rsplit(".", 1)[0]
         counts[key] = counts.get(key, 0) + 1
     return counts
 
@@ -167,6 +171,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-s", "--start", type=Path, default=DEFAULT_START, help="test directory (default: .ai/scripts/tests)")
     parser.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 1, help="worker processes (default: CPU count)")
     parser.add_argument('--shard', type=shard_value, help='run deterministic test-method segment I/N (1-based)')
+    parser.add_argument('--per-test', action='store_true',
+                        help='one worker process per test method, for suites whose classes hold a few very slow tests')
     parser.add_argument("--worker", help=argparse.SUPPRESS)
     parser.add_argument("--result", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
@@ -175,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
         return worker(start, args.worker, args.result, args.shard)
 
     began = time.monotonic()
-    counts = groups(start, args.shard)
+    counts = groups(start, args.shard, args.per_test)
     if args.shard is not None and not counts:
         parser.error('shard contains no tests')
     names = sorted(counts, key=lambda n: -counts[n])  # Larger classes first shortens the tail.
