@@ -268,6 +268,38 @@ def _job_process_handles(job, deadline: float) -> list:
         raise
 
 
+def _group_members(group: int) -> list:
+    """Live (non-zombie) members of a POSIX process group, or None without /proc."""
+    proc = Path('/proc')
+    if not proc.is_dir():
+        return None
+    members = []
+    for entry in proc.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            fields = (entry / 'stat').read_text().rsplit(')', 1)[1].split()
+        except (OSError, IndexError):
+            continue
+        if fields[0] != 'Z' and int(fields[2]) == group:
+            members.append(int(entry.name))
+    return members
+
+
+def _wait_group_dead(group: int, deadline: float) -> None:
+    """SIGKILL delivery is asynchronous; wait until no live member remains."""
+    while time.monotonic() < deadline:
+        members = _group_members(group)
+        if members is None:
+            try:
+                os.killpg(group, 0)
+            except (ProcessLookupError, PermissionError):
+                return
+        elif not members:
+            return
+        time.sleep(0.01)
+
+
 class ProcessTree:
     """Own a child tree before its first instruction and reap it on owner death."""
     def __init__(self):
@@ -366,6 +398,8 @@ class ProcessTree:
                 total, _ = _job_counts(self.job)
                 handles = _job_process_handles(self.job, deadline)
             self.stop()
+            if os.name != 'nt' and self.process is not None:
+                _wait_group_dead(self.process.pid, time.monotonic() + 10)
             if kernel is not None:
                 # Job accounting can reach zero before process handles are
                 # signaled. Only held process handles witness termination.
@@ -445,7 +479,11 @@ def terminate_tree(pid: int, birth: str | None = None) -> None:
             if not running or current_birth != birth:
                 return
             if not kernel.TerminateProcess(handle, 1):
-                raise ctypes.WinError(ctypes.get_last_error())
+                error = ctypes.get_last_error()
+                # A process already exiting refuses termination with ERROR_ACCESS_DENIED.
+                if error == 5 and kernel.WaitForSingleObject(handle, 10000) == 0:
+                    return
+                raise ctypes.WinError(error)
             if kernel.WaitForSingleObject(handle, 10000) != 0:
                 raise OSError('owned supervisor did not terminate')
         finally:
