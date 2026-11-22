@@ -27,6 +27,8 @@ class QualificationGateTests(unittest.TestCase):
         # Only the 3.9 Windows backend combination is dropped; it skips the native tests.
         self.assertIn("exclude:\n          # Windows hardening runs on 3.15, where the native tests run; 3.9 skips them.\n"
                       "          - os: windows-latest\n            python: '3.9'", backend)
+        # Windows keeps the platform-specific contracts; the platform-independent chain tests run on Linux.
+        self.assertIn("${{ matrix.os == 'windows-latest' && '--skip-heavy' || '' }}", backend)
         self.assertNotIn('continue-on-error', backend)
         self.assertNotIn('AGENTIC_TEST_RESUME', backend)
         self.assertNotIn('unittest discover', backend)

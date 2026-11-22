@@ -68,13 +68,14 @@ def balanced(test_ids: list[str], shard: tuple[int, int]) -> set[str]:
     return chosen | {i for i in test_ids if i not in set(heavy) and selected(i, shard)}
 
 
-def groups(start: Path, shard: tuple[int, int] | None = None, per_test: bool = False) -> dict[str, int]:
+def groups(start: Path, shard: tuple[int, int] | None = None, per_test: bool = False,
+           skip_heavy: bool = False) -> dict[str, int]:
     """Test count per `module.Class`, or one group per test with `per_test`; a module that fails to import or
-    load is its own group, named by the module."""
+    load is its own group, named by the module. `skip_heavy` leaves out the `is_heavy` chain tests."""
     sys.path.insert(0, str(start))
     counts: dict[str, int] = {}
     suite = unittest.TestLoader().discover(str(start), top_level_dir=str(start))
-    tests = list(leaves(suite))
+    tests = [t for t in leaves(suite) if not (skip_heavy and is_heavy(t.id()))]
     if per_test and shard is not None:
         chosen = balanced([t.id() for t in tests if not t.id().startswith("unittest.loader.")], shard)
     for test in tests:
@@ -194,6 +195,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--shard', type=shard_value, help='run deterministic test-method segment I/N (1-based)')
     parser.add_argument('--per-test', action='store_true',
                         help='one worker process per test method, for suites whose classes hold a few very slow tests')
+    parser.add_argument('--skip-heavy', action='store_true',
+                        help='with --per-test, leave out the long Native/Terminal evidence-chain tests')
     parser.add_argument("--worker", help=argparse.SUPPRESS)
     parser.add_argument("--result", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
@@ -202,7 +205,9 @@ def main(argv: list[str] | None = None) -> int:
         return worker(start, args.worker, args.result, args.shard)
 
     began = time.monotonic()
-    counts = groups(start, args.shard, args.per_test)
+    if args.skip_heavy and not args.per_test:
+        parser.error('--skip-heavy requires --per-test')
+    counts = groups(start, args.shard, args.per_test, args.skip_heavy)
     if args.shard is not None and not counts:
         parser.error('shard contains no tests')
     # Larger classes, then known-heavy tests, first shortens the tail.

@@ -17,6 +17,10 @@ from unittest import mock
 SCRIPTS = Path(__file__).resolve().parents[1]
 ROOT = SCRIPTS.parents[1]
 sys.path.insert(0, str(SCRIPTS))
+# Detached git auto-maintenance after a fixture commit would add and remove lock files while the
+# measurement snapshots the repositories it builds.
+os.environ.update(GIT_CONFIG_COUNT="2", GIT_CONFIG_KEY_0="gc.auto", GIT_CONFIG_VALUE_0="0",
+                  GIT_CONFIG_KEY_1="maintenance.auto", GIT_CONFIG_VALUE_1="false")
 import disk_tmp  # noqa: E402,F401
 import assurance_demo  # noqa: E402
 import assurance_measure as measure  # noqa: E402

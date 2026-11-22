@@ -81,6 +81,24 @@ class ShardTests(unittest.TestCase):
                 ran += int(result.stdout.split('Ran ')[1].split(' ')[0])
             self.assertEqual(ran, 8)
 
+    def test_skip_heavy_leaves_out_chain_classes_and_requires_per_test(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'test_mixed.py').write_text(
+                'import unittest\n'
+                'class NativeChain(unittest.TestCase):\n    def test_slow(self): pass\n'
+                'class ClosedTerminal(unittest.TestCase):\n    def test_slow(self): pass\n'
+                'class Light(unittest.TestCase):\n    def test_fast(self): pass\n', encoding='utf-8')
+            self.assertEqual(run_tests.groups(root, per_test=True, skip_heavy=True), {'test_mixed.Light.test_fast': 1})
+            self.assertEqual(len(run_tests.groups(root, per_test=True)), 3)
+            command = [sys.executable, str(Path(run_tests.__file__)), '-s', str(root)]
+            result = subprocess.run(command + ['--per-test', '--skip-heavy', '-j', '1'], cwd=root,
+                                    capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn('Ran 1 tests', result.stdout)
+            refused = subprocess.run(command + ['--skip-heavy'], cwd=root, capture_output=True, text=True, timeout=60)
+            self.assertNotEqual(refused.returncode, 0)
+
     def test_per_test_failure_is_reported_and_nonzero(self):
         with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
             root = Path(directory)
