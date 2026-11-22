@@ -18,11 +18,15 @@ class QualificationGateTests(unittest.TestCase):
 
     def test_backend_contracts_are_required_without_optional_skip_or_resume(self):
         backend = self.workflow().split('\n  authority_backend:\n', 1)[1].split('\n  qualification:\n', 1)[0]
-        self.assertIn('python -m unittest discover -s deploy/authority/tests', backend)
+        # The suite is sharded per test; every segment must exist and none may resume, skip or continue on error.
+        count = int(re.search(r'run_tests\.py -s deploy/authority/tests --per-test -j \d+ --shard \$\{\{ matrix\.shard \}\}/(\d+)', backend).group(1))
+        shards = re.search(r'shard: \[([\d, ]+)\]', backend).group(1)
+        self.assertEqual([int(n) for n in shards.split(',')], list(range(1, count + 1)))
         self.assertIn("python: ['3.9', '3.15']", backend)
         self.assertIn('os: [ubuntu-latest, windows-latest]', backend)
         self.assertNotIn('continue-on-error', backend)
-        self.assertNotIn('run_tests.py', backend)
+        self.assertNotIn('AGENTIC_TEST_RESUME', backend)
+        self.assertNotIn('unittest discover', backend)
         self.assertIn('deploy/authority/requirements-auth.txt', backend)
         self.assertIn('python deploy/authority/test_bootstrap_signing.py', backend)
         self.assertIn('python deploy/authority/test_model_vault.py', backend)
