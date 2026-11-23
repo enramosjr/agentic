@@ -12,6 +12,7 @@ from trusted_ci_policy import Refusal
 from trusted_ci_policy import digest
 import test_authority_trial_new_head_case as previous
 from test_authority_trial_host_case import Sequential
+from variant_tests import variants,expand_variants
 
 NATIVE_MINT = bootstrap.installation_token
 
@@ -179,6 +180,7 @@ class Context(previous.NewHead):
             sleeper=getattr(self,'sleeper',time.sleep))
 
 
+@expand_variants
 @unittest.skipIf(getattr(previous.NativeNewHead, '__unittest_skip__', False), 'optional cryptography required')
 class NativeContext(unittest.TestCase):
     def fixture(self):
@@ -314,8 +316,9 @@ class NativeContext(unittest.TestCase):
             return f.source.refs['main']
         self.exercise(continuation=check,export_files=previous.spoof_fixture.forged_fixture.EXPORT)
 
+    @variants(('source-ack','completion-ack','expired-rule-ack'))
     def test_native_unknown_effects_never_replay_and_expired_cleanup_restores_gates(self):
-        for fault in ('source-ack','completion-ack','expired-rule-ack'):
+        for fault in self.variants:
             def check(*args):
                 f=Context(self,args); f.through_tenth(); f.prior_case('new-base',123)
                 operator,target=f.context_transport(); original_rules=copy.deepcopy(target.rules)
@@ -368,8 +371,9 @@ class NativeContext(unittest.TestCase):
             with self.subTest(fault=fault):
                 self.exercise(continuation=check,export_files=previous.spoof_fixture.forged_fixture.EXPORT)
 
+    @variants(('withdrawn-issuer','inventory-base'))
     def test_context_rechecks_old_acceptance_and_final_source_after_blocking_reads(self):
-        for fault in ('withdrawn-issuer','inventory-base'):
+        for fault in self.variants:
             def check(*args):
                 f=Context(self,args); f.through_tenth(); f.prior_case('new-base',123)
                 operator,target=f.context_transport(); rules=copy.deepcopy(target.rules)
@@ -417,8 +421,9 @@ class NativeContext(unittest.TestCase):
             with self.subTest(fault=fault):
                 self.exercise(continuation=check,export_files=previous.spoof_fixture.forged_fixture.EXPORT)
 
+    @variants(('create-ack','delete-ack','registry-ack','create-unknown','delete-unknown'))
     def test_policy_unknown_create_delete_and_registry_writes_are_not_replayed(self):
-        for fault in ('create-ack','delete-ack','registry-ack','create-unknown','delete-unknown'):
+        for fault in self.variants:
             def check(*args):
                 f=Context(self,args); f.through_tenth(); f.advance_case('new-base',123,125)
                 f.prior_case('policy-transition',127)
@@ -476,8 +481,9 @@ class NativeContext(unittest.TestCase):
             with self.subTest(fault=fault):
                 self.exercise(continuation=check,export_files=previous.spoof_fixture.forged_fixture.EXPORT)
 
+    @variants(('cancelled','withdrawn-issuer','unknown','wrong-status'))
     def test_human_late_cancellation_acceptance_and_unknown_results_cannot_close(self):
-        for fault in ('cancelled','withdrawn-issuer','unknown','wrong-status'):
+        for fault in self.variants:
             def check(*args):
                 f=Context(self,args); env=f.human_ready(); attempts=[]
                 native=trial_controller.Native(f.preparer)

@@ -7,6 +7,7 @@ from unittest.mock import patch
 import merge_transport
 from trusted_ci_policy import Refusal
 import test_authority_trial_host_case as host_fixture
+from variant_tests import variants,expand_variants
 
 
 class Expired(host_fixture.Sequential):
@@ -21,6 +22,7 @@ class Expired(host_fixture.Sequential):
         self.sleeper=lambda seconds:self.clock.__setitem__(0,self.clock[0]+seconds)
 
 
+@expand_variants
 @unittest.skipIf(getattr(host_fixture.NativeHost,'__unittest_skip__',False),'optional cryptography required')
 class NativeBroker(unittest.TestCase):
     fixture=host_fixture.NativeHost.fixture
@@ -158,8 +160,9 @@ class NativeBroker(unittest.TestCase):
             self.assertEqual(len(f.attempts),3)
         self.exercise(continuation=check)
 
+    @variants(range(3))
     def test_late_predecessor_ready_pending_and_execution_moves_stop_broker(self):
-        for index in range(3):
+        for index in self.variants:
             for kind in ('ready','pending','execution'):
                 def check(*args):
                     from registry import trial_reference

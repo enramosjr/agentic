@@ -59,12 +59,28 @@ def is_heavy(test_id: str) -> bool:
     return 'Native' in owner or 'Terminal' in owner
 
 
-def balanced(test_ids: list[str], shard: tuple[int, int]) -> set[str]:
-    """Tests of this shard when each test is its own group. Heavy tests are dealt out round-robin in id
-    order (every shard gets within one of the same number); the cheap rest is split by hash."""
+WEIGHTS_FILE = 'shard_weights.json'
+
+
+def balanced(test_ids: list[str], shard: tuple[int, int], weights: dict[str, float] | None = None) -> set[str]:
+    """Tests of this shard when each test is its own group. Heavy tests are dealt out in id order round-robin
+    (every shard gets within one of the same number), or, given measured `weights` (seconds per test id),
+    longest first onto the least loaded shard; a heavy test with no weight counts as the median one.
+    The cheap rest is split by hash."""
     index, count = shard
     heavy = sorted(i for i in test_ids if is_heavy(i))
-    chosen = {i for rank, i in enumerate(heavy) if rank % count == index - 1}
+    if weights:
+        known = sorted(weights[i] for i in heavy if i in weights)
+        default = known[len(known) // 2] if known else 1.0
+        loads = [0.0] * count
+        chosen = set()
+        for test_id in sorted(heavy, key=lambda i: (-weights.get(i, default), i)):
+            slot = min(range(count), key=lambda s: (loads[s], s))
+            loads[slot] += weights.get(test_id, default)
+            if slot == index - 1:
+                chosen.add(test_id)
+    else:
+        chosen = {i for rank, i in enumerate(heavy) if rank % count == index - 1}
     return chosen | {i for i in test_ids if i not in set(heavy) and selected(i, shard)}
 
 
@@ -77,7 +93,9 @@ def groups(start: Path, shard: tuple[int, int] | None = None, per_test: bool = F
     suite = unittest.TestLoader().discover(str(start), top_level_dir=str(start))
     tests = [t for t in leaves(suite) if not (skip_heavy and is_heavy(t.id()))]
     if per_test and shard is not None:
-        chosen = balanced([t.id() for t in tests if not t.id().startswith("unittest.loader.")], shard)
+        weights_path = start / WEIGHTS_FILE
+        weights = json.loads(weights_path.read_text(encoding='utf-8')) if weights_path.is_file() else None
+        chosen = balanced([t.id() for t in tests if not t.id().startswith("unittest.loader.")], shard, weights)
     for test in tests:
         test_id = test.id()
         if per_test and shard is not None and not test_id.startswith("unittest.loader."):

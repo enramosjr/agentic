@@ -8,6 +8,7 @@ import trial_controller
 from trusted_ci_github import GitHub
 from trusted_ci_policy import Refusal
 import test_authority_trial_context_case as context_fixture
+from variant_tests import variants,expand_variants
 
 
 class Revocation(context_fixture.Context):
@@ -73,6 +74,7 @@ class Revocation(context_fixture.Context):
             return trial_controller.Native(self.preparer).revoke_certificate('prompt',self.operator,self.admin,self.tokens)
 
 
+@expand_variants
 @unittest.skipIf(getattr(context_fixture.NativeContext,'__unittest_skip__',False),'optional cryptography required')
 class NativeRevocation(unittest.TestCase):
     fixture=context_fixture.NativeContext.fixture
@@ -166,8 +168,9 @@ class NativeRevocation(unittest.TestCase):
             return f.source.refs['main']
         self.exercise(continuation=check,export_files=context_fixture.previous.spoof_fixture.forged_fixture.EXPORT)
 
+    @variants(('mint-ack','delete-ack','result-ack','expired-last-read'))
     def test_unknown_native_effects_never_repeat_or_release_the_fence(self):
-        for fault in ('mint-ack','delete-ack','result-ack','expired-last-read'):
+        for fault in self.variants:
             def check(*args):
                 f=Revocation(self,args); f.fourteenth(); f.deletion_transport(); f.revocation_fault=fault
                 if fault=='delete-ack':

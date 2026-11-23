@@ -10,6 +10,7 @@ from trusted_ci_policy import Refusal
 import test_authority_trial_forged_case as forged_fixture
 import test_authority_trial_negative_case as negative_fixture
 from test_authority_broker_evidence import stamp
+from variant_tests import variants,expand_variants
 
 
 class Spoof(forged_fixture.Forged):
@@ -68,6 +69,7 @@ class Spoof(forged_fixture.Forged):
         return super().run(role,purpose,change)
 
 
+@expand_variants
 @unittest.skipIf(getattr(negative_fixture.NativeNegative,'__unittest_skip__',False),'optional cryptography required')
 class NativeSpoof(unittest.TestCase):
     fixture=negative_fixture.NativeNegative.fixture
@@ -110,9 +112,10 @@ class NativeSpoof(unittest.TestCase):
             self.assertIn(f.case_token,f.revoked)
         self.exercise(continuation=check,export_files=forged_fixture.EXPORT)
 
+    @variants(__import__('trial_controller').CASE_CHAIN[:8])
     def test_all_eight_owned_completions_are_required_before_ninth_selection(self):
         import trial_controller
-        for name in trial_controller.CASE_CHAIN[:8]:
+        for name in self.variants:
             def check(*args):
                 f=Spoof(self,args); f.through_eighth()
                 store=f.native.provision.store(f.native.provision.root/trial_controller.case_journal('trial-controller',dict(name=name)))
@@ -213,8 +216,9 @@ class NativeSpoof(unittest.TestCase):
             self.assertFalse(any(a['name'].startswith('trial-host-intent-') for a in f.remote.artifacts))
         self.exercise(continuation=check,export_files=forged_fixture.EXPORT)
 
+    @variants(('check','approval','issuer'))
     def test_spoof_and_review_are_reread_after_durable_host_intent(self):
-        for fault in ('check','approval','issuer'):
+        for fault in self.variants:
             def check(*args):
                 f=Spoof(self,args); f.ninth(); f.observed(); upload=f.upload
                 def withdraw(name,raw):
@@ -231,8 +235,9 @@ class NativeSpoof(unittest.TestCase):
                 self.assertFalse(any(a['name'].startswith('trial-host-denial-') for a in f.remote.artifacts))
             with self.subTest(fault=fault): self.exercise(continuation=check,export_files=forged_fixture.EXPORT)
 
+    @variants(('trial-publication-intent-','trial-publication-observation-','trial-host-intent-','trial-host-denial-'))
     def test_unknown_publication_and_host_uploads_never_replay(self):
-        for prefix in ('trial-publication-intent-','trial-publication-observation-','trial-host-intent-','trial-host-denial-'):
+        for prefix in self.variants:
             def check(*args):
                 f=Spoof(self,args); f.ninth(); upload=f.upload; effects=[]
                 def lose(name,raw):
@@ -260,8 +265,9 @@ class NativeSpoof(unittest.TestCase):
                 self.assertIsNotNone(f.registry.binding()['fence']['pending'])
             with self.subTest(prefix=prefix): self.exercise(continuation=check,export_files=forged_fixture.EXPORT)
 
+    @variants(('wrong','unknown','obligation','status'))
     def test_wrong_denial_and_unknown_host_request_do_not_count(self):
-        for fault in ('wrong','unknown','obligation','status'):
+        for fault in self.variants:
             def check(*args):
                 from trusted_ci_github import HostRefusal
                 f=Spoof(self,args); f.ninth(); f.observed(); f.host_fault=fault
@@ -349,8 +355,9 @@ class NativeSpoof(unittest.TestCase):
             return f.source.refs['main']
         self.exercise(continuation=check,export_files=forged_fixture.EXPORT)
 
+    @variants(('exception','receipt'))
     def test_history_move_in_actual_session_exception_and_receipt_inventory_blocks_upload(self):
-        for boundary in ('exception','receipt'):
+        for boundary in self.variants:
             def check(*args):
                 import broker_session,trial_case
                 from merge_receipts import ActionsReceipts

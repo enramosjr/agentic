@@ -14,6 +14,7 @@ from registry import trial_reference
 from trusted_ci_policy import Refusal
 from test_authority_broker_evidence import stamp
 import test_authority_trial_broker_context_case as context_fixture
+from variant_tests import variants,expand_variants
 
 
 class FinalizerMintGuard(unittest.TestCase):
@@ -39,6 +40,7 @@ class FinalizerMintGuard(unittest.TestCase):
         self.assertEqual(len(effects),1)
 
 
+@expand_variants
 @unittest.skipIf(getattr(context_fixture.NativeBrokerContext,'__unittest_skip__',False),'optional cryptography required')
 class NativeContextRecovery(unittest.TestCase):
     fixture=context_fixture.NativeBrokerContext.fixture
@@ -77,8 +79,9 @@ class NativeContextRecovery(unittest.TestCase):
         journal=f.native.provision.store(f.native.provision.root/'trial-controller-context-transition').read()
         self.assertEqual(journal['value']['phase'],'bound')
 
+    @variants(('create','delete'))
     def test_unknown_host_create_or_delete_ack_is_never_adopted_or_replayed(self):
-        for fault in ('create','delete'):
+        for fault in self.variants:
             def check(*args):
                 f=self.prepared_context(args); origin=f.origin.binding(); before=f.registry.binding()
                 events=len(f.target.events)
@@ -191,8 +194,9 @@ class NativeContextRecovery(unittest.TestCase):
             return f.admission.request['snapshot']['base']
         self.run_case(check)
 
+    @variants(('missing','uploaded-failed'))
     def test_pair_ack_loss_and_unknown_terminal_publication_never_complete_or_replay(self):
-        for fault in ('missing','uploaded-failed'):
+        for fault in self.variants:
             def check(*args):
                 f=self.prepared_context(args); origin=f.origin.binding()
                 self.broker(f)

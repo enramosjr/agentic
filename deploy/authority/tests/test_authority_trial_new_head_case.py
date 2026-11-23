@@ -10,6 +10,7 @@ import merge_transport
 import service
 from trusted_ci_policy import Refusal, digest
 import test_authority_trial_spoof_case as spoof_fixture
+from variant_tests import variants,expand_variants
 
 
 class NewHead(spoof_fixture.Spoof):
@@ -160,6 +161,7 @@ class NewHead(spoof_fixture.Spoof):
             disk_factory=Disk, box_factory=Box, image_loader=lambda *a: None)
 
 
+@expand_variants
 @unittest.skipIf(getattr(spoof_fixture.NativeSpoof, '__unittest_skip__', False), 'optional cryptography required')
 class NativeNewHead(unittest.TestCase):
     prepared = spoof_fixture.NativeSpoof.prepared
@@ -245,9 +247,10 @@ class NativeNewHead(unittest.TestCase):
                 self.assertIn(f.case_token,f.revoked)
         self.exercise(continuation=check, export_files=spoof_fixture.forged_fixture.EXPORT)
 
+    @variants(__import__('trial_controller').CASE_CHAIN[:9])
     def test_all_nine_owned_completions_are_required_before_historical_preparation(self):
         import trial_controller
-        for name in trial_controller.CASE_CHAIN[:9]:
+        for name in self.variants:
             def check(*args):
                 f=NewHead(self,args); f.through_ninth()
                 store=f.native.provision.store(f.native.provision.root/trial_controller.case_journal('trial-controller',dict(name=name)))
@@ -300,8 +303,9 @@ class NativeNewHead(unittest.TestCase):
                 self.assertEqual(f.source.writes,writes)
             with self.subTest(phase=phase,target=target): self.exercise(continuation=check,export_files=spoof_fixture.forged_fixture.EXPORT)
 
+    @variants(('commit','ref','budget'))
     def test_native_unknown_source_effects_recover_only_exact_acknowledged_ref(self):
-        for boundary in ('commit','ref','budget'):
+        for boundary in self.variants:
             def check(*args):
                 import trial_controller
                 f=NewHead(self,args); f.through_ninth(); post=f.source.post
@@ -323,8 +327,9 @@ class NativeNewHead(unittest.TestCase):
                 self.assertEqual(f.source.writes,writes)
             with self.subTest(boundary=boundary): self.exercise(continuation=check,export_files=spoof_fixture.forged_fixture.EXPORT)
 
+    @variants(('private','owner'))
     def test_source_privacy_and_owner_are_checked_before_transition_effects(self):
-        for defect in ('private','owner'):
+        for defect in self.variants:
             def check(*args):
                 import trial_controller
                 f=NewHead(self,args); f.through_ninth(); get=f.source.get
@@ -417,8 +422,9 @@ class NativeNewHead(unittest.TestCase):
             self.assertFalse(any(a['name'].startswith('trial-host-intent-') for a in f.remote.artifacts))
         self.exercise(continuation=check,export_files=spoof_fixture.forged_fixture.EXPORT)
 
+    @variants(('old-check','current-review','current-success'))
     def test_prior_success_and_current_review_are_reread_after_host_intent(self):
-        for fault in ('old-check','current-review','current-success'):
+        for fault in self.variants:
             def check(*args):
                 f=NewHead(self,args); f.current(); upload=f.upload
                 def withdraw(name,raw):
@@ -474,8 +480,9 @@ class NativeNewHead(unittest.TestCase):
             self.assertFalse(any(a['name'].startswith('trial-host-intent-') for a in f.remote.artifacts))
         self.exercise(continuation=check,export_files=spoof_fixture.forged_fixture.EXPORT)
 
+    @variants(('trial-publication-intent-','trial-publication-observation-','trial-host-intent-','trial-host-denial-'))
     def test_new_head_unknown_publication_and_host_uploads_never_replay(self):
-        for prefix in ('trial-publication-intent-','trial-publication-observation-','trial-host-intent-','trial-host-denial-'):
+        for prefix in self.variants:
             def check(*args):
                 f=NewHead(self,args); f.current(observed=False); upload=f.upload; effects=[]
                 def lose(name,raw):
@@ -503,8 +510,9 @@ class NativeNewHead(unittest.TestCase):
                 self.assertIsNotNone(f.registry.binding()['fence']['pending'])
             with self.subTest(prefix=prefix): self.exercise(continuation=check,export_files=spoof_fixture.forged_fixture.EXPORT)
 
+    @variants(('wrong','unknown','obligation','status'))
     def test_new_head_wrong_denial_and_unknown_host_request_do_not_count(self):
-        for fault in ('wrong','unknown','obligation','status'):
+        for fault in self.variants:
             def check(*args):
                 from trusted_ci_github import HostRefusal
                 f=NewHead(self,args); f.current(); f.host_fault=fault
@@ -593,8 +601,9 @@ class NativeNewHead(unittest.TestCase):
             return f.source.refs['main']
         self.exercise(continuation=check,export_files=spoof_fixture.forged_fixture.EXPORT)
 
+    @variants(('exception','receipt'))
     def test_new_head_history_move_in_actual_session_exception_and_receipt_inventory_blocks_upload(self):
-        for boundary in ('exception','receipt'):
+        for boundary in self.variants:
             def check(*args):
                 import broker_session,trial_case
                 from merge_receipts import ActionsReceipts

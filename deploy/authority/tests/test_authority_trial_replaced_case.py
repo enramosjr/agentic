@@ -8,6 +8,7 @@ import merge_transport
 import service
 from trusted_ci_policy import Refusal
 import test_authority_trial_negative_case as negative_fixture
+from variant_tests import variants,expand_variants
 
 
 PERMISSIVE = b'import sys\nsys.exit(0)\n'
@@ -43,6 +44,7 @@ class Replaced(negative_fixture.Negative):
         self.owner.assertEqual(self.close_handoff()['host_case'],'replaced-checks')
 
 
+@expand_variants
 @unittest.skipIf(getattr(negative_fixture.NativeNegative,'__unittest_skip__',False),'optional cryptography required')
 class NativeReplaced(unittest.TestCase):
     fixture=negative_fixture.NativeNegative.fixture
@@ -95,9 +97,10 @@ class NativeReplaced(unittest.TestCase):
             self.assertIsNotNone(f.registry.binding()['fence']['pending'])
         self.exercise(continuation=check)
 
+    @variants(__import__('trial_controller').CASE_CHAIN[:6])
     def test_every_owned_completion_is_required_before_seventh_selection(self):
         import trial_controller
-        for name in trial_controller.CASE_CHAIN[:6]:
+        for name in self.variants:
             def check(*args):
                 f=Replaced(self,args); f.through_sixth()
                 store=f.native.provision.store(f.native.provision.root/trial_controller.case_journal('trial-controller',dict(name=name)))
@@ -174,8 +177,9 @@ class NativeReplaced(unittest.TestCase):
             self.assertFalse(any(a['name'].startswith('trial-host-intent-') for a in f.remote.artifacts))
         self.exercise(continuation=check,export_files=EXPORT)
 
+    @variants(('trial-publication-intent-','trial-publication-denial-','trial-host-intent-','trial-host-denial-'))
     def test_unknown_publication_and_host_uploads_are_never_replayed(self):
-        for prefix in ('trial-publication-intent-','trial-publication-denial-','trial-host-intent-','trial-host-denial-'):
+        for prefix in self.variants:
             def check(*args):
                 f=Replaced(self,args); f.seventh(); upload=f.upload; effects=[]
                 def lose(name,raw):
@@ -203,8 +207,9 @@ class NativeReplaced(unittest.TestCase):
                 self.assertIsNotNone(f.registry.binding()['fence']['pending'])
             with self.subTest(prefix=prefix): self.exercise(continuation=check,export_files=EXPORT)
 
+    @variants(('wrong','unknown'))
     def test_wrong_denial_category_and_unknown_host_request_do_not_count(self):
-        for fault in ('wrong','unknown'):
+        for fault in self.variants:
             def check(*args):
                 f=Replaced(self,args); f.seventh(); f.rejected(); f.host_fault=fault
                 with self.assertRaises(OSError if fault=='unknown' else Refusal): f.host()
@@ -277,8 +282,9 @@ class NativeReplaced(unittest.TestCase):
             return f.source.refs['main']
         self.exercise(continuation=check,export_files=EXPORT)
 
+    @variants(('exception','receipt'))
     def test_history_move_in_session_exception_and_receipt_inventory_blocks_upload(self):
-        for boundary in ('exception','receipt'):
+        for boundary in self.variants:
             def check(*args):
                 import broker_session,trial_case
                 from merge_receipts import ActionsReceipts

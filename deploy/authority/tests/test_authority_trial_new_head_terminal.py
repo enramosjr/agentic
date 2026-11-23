@@ -17,6 +17,7 @@ import test_authority_trial_forged_case as forged_fixture
 import test_authority_trial_new_head_case as new_head_fixture
 import test_authority_trial_outage_terminal as outage_fixture
 from trusted_ci_policy import Refusal, digest
+from variant_tests import variants,expand_variants
 
 RUN = 121
 
@@ -72,6 +73,7 @@ class Holds(unittest.TestCase):
             trial_controller.Native(NoIO()).observe_terminal('prompt', 'new-head', {})
 
 
+@expand_variants
 @unittest.skipIf(getattr(new_head_fixture.NativeNewHead, '__unittest_skip__', False), 'optional cryptography required')
 class NewHeadTerminal(unittest.TestCase):
     fixture = new_head_fixture.NativeNewHead.fixture
@@ -150,8 +152,9 @@ class NewHeadTerminal(unittest.TestCase):
             self.assertEqual(f.admission.binding['deployment']['state'], 'qualification')
         self.exercise(continuation=check, export_files=forged_fixture.EXPORT)
 
+    @variants(trial_controller.CASE_CHAIN[:10])
     def test_all_ten_owned_completions_are_required_before_new_base_preparation(self):
-        for name in trial_controller.CASE_CHAIN[:10]:
+        for name in self.variants:
             def check(*args):
                 f = context_fixture.Context(self, args); f.through_tenth()
                 store = f.native.provision.store(f.native.provision.root/trial_controller.case_journal('trial-controller', dict(name=name)))

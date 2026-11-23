@@ -9,6 +9,7 @@ import merge_transport
 from trusted_ci_github import HostRefusal
 from trusted_ci_policy import Refusal
 import test_authority_trial_outage_case as outage_fixture
+from variant_tests import variants,expand_variants
 
 
 class Negative(outage_fixture.Outage):
@@ -141,6 +142,7 @@ class Negative(outage_fixture.Outage):
         return result
 
 
+@expand_variants
 @unittest.skipIf(getattr(outage_fixture.NativeOutage,'__unittest_skip__',False),'optional cryptography required')
 class NativeNegative(unittest.TestCase):
     fixture=outage_fixture.NativeOutage.fixture
@@ -150,8 +152,9 @@ class NativeNegative(unittest.TestCase):
     exercise=outage_fixture.NativeOutage.exercise
     prepare=outage_fixture.NativeOutage.prepare
 
+    @variants(('direct-push','coding-update','missing-approval','expired-proof','authority-outage'))
     def test_sixth_selection_reauthenticates_all_five_owned_completions(self):
-        for name in ('direct-push','coding-update','missing-approval','expired-proof','authority-outage'):
+        for name in self.variants:
             def check(*args):
                 import trial_controller
                 f=Negative(self,args); f.through_fifth()
@@ -192,8 +195,9 @@ class NativeNegative(unittest.TestCase):
             self.assertIsNotNone(f.registry.binding()['fence']['pending'])
         self.exercise(continuation=check)
 
+    @variants(('trial-publication-intent-','trial-publication-denial-','trial-host-intent-','trial-host-denial-'))
     def test_unknown_publication_and_host_effects_never_replay_or_close(self):
-        for prefix in ('trial-publication-intent-','trial-publication-denial-','trial-host-intent-','trial-host-denial-'):
+        for prefix in self.variants:
             def check(*args):
                 f=Negative(self,args); f.sixth(); upload=f.upload; effects=[]
                 def lose(name,raw):

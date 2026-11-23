@@ -63,6 +63,15 @@ class ShardTests(unittest.TestCase):
             lines = marker.read_text().splitlines()
             self.assertEqual(len(lines), len(set(lines)), 'a method ran more than once')
 
+    def test_measured_weights_balance_heavy_tests_by_duration_and_run_each_once(self):
+        weights = {'m.NativeCase.test_a': 100, 'm.NativeCase.test_b': 60, 'm.NativeCase.test_c': 50,
+                   'm.NativeCase.test_d': 40, 'm.NativeCase.test_e': 10}
+        ids = list(weights) + ['m.NativeCase.test_unmeasured'] + [f'm.Light.test_{i}' for i in range(8)]
+        parts = [run_tests.balanced(ids, (index, 2), weights) for index in (1, 2)]
+        self.assertEqual(sorted(i for part in parts for i in part), sorted(ids))
+        loads = [sum(weights.get(i, 50) for i in part if 'Native' in i) for part in parts]  # 50 is the median
+        self.assertLessEqual(abs(loads[0] - loads[1]), 10, loads)
+
     def test_per_test_shards_spread_heavy_native_tests_evenly_and_run_each_once(self):
         ids = [f'm{n}.NativeCase.test_{i:02}' for n in range(3) for i in range(10)] + [f'm.Light.test_{i}' for i in range(40)]
         parts = [run_tests.balanced(ids, (index, 4)) for index in range(1, 5)]

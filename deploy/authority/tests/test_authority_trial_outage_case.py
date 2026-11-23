@@ -9,6 +9,7 @@ import merge_transport
 from trusted_ci_github import HostRefusal
 from trusted_ci_policy import Refusal
 import test_authority_trial_broker_case as broker_fixture
+from variant_tests import variants,expand_variants
 
 
 class Outage(broker_fixture.Expired):
@@ -59,6 +60,7 @@ class Outage(broker_fixture.Expired):
         return identity
 
 
+@expand_variants
 @unittest.skipIf(getattr(broker_fixture.NativeBroker,'__unittest_skip__',False),'optional cryptography required')
 class NativeOutage(unittest.TestCase):
     fixture=broker_fixture.NativeBroker.fixture
@@ -150,8 +152,9 @@ class NativeOutage(unittest.TestCase):
             return f.source.refs['main']
         self.exercise(continuation=check)
 
+    @variants(('status','no-outage','missing-approval','stale-final','foreign-final'))
     def test_wrong_failure_or_success_never_counts_as_outage_or_dispatches(self):
-        for defect in ('status','no-outage','missing-approval','stale-final','foreign-final'):
+        for defect in self.variants:
             def check(*args):
                 f=Outage(self,args); f.fifth()
                 if defect=='status': f.fault_status=403
