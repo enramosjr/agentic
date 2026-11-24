@@ -68,7 +68,7 @@ def balanced(test_ids: list[str], shard: tuple[int, int], weights: dict[str, flo
     longest first onto the least loaded shard; a heavy test with no weight counts as the median one.
     The cheap rest is split by hash."""
     index, count = shard
-    heavy = sorted(i for i in test_ids if is_heavy(i))
+    heavy = sorted(i for i in test_ids if is_heavy(i) or (weights and i in weights))
     if weights:
         known = sorted(weights[i] for i in heavy if i in weights)
         default = known[len(known) // 2] if known else 1.0
