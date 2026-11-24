@@ -379,17 +379,31 @@ class ValidationTests(AutonomyTestCase):
     def test_incremental_validation_retains_and_resumes_passes_without_repeating_them(self):
         counter = self.runtime / "counter"
         first = self.command("from pathlib import Path; p=Path(" + repr(str(counter)) + "); p.write_text(p.read_text()+'run' if p.exists() else 'run'); print('first asserted')")
-        # Spend the run budget in the second command, not in OS process startup.
+        # Resume the remaining workload after a durable partial result.
         second = self.command("import time; time.sleep(3); print('second asserted')")
         commands = [first, second]
         request = self.request(self.runtime / "first", commands)
-        result = autonomy_validation.run(request, self.repo, time.monotonic() + 2, .02, lambda *args: None, lambda: None)
+        clock = mock.Mock(wraps=time)
+        clock.monotonic.return_value = 100
+        result = request.with_name("result.json")
+        def exhaust_after_durable_pass(*args):
+            retained = json.loads(result.read_text())
+            if retained["commands"] and retained["commands"][0]["state"] == "PASS":
+                self.assertEqual(counter.read_text(), "run")
+                clock.monotonic.return_value = 100 + SHORT + 1
+        # Spend policy time only after the first real child has a durable PASS.
+        # The real child watchdog remains bounded by SHORT minus the reserve.
+        with mock.patch.object(autonomy_validation, "time", clock):
+            autonomy_validation.run(request, self.repo, 100 + SHORT, .02,
+                                    exhaust_after_durable_pass, lambda: None)
         original = json.loads(result.read_text())
         self.assertEqual(original["state"], "BUDGET_EXHAUSTED")
         self.assertEqual(original["commands"][0]["state"], "PASS")
+        self.assertEqual(len(original["commands"]), 1)
         self.assertEqual(counter.read_text(), "run")
         resumed = self.request(self.runtime / "resumed", commands, result)
-        finished = autonomy_validation.run(resumed, self.repo, time.monotonic() + 5, .02, lambda *args: None, lambda: None)
+        # The success phase includes the three-second workload and native startup.
+        finished = autonomy_validation.run(resumed, self.repo, time.monotonic() + SHORT + 3, .02, lambda *args: None, lambda: None)
         final = json.loads(finished.read_text())
         self.assertEqual(final["state"], "PASS")
         self.assertEqual(counter.read_text(), "run", "completed validation command was rerun")
@@ -484,17 +498,21 @@ class ValidationTests(AutonomyTestCase):
     def test_prerequisite_source_or_commit_binding_invalidates_consumer_across_commits(self):
         (self.repo / "prepare.txt").write_text("v1")
         self.commit_all("prepare input")
+        success_seconds = 3 * SHORT  # Two guarded children plus Git/receipt readbacks.
         for scoped in (False, True):
             first = {**self.command("print('prepare')"), "label": "prepare"}
             if scoped:
                 first["inputs"] = ["prepare.txt"]
             second = {**self.command("print('assert consumer')"), "inputs": ["AGENTS.md"], "after": ["prepare"]}
             request = self.request(self.runtime / f"deps-{scoped}", [first, second])
-            result = autonomy_validation.run(request, self.repo, time.monotonic() + 5, .02, lambda *args: None, lambda: None)
+            result = autonomy_validation.run(request, self.repo, time.monotonic() + success_seconds, .02, lambda *args: None, lambda: None)
+            initial = json.loads(result.read_text())
+            self.assertEqual(initial["state"], "PASS")
+            self.assertEqual(len(initial["commands"]), 2)
             (self.repo / "prepare.txt").write_text(f"changed-{scoped}")
             self.commit_all("change prerequisite")
             request = self.request(self.runtime / f"deps-changed-{scoped}", [first, second], result)
-            changed = autonomy_validation.run(request, self.repo, time.monotonic() + 5, .02, lambda *args: None, lambda: None)
+            changed = autonomy_validation.run(request, self.repo, time.monotonic() + success_seconds, .02, lambda *args: None, lambda: None)
             value = json.loads(changed.read_text())
             self.assertEqual(value["state"], "PASS")
             self.assertTrue(all("reused_from" not in entry for entry in value["commands"]))
@@ -537,9 +555,10 @@ class ValidationTests(AutonomyTestCase):
                              f"p=Path({str(counter)!r}); p.write_text(p.read_text()+'run' if p.exists() else 'run')")
         second = {**self.command("print('dependent assertion')"), "after": [first["label"]]}
         result = None
+        success_seconds = 3 * SHORT  # Two child launches plus Git/receipt readbacks.
         runner = (f"import sys,time; sys.path.insert(0, {str(SCRIPTS)!r}); "
                   "from pathlib import Path; import autonomy_validation as v; "
-                  "v.run(Path(sys.argv[1]), Path(sys.argv[2]), time.monotonic()+5, .02, "
+                  f"v.run(Path(sys.argv[1]), Path(sys.argv[2]), time.monotonic()+{success_seconds}, .02, "
                   "lambda *args: None, lambda: None)")
         for number in range(2):
             request = self.request(self.runtime / f"session-{number}", [first, second], result)
@@ -547,7 +566,7 @@ class ValidationTests(AutonomyTestCase):
                                       env={**os.environ, "CODEX_THREAD_ID": f"thread-{number}",
                                            "OKF_HANDOFF_REQUEST": f"handoff-{number}",
                                            "SHLVL": str(number), "_": f"launcher-{number}"},
-                                      capture_output=True, text=True, timeout=10)
+                                      capture_output=True, text=True, timeout=success_seconds + SHORT)
             self.assertEqual(executed.returncode, 0, executed.stderr)
             result = request.with_name("result.json")
             value = json.loads(result.read_text())
@@ -725,14 +744,43 @@ class ValidationTests(AutonomyTestCase):
 
     def test_command_timeout_cancels_peer_and_preserves_timeout_state(self):
         pid = self.runtime / "peer-pid"
-        peer = {**self.command(f"from pathlib import Path; import os,time; Path({str(pid)!r}).write_text(str(os.getpid())); time.sleep(10)"),
+        timeout_ready = self.runtime / "timeout-ready"
+        def waiting_child(ready):
+            return (f"import sys; sys.path.insert(0,{str(SCRIPTS)!r}); "
+                    "from pathlib import Path; import json,time,process_runtime; "
+                    f"Path({str(ready)!r}).write_text(json.dumps(process_runtime.identity())); time.sleep(60)")
+        peer = {**self.command(waiting_child(pid)),
                 "label": "peer", "resources": ["peer"], "timeout_seconds": 20}
-        timeout = {**self.command("import time; time.sleep(10)"), "label": "timeout",
+        timeout = {**self.command(waiting_child(timeout_ready)), "label": "timeout",
                    "resources": ["timeout"], "timeout_seconds": 1}
-        result = self.run_commands([peer, timeout], max_parallel=2)
-        self.assertEqual(result["state"], "TIMED_OUT")
-        self.assertEqual({row["label"]: row["state"] for row in result["commands"]}, {"peer": "CANCELLED", "timeout": "TIMED_OUT"})
-        self.assertFalse(process_runtime.alive(int(pid.read_text())))
+        start = process_runtime.ProcessTree.start
+        def ready_start(tree, *args, **kwargs):
+            process = start(tree, *args, **kwargs)
+            try:
+                deadline = time.monotonic() + 3 * SHORT
+                while not all(ready.exists() for ready in (pid, timeout_ready)):
+                    self.assertIsNone(process.poll(), "child exited before both peers were ready")
+                    self.assertLess(time.monotonic(), deadline, "peer readiness timed out")
+                    time.sleep(.01)
+                return process
+            except BaseException:
+                tree.close()
+                raise
+        request = self.request(self.runtime / "parallel", [peer, timeout], max_parallel=2)
+        try:
+            # Real timers start after both actual children have published READY.
+            with mock.patch.object(process_runtime.ProcessTree, "start", ready_start):
+                path = autonomy_validation.run(request, self.repo, time.monotonic() + 4 * SHORT, .02,
+                                               lambda *args: None, lambda: None, tick_seconds=.02)
+            result = json.loads(path.read_text())
+            self.assertEqual(result["state"], "TIMED_OUT")
+            self.assertEqual({row["label"]: row["state"] for row in result["commands"]}, {"peer": "CANCELLED", "timeout": "TIMED_OUT"})
+            for ready in (pid, timeout_ready):
+                self.assertFalse(process_runtime.alive(**json.loads(ready.read_text())))
+        finally:
+            for ready in (pid, timeout_ready):
+                if ready.exists():
+                    process_runtime.terminate_tree(**json.loads(ready.read_text()))
 
     def test_parallelism_never_exceeds_declared_limit(self):
         state = self.runtime / "concurrency.json"

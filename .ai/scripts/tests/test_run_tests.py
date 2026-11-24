@@ -49,6 +49,75 @@ class ShardTests(unittest.TestCase):
             self.assertEqual(len(actual), 128)
             self.assertEqual(set(actual), {f'test_fixture.Cases.test_{i:03}' for i in range(128)})
 
+    def test_per_test_groups_run_each_method_once_in_its_own_process(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root, marker = Path(directory), Path(outside) / 'runs'
+            self.fixture(root, marker, count=6)
+            self.assertEqual(run_tests.groups(root), {'test_fixture.Cases': 6})
+            self.assertEqual(run_tests.groups(root, per_test=True), {f'test_fixture.Cases.test_{i:03}': 1 for i in range(6)})
+            result = subprocess.run([sys.executable, str(Path(run_tests.__file__)), '-s', str(root), '-j', '3', '--per-test'],
+                                    cwd=root, capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn('Ran 6 tests', result.stdout)
+            # Concurrent appends to one marker file can interleave on Windows, so only duplicates are checked here.
+            lines = marker.read_text().splitlines()
+            self.assertEqual(len(lines), len(set(lines)), 'a method ran more than once')
+
+    def test_measured_weights_balance_heavy_tests_by_duration_and_run_each_once(self):
+        weights = {'m.NativeCase.test_a': 100, 'm.NativeCase.test_b': 60, 'm.NativeCase.test_c': 50,
+                   'm.NativeCase.test_d': 40, 'm.NativeCase.test_e': 10}
+        ids = list(weights) + ['m.NativeCase.test_unmeasured'] + [f'm.Light.test_{i}' for i in range(8)]
+        parts = [run_tests.balanced(ids, (index, 2), weights) for index in (1, 2)]
+        self.assertEqual(sorted(i for part in parts for i in part), sorted(ids))
+        loads = [sum(weights.get(i, 50) for i in part if 'Native' in i) for part in parts]  # 50 is the median
+        self.assertLessEqual(abs(loads[0] - loads[1]), 10, loads)
+
+    def test_per_test_shards_spread_heavy_native_tests_evenly_and_run_each_once(self):
+        ids = [f'm{n}.NativeCase.test_{i:02}' for n in range(3) for i in range(10)] + [f'm.Light.test_{i}' for i in range(40)]
+        parts = [run_tests.balanced(ids, (index, 4)) for index in range(1, 5)]
+        self.assertEqual(sorted(i for part in parts for i in part), sorted(ids))
+        heavy = [sum('Native' in i for i in part) for part in parts]
+        self.assertLessEqual(max(heavy) - min(heavy), 1, heavy)
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root, marker = Path(directory), Path(outside) / 'runs'
+            self.fixture(root, marker, count=8)
+            ran = 0
+            for index in (1, 2):
+                result = subprocess.run([sys.executable, str(Path(run_tests.__file__)), '-s', str(root), '-j', '2',
+                                         '--per-test', '--shard', f'{index}/2'],
+                                        cwd=root, capture_output=True, text=True, timeout=60)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                ran += int(result.stdout.split('Ran ')[1].split(' ')[0])
+            self.assertEqual(ran, 8)
+
+    def test_skip_heavy_leaves_out_chain_classes_and_requires_per_test(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'test_mixed.py').write_text(
+                'import unittest\n'
+                'class NativeChain(unittest.TestCase):\n    def test_slow(self): pass\n'
+                'class ClosedTerminal(unittest.TestCase):\n    def test_slow(self): pass\n'
+                'class Light(unittest.TestCase):\n    def test_fast(self): pass\n', encoding='utf-8')
+            self.assertEqual(run_tests.groups(root, per_test=True, skip_heavy=True), {'test_mixed.Light.test_fast': 1})
+            self.assertEqual(len(run_tests.groups(root, per_test=True)), 3)
+            command = [sys.executable, str(Path(run_tests.__file__)), '-s', str(root)]
+            result = subprocess.run(command + ['--per-test', '--skip-heavy', '-j', '1'], cwd=root,
+                                    capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn('Ran 1 tests', result.stdout)
+            refused = subprocess.run(command + ['--skip-heavy'], cwd=root, capture_output=True, text=True, timeout=60)
+            self.assertNotEqual(refused.returncode, 0)
+
+    def test_per_test_failure_is_reported_and_nonzero(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            self.fixture(root, Path(outside) / 'runs', fail=True, count=3)
+            result = subprocess.run([sys.executable, str(Path(run_tests.__file__)), '-s', str(root), '-j', '3', '--per-test'],
+                                    cwd=root, capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('deliberate segment failure', result.stdout)
+            self.assertIn('FAILED (failures=1)', result.stdout)
+
     def test_failed_segment_returns_nonzero(self):
         with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
             root, marker = Path(directory), Path(outside) / 'runs'

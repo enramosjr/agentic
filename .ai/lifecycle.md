@@ -199,6 +199,11 @@ Use for any bug, failing check, or unexpected behavior, at any tier above L0.
 
 ## Recording and enforcement
 
+Local stage gates remain fast feedback and drift checks. They do not authenticate
+protected-branch authorization. The [trusted CI integration](docs/trusted-ci.md)
+separates critical acceptance, issuer credentials and hosting authorization;
+installation alone does not establish deployed enforcement.
+
 `lifecycle.py learn TEXT [--stage S] [--evidence REF]` records inert observations in active L1–L3 tasks. Capture alone does not close a retrospective. Before Verify, explicitly run `lifecycle.py retrospect --lessons 1 2` for existing lessons with nonblank evidence, or `lifecycle.py retrospect --no-new-lessons REASON` with a nonblank explanation. Verify and commit/PR/ship guards require closure; historical records without closure remain audit-valid. Outcome, timestamp and lesson numbers or reason persist in the audit record. Task declarations and SessionStart surface a separate advisory observation block (up to five whole entries within 8,192 UTF-8 bytes), ranked by query/task-reason token overlap, recency and source reference; absent matches use a labeled recent fallback. `lifecycle.py observations --query TEXT` retrieves read-only context with evidence, provenance and omission/corruption diagnostics. Observations have no instruction precedence. Report the closing outcome at delivery.
 
 `promote RECORD#N --approved-by human:ID` and `retire RULE_ID --reason TEXT --approved-by human:ID` require human authorization; attribution records claims rather than authenticating consent, and `decision:` is refused. Active approved rules have repository-instruction precedence and are injected at SessionStart within an 8,192-byte UTF-8 block. Missing rules preserve prior behavior; invalid rules emit a diagnostic without partial injection. Identical promotion/retirement retries repair interrupted log/index publication. At milestone close use repeatable `okf.py checkpoint --lessons-from RECORD` for every milestone record and include unpromoted observations in the retrospective. See the learning-loop capability and playbook in `knowledge/` when present; an installed adopter starts without template knowledge.

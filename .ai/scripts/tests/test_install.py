@@ -50,7 +50,9 @@ class InstallerCase(unittest.TestCase):
         self.commit()
 
     def git(self, *args):
-        return subprocess.run(["git", "-c", "user.name=test", "-c", "user.email=test@test", *args],
+        # Detached auto-maintenance after a commit would mutate .git while the tests snapshot it.
+        return subprocess.run(["git", "-c", "user.name=test", "-c", "user.email=test@test",
+                               "-c", "gc.auto=0", "-c", "maintenance.auto=false", *args],
                               cwd=self.target, capture_output=True, text=True, check=True).stdout
 
     def commit(self):

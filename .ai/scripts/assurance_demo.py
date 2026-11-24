@@ -92,6 +92,10 @@ class Session:
         self.calls = calls
         self.env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_") and k not in DROPPED_ENV}
         self.env["PYTHONDONTWRITEBYTECODE"] = "1"
+        # Detached git auto-maintenance after a fixture commit adds and removes lock files while the
+        # repository is being snapshotted or deleted. The GIT_* strip above would drop a caller's setting.
+        self.env.update(GIT_CONFIG_COUNT="2", GIT_CONFIG_KEY_0="gc.auto", GIT_CONFIG_VALUE_0="0",
+                        GIT_CONFIG_KEY_1="maintenance.auto", GIT_CONFIG_VALUE_1="false")
 
     def exec(self, argv: list[str], ok: tuple[int, ...] = (0,)) -> subprocess.CompletedProcess:
         try:

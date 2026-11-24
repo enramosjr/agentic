@@ -1,0 +1,163 @@
+# Install in the SEPARATE authority repository as .github/workflows/authority.yml.
+# This file is intentionally not an authoritative workflow in the candidate repo.
+name: AGENTIC authority
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        default: production
+        options: [production, qualification-fixtures, qualification-probes]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: agentic-authority
+  cancel-in-progress: false
+jobs:
+  discover:
+    if: github.event_name != 'workflow_dispatch' || inputs.mode != 'qualification-probes'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      prs: ${{ steps.discover.outputs.prs }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Prepare approved policy
+        env:
+          POLICY_JSON: ${{ inputs.mode == 'qualification-fixtures' && vars.AGENTIC_QUALIFICATION_POLICY_JSON || vars.AGENTIC_POLICY_JSON }}
+        run: python3 -c 'import os,pathlib; pathlib.Path("policy.json").write_text(os.environ["POLICY_JSON"], encoding="utf-8")'
+      - id: discover
+        env:
+          AGENTIC_READ_TOKEN: ${{ secrets.AGENTIC_READ_TOKEN }}
+        shell: python
+        run: |
+          import json, os, subprocess
+          r = subprocess.run(["python3", ".ai/scripts/trusted_ci.py", "discover", "--policy", "policy.json"], check=True, capture_output=True, text=True)
+          values = json.loads(r.stdout)
+          assert isinstance(values, list) and all(type(n) is int and n > 0 for n in values)
+          with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
+              stream.write("prs=" + json.dumps(values) + "\n")
+  verify:
+    needs: discover
+    if: needs.discover.outputs.prs != '[]'
+    name: verify (${{ matrix.pr }})
+    runs-on: [self-hosted, linux, agentic-authority]
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        pr: ${{ fromJSON(needs.discover.outputs.prs) }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Provision approved image
+        env:
+          POLICY_JSON: ${{ inputs.mode == 'qualification-fixtures' && vars.AGENTIC_QUALIFICATION_POLICY_JSON || vars.AGENTIC_POLICY_JSON }}
+        shell: python
+        run: |
+          import os, pathlib, subprocess, sys
+          sys.path.insert(0, ".ai/scripts")
+          from trusted_ci_policy import loads, validate_policy
+          p = validate_policy(loads(os.environ["POLICY_JSON"]))
+          pathlib.Path("policy.json").write_text(os.environ["POLICY_JSON"], encoding="utf-8")
+          subprocess.run(["docker", "pull", p["image"]], check=True)
+      - name: Verify isolated candidate
+        id: verify
+        env:
+          AGENTIC_READ_TOKEN: ${{ secrets.AGENTIC_READ_TOKEN }}
+          PR_NUMBER: ${{ matrix.pr }}
+        run: python3 .ai/scripts/trusted_ci.py verify --policy policy.json --pr "$PR_NUMBER" --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" --output report.json --runtime docker
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: report-${{ matrix.pr }}-${{ github.run_attempt }}
+          path: report.json
+          if-no-files-found: error
+          retention-days: 7
+  publish:
+    needs: [discover, verify]
+    if: always() && needs.discover.result == 'success' && needs.discover.outputs.prs != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        pr: ${{ fromJSON(needs.discover.outputs.prs) }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Prepare approved policy
+        env:
+          POLICY_JSON: ${{ inputs.mode == 'qualification-fixtures' && vars.AGENTIC_QUALIFICATION_POLICY_JSON || vars.AGENTIC_POLICY_JSON }}
+        run: python3 -c 'import os,pathlib; pathlib.Path("policy.json").write_text(os.environ["POLICY_JSON"], encoding="utf-8")'
+      - id: issuer
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349
+        with:
+          app-id: ${{ fromJSON(vars.AGENTIC_POLICY_JSON).app_id }}
+          private-key: ${{ secrets.AGENTIC_ISSUER_PRIVATE_KEY }}
+          owner: ${{ vars.AGENTIC_TARGET_OWNER }}
+          repositories: ${{ inputs.mode == 'qualification-fixtures' && vars.AGENTIC_QUALIFICATION_REPOSITORY || vars.AGENTIC_TARGET_REPOSITORY }}
+          permission-checks: write
+          permission-contents: read
+          permission-pull-requests: read
+      - name: Publish exact trusted result
+        env:
+          AGENTIC_READ_TOKEN: ${{ secrets.AGENTIC_READ_TOKEN }}
+          AGENTIC_ISSUER_TOKEN: ${{ steps.issuer.outputs.token }}
+          AGENTIC_POLICY_VARIABLE: ${{ inputs.mode == 'qualification-fixtures' && 'AGENTIC_QUALIFICATION_POLICY_JSON' || 'AGENTIC_POLICY_JSON' }}
+          PR_NUMBER: ${{ matrix.pr }}
+        run: python3 .ai/scripts/trusted_ci.py publish --policy policy.json --pr "$PR_NUMBER" --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT"
+  qualification:
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'qualification-probes'
+    name: hosted qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Prepare independently reviewed fixture manifest
+        env:
+          REFERENCE_POLICY: ${{ vars.AGENTIC_POLICY_JSON }}
+          FIXTURE_POLICY: ${{ vars.AGENTIC_QUALIFICATION_POLICY_JSON }}
+          FIXTURE_MANIFEST: ${{ vars.AGENTIC_QUALIFICATION_MANIFEST }}
+        shell: python
+        run: |
+          import os, pathlib
+          for name, key in [("reference.json", "REFERENCE_POLICY"), ("fixture.json", "FIXTURE_POLICY"), ("manifest.json", "FIXTURE_MANIFEST")]:
+              pathlib.Path(name).write_text(os.environ[key], encoding="utf-8")
+      - name: Exercise actual host denials and disposable positive merge
+        env:
+          AGENTIC_READ_TOKEN: ${{ secrets.AGENTIC_READ_TOKEN }}
+          AGENTIC_QUALIFICATION_CODING_TOKEN: ${{ secrets.AGENTIC_QUALIFICATION_CODING_TOKEN }}
+          AGENTIC_QUALIFICATION_MERGE_TOKEN: ${{ secrets.AGENTIC_QUALIFICATION_MERGE_TOKEN }}
+        run: python3 .ai/scripts/trusted_ci.py qualify-host --policy fixture.json --reference-policy reference.json --manifest manifest.json --run-id "$GITHUB_RUN_ID" --attempt "$GITHUB_RUN_ATTEMPT" --output qualification.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: hosted-qualification
+          path: qualification.json
+          if-no-files-found: error
+          retention-days: 7

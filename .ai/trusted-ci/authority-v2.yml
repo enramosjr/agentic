@@ -1,0 +1,1155 @@
+# Installed only in the independent authority repository; v1 stays unchanged.
+# All service entrypoints remain held; this is not a qualified production workflow.
+name: AGENTIC v2 authority
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Fixed credential or protected task producer path
+        type: choice
+        options: [credentials, task, production, qualification, case]
+        default: credentials
+        required: true
+      challenges:
+        description: Exact seven-purpose setup challenges from the trusted native coordinator
+        type: string
+        required: false
+        default: '{}'
+      prompt:
+        description: Bounded task text; never a command or authority selector
+        type: string
+        required: false
+      handoff:
+        description: Bounded native record lookup hint; never authority or execution consent
+        type: string
+        required: false
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: agentic-authority
+  cancel-in-progress: false
+jobs:
+  trial_case_ready:
+    if: inputs.mode == 'case'
+    name: trial case ready
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: case-ready
+          task: ${{ inputs.handoff }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN }}
+  trial_case_handoff:
+    needs: [prepare]
+    if: inputs.mode == 'case'
+    name: trial case handoff
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: case-handoff
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN }}
+  trial_handoff:
+    if: inputs.mode == 'qualification'
+    name: trial handoff
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: trial-handoff
+          task: ${{ inputs.handoff }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_TRIAL_ORIGIN_TOKEN: ${{ secrets.AGENTIC_TRIAL_ORIGIN_TOKEN }}
+  trial_prepare:
+    needs: [trial_handoff]
+    name: trial preparation
+    outputs:
+      request: ${{ steps.produce.outputs.request }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        id: produce
+        with:
+          role: trial-prepare
+          task: ${{ inputs.handoff }}
+          prompt: ${{ inputs.prompt }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_TRIAL_ORIGIN_TOKEN: ${{ secrets.AGENTIC_TRIAL_ORIGIN_TOKEN }}
+  trial_model_auth:
+    needs: [trial_prepare]
+    name: model authorization
+    permissions:
+      contents: write
+      actions: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: trial-model
+          task: ${{ needs.trial_prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_TRIAL_ORIGIN_TOKEN: ${{ secrets.AGENTIC_TRIAL_ORIGIN_TOKEN }}
+          AGENTIC_MODEL_VAULT_KEY: ${{ secrets.AGENTIC_MODEL_VAULT_KEY }}
+          AGENTIC_MODEL_DELIVERY_KEY: ${{ secrets.AGENTIC_MODEL_DELIVERY_KEY }}
+  trial_admin_proof:
+    needs: [trial_prepare]
+    name: proof (admin)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: trial-proof
+          task: ${{ needs.trial_prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_TRIAL_ORIGIN_TOKEN: ${{ secrets.AGENTIC_TRIAL_ORIGIN_TOKEN }}
+          AGENTIC_ADMIN_PRIVATE_KEY: ${{ secrets.AGENTIC_ADMIN_PRIVATE_KEY }}
+  trial_reader_proof:
+    needs: [trial_prepare]
+    name: proof (reader)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: trial-proof
+          task: ${{ needs.trial_prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_TRIAL_ORIGIN_TOKEN: ${{ secrets.AGENTIC_TRIAL_ORIGIN_TOKEN }}
+          AGENTIC_READER_PRIVATE_KEY: ${{ secrets.AGENTIC_READER_PRIVATE_KEY }}
+  trial_issuer_proof:
+    needs: [trial_prepare]
+    name: proof (issuer)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: trial-proof
+          task: ${{ needs.trial_prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_TRIAL_ORIGIN_TOKEN: ${{ secrets.AGENTIC_TRIAL_ORIGIN_TOKEN }}
+          AGENTIC_ISSUER_PRIVATE_KEY: ${{ secrets.AGENTIC_ISSUER_PRIVATE_KEY }}
+  trial_coding_proof:
+    needs: [trial_prepare]
+    name: proof (coding)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: trial-proof
+          task: ${{ needs.trial_prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_TRIAL_ORIGIN_TOKEN: ${{ secrets.AGENTIC_TRIAL_ORIGIN_TOKEN }}
+          AGENTIC_CODING_PRIVATE_KEY: ${{ secrets.AGENTIC_CODING_PRIVATE_KEY }}
+  trial_merge_proof:
+    needs: [trial_prepare]
+    name: proof (merge)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: trial-proof
+          task: ${{ needs.trial_prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_TRIAL_ORIGIN_TOKEN: ${{ secrets.AGENTIC_TRIAL_ORIGIN_TOKEN }}
+          AGENTIC_MERGE_PRIVATE_KEY: ${{ secrets.AGENTIC_MERGE_PRIVATE_KEY }}
+  qualification:
+    needs: [trial_prepare, trial_model_auth, trial_admin_proof, trial_reader_proof, trial_issuer_proof, trial_coding_proof, trial_merge_proof]
+    name: hosted qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: trial-worker
+          task: ${{ needs.trial_prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_TRIAL_ORIGIN_TOKEN: ${{ secrets.AGENTIC_TRIAL_ORIGIN_TOKEN }}
+          AGENTIC_CODING_PRIVATE_KEY: ${{ secrets.AGENTIC_CODING_PRIVATE_KEY }}
+          AGENTIC_MODEL_DELIVERY_KEY: ${{ secrets.AGENTIC_MODEL_DELIVERY_KEY }}
+  trial_task_controls:
+    needs: [trial_prepare, trial_model_auth, trial_admin_proof, trial_reader_proof, trial_issuer_proof, trial_coding_proof, trial_merge_proof]
+    name: trial task controls (${{ fromJSON(needs.trial_prepare.outputs.request).task.task_id }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: trial-controls
+          task: ${{ needs.trial_prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_TRIAL_ORIGIN_TOKEN: ${{ secrets.AGENTIC_TRIAL_ORIGIN_TOKEN }}
+          AGENTIC_ADMIN_PRIVATE_KEY: ${{ secrets.AGENTIC_ADMIN_PRIVATE_KEY }}
+  admin_credential_proof:
+    if: inputs.mode == 'credentials'
+    name: credential proof (admin)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: credential
+          challenge: ${{ toJSON(fromJSON(inputs.challenges).admin) }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_ADMIN_PRIVATE_KEY: ${{ secrets.AGENTIC_ADMIN_PRIVATE_KEY }}
+  reader_credential_proof:
+    if: inputs.mode == 'credentials'
+    name: credential proof (reader)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: credential
+          challenge: ${{ toJSON(fromJSON(inputs.challenges).reader) }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_READER_PRIVATE_KEY: ${{ secrets.AGENTIC_READER_PRIVATE_KEY }}
+  issuer_credential_proof:
+    if: inputs.mode == 'credentials'
+    name: credential proof (issuer)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: credential
+          challenge: ${{ toJSON(fromJSON(inputs.challenges).issuer) }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_ISSUER_PRIVATE_KEY: ${{ secrets.AGENTIC_ISSUER_PRIVATE_KEY }}
+  coding_credential_proof:
+    if: inputs.mode == 'credentials'
+    name: credential proof (coding)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: credential
+          challenge: ${{ toJSON(fromJSON(inputs.challenges).coding) }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_CODING_PRIVATE_KEY: ${{ secrets.AGENTIC_CODING_PRIVATE_KEY }}
+  merge_credential_proof:
+    if: inputs.mode == 'credentials'
+    name: credential proof (merge)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: credential
+          challenge: ${{ toJSON(fromJSON(inputs.challenges).merge) }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_MERGE_PRIVATE_KEY: ${{ secrets.AGENTIC_MERGE_PRIVATE_KEY }}
+  model_vault_credential_proof:
+    if: inputs.mode == 'credentials'
+    name: credential proof (model_vault)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: credential
+          challenge: ${{ toJSON(fromJSON(inputs.challenges).model_vault) }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_MODEL_VAULT_KEY: ${{ secrets.AGENTIC_MODEL_VAULT_KEY }}
+  model_delivery_credential_proof:
+    if: inputs.mode == 'credentials'
+    name: credential proof (model_delivery)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: credential
+          challenge: ${{ toJSON(fromJSON(inputs.challenges).model_delivery) }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_MODEL_DELIVERY_KEY: ${{ secrets.AGENTIC_MODEL_DELIVERY_KEY }}
+  prepare_task:
+    if: inputs.mode == 'task'
+    name: prepare task
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      request: ${{ steps.prepare.outputs.request }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        id: prepare
+        with:
+          role: prepare-task
+          prompt: ${{ inputs.prompt }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_READER_PRIVATE_KEY: ${{ secrets.AGENTIC_READER_PRIVATE_KEY }}
+  model_auth:
+    needs: [prepare_task]
+    name: model authorization
+    permissions:
+      contents: write
+      actions: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: model-authorization
+          task: ${{ needs.prepare_task.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_MODEL_VAULT_KEY: ${{ secrets.AGENTIC_MODEL_VAULT_KEY }}
+          AGENTIC_MODEL_DELIVERY_KEY: ${{ secrets.AGENTIC_MODEL_DELIVERY_KEY }}
+  task:
+    needs: [prepare_task, model_auth]
+    name: task (${{ fromJSON(needs.prepare_task.outputs.request).task.task_id }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: task
+          task: ${{ needs.prepare_task.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_CODING_PRIVATE_KEY: ${{ secrets.AGENTIC_CODING_PRIVATE_KEY }}
+          AGENTIC_MODEL_DELIVERY_KEY: ${{ secrets.AGENTIC_MODEL_DELIVERY_KEY }}
+  task_controls:
+    needs: [prepare_task, model_auth]
+    name: task controls (${{ fromJSON(needs.prepare_task.outputs.request).task.task_id }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: task-controls
+          task: ${{ needs.prepare_task.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_ADMIN_PRIVATE_KEY: ${{ secrets.AGENTIC_ADMIN_PRIVATE_KEY }}
+  discover:
+    if: inputs.mode == 'production'
+    name: discover
+    outputs:
+      request: ${{ steps.produce.outputs.request }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        id: produce
+        with:
+          role: discover
+          task: '{}'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_READER_PRIVATE_KEY: ${{ secrets.AGENTIC_READER_PRIVATE_KEY }}
+  prepare:
+    needs: [discover, trial_case_ready]
+    if: always() && ((inputs.mode == 'production' && needs.discover.result == 'success' && fromJSON(needs.discover.outputs.request).pr != null) || (inputs.mode == 'case' && needs.trial_case_ready.result == 'success'))
+    name: prepare
+    outputs:
+      request: ${{ steps.produce.outputs.request }}
+      host_case: ${{ steps.produce.outputs.host_case }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        id: produce
+        with:
+          role: ${{ inputs.mode == 'case' && 'case-prepare' || 'prepare' }}
+          task: ${{ inputs.mode == 'case' && inputs.handoff || needs.discover.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_ADMIN_PRIVATE_KEY: ${{ inputs.mode == 'production' && secrets.AGENTIC_ADMIN_PRIVATE_KEY || '' }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
+  verify:
+    needs: [prepare, trial_case_handoff]
+    if: always() && needs.prepare.result == 'success' && (inputs.mode == 'production' || (needs.trial_case_handoff.result == 'success' && needs.prepare.outputs.host_case != 'spoofed-source' && needs.prepare.outputs.host_case != 'new-head' && needs.prepare.outputs.host_case != 'new-base' && needs.prepare.outputs.host_case != 'policy-transition'))
+    name: verify (${{ fromJSON(needs.prepare.outputs.request).snapshot.pr }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: ${{ inputs.mode == 'case' && 'case-verify' || 'verify' }}
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_READER_PRIVATE_KEY: ${{ secrets.AGENTIC_READER_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
+  publication_controls:
+    needs: [prepare, verify]
+    if: always() && needs.prepare.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && (needs.prepare.outputs.host_case == 'spoofed-source' || needs.prepare.outputs.host_case == 'new-head' || needs.prepare.outputs.host_case == 'new-base' || needs.prepare.outputs.host_case == 'policy-transition') && needs.verify.result == 'skipped'))
+    name: publication controls (${{ fromJSON(needs.prepare.outputs.request).snapshot.pr }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: ${{ inputs.mode == 'case' && 'case-publication-controls' || 'publication-controls' }}
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_ADMIN_PRIVATE_KEY: ${{ secrets.AGENTIC_ADMIN_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
+  admin_proof:
+    needs: [prepare, verify]
+    if: always() && needs.prepare.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && (needs.prepare.outputs.host_case == 'spoofed-source' || needs.prepare.outputs.host_case == 'new-head' || needs.prepare.outputs.host_case == 'new-base' || needs.prepare.outputs.host_case == 'policy-transition') && needs.verify.result == 'skipped'))
+    name: proof (admin)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: ${{ inputs.mode == 'case' && 'case-proof' || 'proof' }}
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_ADMIN_PRIVATE_KEY: ${{ secrets.AGENTIC_ADMIN_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
+  reader_proof:
+    needs: [prepare, verify]
+    if: always() && needs.prepare.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && (needs.prepare.outputs.host_case == 'spoofed-source' || needs.prepare.outputs.host_case == 'new-head' || needs.prepare.outputs.host_case == 'new-base' || needs.prepare.outputs.host_case == 'policy-transition') && needs.verify.result == 'skipped'))
+    name: proof (reader)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: ${{ inputs.mode == 'case' && 'case-proof' || 'proof' }}
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_READER_PRIVATE_KEY: ${{ secrets.AGENTIC_READER_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
+  issuer_proof:
+    needs: [prepare, verify]
+    if: always() && needs.prepare.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && (needs.prepare.outputs.host_case == 'spoofed-source' || needs.prepare.outputs.host_case == 'new-head' || needs.prepare.outputs.host_case == 'new-base' || needs.prepare.outputs.host_case == 'policy-transition') && needs.verify.result == 'skipped'))
+    name: proof (issuer)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: ${{ inputs.mode == 'case' && 'case-proof' || 'proof' }}
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_ISSUER_PRIVATE_KEY: ${{ secrets.AGENTIC_ISSUER_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
+  coding_proof:
+    needs: [prepare, verify]
+    if: always() && needs.prepare.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && (needs.prepare.outputs.host_case == 'spoofed-source' || needs.prepare.outputs.host_case == 'new-head' || needs.prepare.outputs.host_case == 'new-base' || needs.prepare.outputs.host_case == 'policy-transition') && needs.verify.result == 'skipped'))
+    name: proof (coding)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: ${{ inputs.mode == 'case' && 'case-proof' || 'proof' }}
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_CODING_PRIVATE_KEY: ${{ secrets.AGENTIC_CODING_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
+  merge_proof:
+    needs: [prepare, verify]
+    if: always() && needs.prepare.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && (needs.prepare.outputs.host_case == 'spoofed-source' || needs.prepare.outputs.host_case == 'new-head' || needs.prepare.outputs.host_case == 'new-base' || needs.prepare.outputs.host_case == 'policy-transition') && needs.verify.result == 'skipped'))
+    name: proof (merge)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: ${{ inputs.mode == 'case' && 'case-proof' || 'proof' }}
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_MERGE_PRIVATE_KEY: ${{ secrets.AGENTIC_MERGE_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
+  publish:
+    needs: [prepare, verify, publication_controls, admin_proof, reader_proof, issuer_proof, coding_proof, merge_proof]
+    if: always() && needs.prepare.result == 'success' && needs.publication_controls.result == 'success' && needs.admin_proof.result == 'success' && needs.reader_proof.result == 'success' && needs.issuer_proof.result == 'success' && needs.coding_proof.result == 'success' && needs.merge_proof.result == 'success' && (needs.verify.result == 'success' || (inputs.mode == 'case' && (needs.prepare.outputs.host_case == 'spoofed-source' || needs.prepare.outputs.host_case == 'new-head' || needs.prepare.outputs.host_case == 'new-base' || needs.prepare.outputs.host_case == 'policy-transition') && needs.verify.result == 'skipped'))
+    name: publish (${{ fromJSON(needs.prepare.outputs.request).snapshot.pr }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: ${{ inputs.mode == 'case' && 'case-publish' || 'publish' }}
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_ISSUER_PRIVATE_KEY: ${{ secrets.AGENTIC_ISSUER_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
+  trial_host_denial:
+    needs: [prepare, publish]
+    if: inputs.mode == 'case' && contains(fromJSON('["direct-push","coding-update","missing-approval","bad-acceptance","replaced-checks","forged-records","spoofed-source","new-head","new-base","policy-transition","human-update"]'), needs.prepare.outputs.host_case)
+    name: trial host denial
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: case-host-denial
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_CODING_PRIVATE_KEY: ${{ contains(fromJSON('["direct-push","coding-update"]'), needs.prepare.outputs.host_case) && secrets.AGENTIC_CODING_PRIVATE_KEY || '' }}
+          AGENTIC_MERGE_PRIVATE_KEY: ${{ contains(fromJSON('["missing-approval","bad-acceptance","replaced-checks","forged-records","spoofed-source","new-head","new-base","policy-transition"]'), needs.prepare.outputs.host_case) && secrets.AGENTIC_MERGE_PRIVATE_KEY || '' }}
+          AGENTIC_READER_PRIVATE_KEY: ${{ needs.prepare.outputs.host_case == 'human-update' && secrets.AGENTIC_READER_PRIVATE_KEY || '' }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN }}
+  broker:
+    needs: [prepare, publish, trial_host_denial]
+    if: always() && needs.prepare.result == 'success'
+    name: broker (${{ fromJSON(needs.prepare.outputs.request).snapshot.pr }})
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.mode == 'case' && 10 || 5 }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: ${{ inputs.mode == 'case' && 'case-broker' || 'broker' }}
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_MERGE_PRIVATE_KEY: ${{ secrets.AGENTIC_MERGE_PRIVATE_KEY }}
+          AGENTIC_READER_PRIVATE_KEY: ${{ secrets.AGENTIC_READER_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
+  controls:
+    needs: [prepare, publish]
+    if: inputs.mode != 'case' || needs.prepare.outputs.host_case == 'none'
+    name: controls (${{ fromJSON(needs.prepare.outputs.request).snapshot.pr }})
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.mode == 'case' && 10 || 5 }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: ${{ inputs.mode == 'case' && 'case-controls' || 'controls' }}
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_ADMIN_PRIVATE_KEY: ${{ secrets.AGENTIC_ADMIN_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
+  admin_final_proof:
+    needs: [prepare, publish]
+    if: inputs.mode != 'case' || needs.prepare.outputs.host_case == 'none'
+    name: final proof (admin)
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.mode == 'case' && 10 || 5 }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: ${{ inputs.mode == 'case' && 'case-final-proof' || 'final-proof' }}
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_ADMIN_PRIVATE_KEY: ${{ secrets.AGENTIC_ADMIN_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
+  reader_final_proof:
+    needs: [prepare, publish]
+    if: inputs.mode != 'case' || needs.prepare.outputs.host_case == 'none'
+    name: final proof (reader)
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.mode == 'case' && 10 || 5 }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: ${{ inputs.mode == 'case' && 'case-final-proof' || 'final-proof' }}
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_READER_PRIVATE_KEY: ${{ secrets.AGENTIC_READER_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
+  issuer_final_proof:
+    needs: [prepare, publish]
+    if: inputs.mode != 'case' || needs.prepare.outputs.host_case == 'none'
+    name: final proof (issuer)
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.mode == 'case' && 10 || 5 }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: ${{ inputs.mode == 'case' && 'case-final-proof' || 'final-proof' }}
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_ISSUER_PRIVATE_KEY: ${{ secrets.AGENTIC_ISSUER_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
+  coding_final_proof:
+    needs: [prepare, publish]
+    if: inputs.mode != 'case' || needs.prepare.outputs.host_case == 'none'
+    name: final proof (coding)
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.mode == 'case' && 10 || 5 }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: ${{ inputs.mode == 'case' && 'case-final-proof' || 'final-proof' }}
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_CODING_PRIVATE_KEY: ${{ secrets.AGENTIC_CODING_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
+  merge_final_proof:
+    needs: [prepare, publish]
+    if: inputs.mode != 'case' || needs.prepare.outputs.host_case == 'none'
+    name: final proof (merge)
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ inputs.mode == 'case' && 10 || 5 }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: ${{ inputs.mode == 'case' && 'case-final-proof' || 'final-proof' }}
+          task: ${{ needs.prepare.outputs.request }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_MERGE_PRIVATE_KEY: ${{ secrets.AGENTIC_MERGE_PRIVATE_KEY }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}
+  finalize:
+    needs: [prepare, broker, controls, admin_final_proof, reader_final_proof, issuer_final_proof, coding_final_proof, merge_final_proof]
+    if: always() && needs.prepare.result == 'success'
+    name: finalize
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.13'
+      - name: Install pinned trusted consumer dependencies
+        run: python3 -m pip install --disable-pip-version-check -r deploy/authority/requirements-auth.txt
+      - name: Install locked artifact SDK without lifecycle scripts
+        working-directory: deploy/authority/artifact_upload
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: ./deploy/authority/artifact_upload
+        with:
+          role: ${{ inputs.mode == 'case' && 'case-finalize' || 'finalize' }}
+          task: ${{ inputs.mode == 'case' && needs.prepare.outputs.request || '{}' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          AGENTIC_ADMIN_PRIVATE_KEY: ${{ secrets.AGENTIC_ADMIN_PRIVATE_KEY }}
+          AGENTIC_RECOVERY_PIN: ${{ vars.AGENTIC_FINALIZE_PIN }}
+          AGENTIC_TRIAL_CASE_ORIGIN_TOKEN: ${{ inputs.mode == 'case' && secrets.AGENTIC_TRIAL_CASE_ORIGIN_TOKEN || '' }}

@@ -54,7 +54,9 @@ class OnboardE2ETests(unittest.TestCase):
         path.write_bytes(text.encode() if isinstance(text, str) else text)
 
     def git(self, *args):
-        subprocess.run(['git', '-c', 'user.name=t', '-c', 'user.email=t@t', *args], cwd=self.root,
+        # Detached auto-maintenance after a commit would mutate .git during snapshots.
+        subprocess.run(['git', '-c', 'user.name=t', '-c', 'user.email=t@t',
+                        '-c', 'gc.auto=0', '-c', 'maintenance.auto=false', *args], cwd=self.root,
                        capture_output=True, check=True)
 
     def cli(self, *args, code=0):

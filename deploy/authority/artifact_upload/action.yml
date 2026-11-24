@@ -1,0 +1,21 @@
+name: AGENTIC authority service
+description: Run a fixed authority role in its pinned producer job
+inputs:
+  role:
+    description: Fixed service role
+    required: true
+  task:
+    description: Bounded prepared request for model, coding and separate controls producers
+    required: false
+  prompt:
+    description: Task text for the independently admitted preparation job
+    required: false
+  challenge:
+    description: Bounded setup challenge, validated against the current native configuration fence
+    required: false
+outputs:
+  request:
+    description: Closed prepared task request; credentials are never included
+runs:
+  using: node24
+  main: action.mjs

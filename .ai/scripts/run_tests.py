@@ -53,16 +53,60 @@ def selected(test_id: str, shard: tuple[int, int] | None) -> bool:
     return slot == index - 1
 
 
-def groups(start: Path, shard: tuple[int, int] | None = None) -> dict[str, int]:
-    """Test count per `module.Class`; a module that fails to import or load is its own group, named by the module."""
+def is_heavy(test_id: str) -> bool:
+    """Classes named `*Native*` or `*Terminal*` build long evidence chains, minutes per test."""
+    owner = test_id.rsplit('.', 2)[-2]
+    return 'Native' in owner or 'Terminal' in owner
+
+
+WEIGHTS_FILE = 'shard_weights.json'
+
+
+def balanced(test_ids: list[str], shard: tuple[int, int], weights: dict[str, float] | None = None) -> set[str]:
+    """Tests of this shard when each test is its own group. Heavy tests are dealt out in id order round-robin
+    (every shard gets within one of the same number), or, given measured `weights` (seconds per test id),
+    longest first onto the least loaded shard; a heavy test with no weight counts as the median one.
+    The cheap rest is split by hash."""
+    index, count = shard
+    heavy = sorted(i for i in test_ids if is_heavy(i) or (weights and i in weights))
+    if weights:
+        known = sorted(weights[i] for i in heavy if i in weights)
+        default = known[len(known) // 2] if known else 1.0
+        loads = [0.0] * count
+        chosen = set()
+        for test_id in sorted(heavy, key=lambda i: (-weights.get(i, default), i)):
+            slot = min(range(count), key=lambda s: (loads[s], s))
+            loads[slot] += weights.get(test_id, default)
+            if slot == index - 1:
+                chosen.add(test_id)
+    else:
+        chosen = {i for rank, i in enumerate(heavy) if rank % count == index - 1}
+    return chosen | {i for i in test_ids if i not in set(heavy) and selected(i, shard)}
+
+
+def groups(start: Path, shard: tuple[int, int] | None = None, per_test: bool = False,
+           skip_heavy: bool = False) -> dict[str, int]:
+    """Test count per `module.Class`, or one group per test with `per_test`; a module that fails to import or
+    load is its own group, named by the module. `skip_heavy` leaves out the `is_heavy` chain tests."""
     sys.path.insert(0, str(start))
     counts: dict[str, int] = {}
     suite = unittest.TestLoader().discover(str(start), top_level_dir=str(start))
-    for test in leaves(suite):
+    tests = [t for t in leaves(suite) if not (skip_heavy and is_heavy(t.id()))]
+    if per_test and shard is not None:
+        weights_path = start / WEIGHTS_FILE
+        weights = json.loads(weights_path.read_text(encoding='utf-8')) if weights_path.is_file() else None
+        chosen = balanced([t.id() for t in tests if not t.id().startswith("unittest.loader.")], shard, weights)
+    for test in tests:
         test_id = test.id()
-        if not selected(test_id, shard):
+        if per_test and shard is not None and not test_id.startswith("unittest.loader."):
+            if test_id not in chosen:
+                continue
+        elif not selected(test_id, shard):
             continue
-        key = test_id.rsplit(".", 1)[1] if test_id.startswith("unittest.loader.") else test_id.rsplit(".", 1)[0]
+        if test_id.startswith("unittest.loader."):
+            key = test_id.rsplit(".", 1)[1]
+        else:
+            key = test_id if per_test else test_id.rsplit(".", 1)[0]
         counts[key] = counts.get(key, 0) + 1
     return counts
 
@@ -167,6 +211,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-s", "--start", type=Path, default=DEFAULT_START, help="test directory (default: .ai/scripts/tests)")
     parser.add_argument("-j", "--jobs", type=int, default=os.cpu_count() or 1, help="worker processes (default: CPU count)")
     parser.add_argument('--shard', type=shard_value, help='run deterministic test-method segment I/N (1-based)')
+    parser.add_argument('--per-test', action='store_true',
+                        help='one worker process per test method, for suites whose classes hold a few very slow tests')
+    parser.add_argument('--skip-heavy', action='store_true',
+                        help='with --per-test, leave out the long Native/Terminal evidence-chain tests')
     parser.add_argument("--worker", help=argparse.SUPPRESS)
     parser.add_argument("--result", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
@@ -175,13 +223,18 @@ def main(argv: list[str] | None = None) -> int:
         return worker(start, args.worker, args.result, args.shard)
 
     began = time.monotonic()
-    counts = groups(start, args.shard)
+    if args.skip_heavy and not args.per_test:
+        parser.error('--skip-heavy requires --per-test')
+    counts = groups(start, args.shard, args.per_test, args.skip_heavy)
     if args.shard is not None and not counts:
         parser.error('shard contains no tests')
-    names = sorted(counts, key=lambda n: -counts[n])  # Larger classes first shortens the tail.
+    # Larger classes, then known-heavy tests, first shortens the tail.
+    names = sorted(counts, key=lambda n: (-counts[n], not (args.per_test and is_heavy(n))))
     resume = Resume(start, args.shard)
     with ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
-        results = list(pool.map(lambda n: run_group(start, n, counts[n], resume, args.shard), names))
+        # A per-test group names its exact test, so its worker needs no shard filter.
+        worker_shard = None if args.per_test else args.shard
+        results = list(pool.map(lambda n: run_group(start, n, counts[n], resume, worker_shard), names))
 
     run = sum(r["run"] for r in results)
     failures = [f for r in results for f in r["failures"]]
