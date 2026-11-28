@@ -52,6 +52,25 @@
     "AGENTS.md",
     "CLAUDE.md",
     "README.md",
-    "THIRD_PARTY_NOTICES.md"
+    "THIRD_PARTY_NOTICES.md",
+    "rfc/0001-agentic.md",
+    "rfc/README.md",
+    "rfc/adr/0001-enforce-lifecycle-with-hooks.md",
+    "rfc/adr/0002-one-lifecycle-four-tiers.md",
+    "rfc/adr/0003-repository-as-memory-okf.md",
+    "rfc/adr/0004-vendor-neutral-governance-source.md",
+    "rfc/adr/0005-project-local-stdlib-kit.md",
+    "rfc/adr/0006-fingerprinted-evidence-ledger.md",
+    "rfc/adr/0007-living-requirements-assurance.md",
+    "rfc/adr/0008-approvals-are-recorded-claims.md",
+    "rfc/adr/0009-trusted-ci-separated-environments.md",
+    "rfc/adr/0010-structured-tools-over-shell.md",
+    "rfc/adr/0011-supervised-autonomy-driver.md",
+    "rfc/adr/0012-one-pr-per-milestone.md",
+    "rfc/adr/0013-framework-source-chat-only.md",
+    "rfc/adr/0014-human-gated-learning.md",
+    "rfc/adr/0015-native-process-runtime-parity.md",
+    "rfc/adr/0016-hash-pinned-brownfield-deltas.md",
+    "rfc/adr/0017-opt-in-bound-native-review.md"
   ]
 }
